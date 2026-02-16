@@ -1,0 +1,14 @@
+# Event Codes
+
+- `1000` LINK_DOWN
+- `1001` LINK_UP
+- `1002` BAD_FRAME
+- `1100` CONFIG_APPLIED
+- `1101` CONFIG_REJECTED
+- `1200` WATCHDOG_MISS
+
+Severity mapping:
+- `0 INFO`
+- `1 WARN`
+- `2 ALARM`
+- `3 CRIT`
