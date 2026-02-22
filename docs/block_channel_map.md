@@ -9,10 +9,13 @@
 - 2 `WATER_RAIL`
 - 3 `WATER_GROW`
 - 4 `WATER_UNDERTRAY`
-- 5 `WINDOW_POS`
+- 5 `WATER_UPPER_HEAT`
+- 6 `WINDOWS_POS_A`
+- 7 `WINDOWS_POS_B`
+- 8 `CURTAIN_POS`
 
 ## Расчет индекса в snapshot
-- `sensor_id = block_index * 6 + channel_index`
+- `sensor_id = block_index * channels_per_block + channel_index`
 - `block_no = block_index + 1`
 
 ## Текущая конфигурация мастера
@@ -24,7 +27,7 @@
   - `0` -> Block1 AIR_TEMP
   - `1` -> Block1 AIR_HUM
   - `2` -> Block1 WATER_RAIL
-- `sensor_id 3..5` (каналы блока 1, которых пока нет) помечаются `OFFLINE`.
+- `sensor_id 3..8` (каналы блока 1, которых пока нет) помечаются `OFFLINE`.
 
 ## Как расширять
 При добавлении нового блока добавляется строка в `kModbusMap`.

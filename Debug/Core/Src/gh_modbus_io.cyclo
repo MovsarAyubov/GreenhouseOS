@@ -1,0 +1,11 @@
+../Core/Src/gh_modbus_io.c:24:17:modbus_crc16	4
+../Core/Src/gh_modbus_io.c:48:13:rs485_set_tx	1
+../Core/Src/gh_modbus_io.c:53:13:uart_drain_rx	2
+../Core/Src/gh_modbus_io.c:62:6:modbus_read_holding_registers	10
+../Core/Src/gh_modbus_io.c:123:6:modbus_write_single_holding_register	10
+../Core/Src/gh_modbus_io.c:164:6:modbus_write_multiple_holding_registers	13
+../Core/Src/gh_modbus_io.c:223:17:cfg_u16_clamped	3
+../Core/Src/gh_modbus_io.c:237:13:hhmm_is_valid	3
+../Core/Src/gh_modbus_io.c:244:17:control_regs_crc32	2
+../Core/Src/gh_modbus_io.c:256:13:build_control_regs_from_config	8
+../Core/Src/gh_modbus_io.c:300:6:apply_control_to_slave	12

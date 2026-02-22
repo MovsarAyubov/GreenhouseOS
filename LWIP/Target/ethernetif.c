@@ -55,7 +55,11 @@
 
 /* USER CODE BEGIN 1 */
 
-#define DP83848_PHY_ADDR_DEFAULT      1U
+#if defined(LAN8742A_PHY_ADDRESS)
+#define DP83848_PHY_ADDR_DEFAULT      LAN8742A_PHY_ADDRESS
+#else
+#define DP83848_PHY_ADDR_DEFAULT      0U
+#endif
 #define DP83848_PHY_BSR               0x01U
 #define DP83848_PHY_ID1               0x02U
 #define DP83848_PHY_ID2               0x03U
@@ -120,11 +124,11 @@ static int32_t phy_get_link_state(uint32_t phy_addr, uint32_t *duplex, uint32_t 
 
   if (ETH_PHY_IO_ReadReg(phy_addr, DP83848_PHY_BSR, &bsr) < 0)
   {
-    return 0;
+    return -1;
   }
   if (ETH_PHY_IO_ReadReg(phy_addr, DP83848_PHY_BSR, &bsr) < 0)
   {
-    return 0;
+    return -1;
   }
   if ((bsr & DP83848_BSR_LINK_STATUS) == 0U)
   {
@@ -348,9 +352,9 @@ static void low_level_init(struct netif *netif)
   ETH_PHY_IO_Init();
   if (!phy_find_address(&g_phy_addr))
   {
-    netif_set_link_down(netif);
-    netif_set_down(netif);
-    return;
+    /* Fallback: keep interface usable even if PHY ID probing fails on some boards.
+       Link thread will keep polling and update actual state. */
+    g_phy_addr = DP83848_PHY_ADDR_DEFAULT;
   }
 
   if (hal_eth_init_status == HAL_OK)
@@ -818,6 +822,8 @@ void ethernet_link_thread(void* argument)
   ETH_MACConfigTypeDef MACConf = {0};
   int32_t phy_up = 0;
   uint32_t linkchanged = 0U, speed = 0U, duplex = 0U;
+  uint8_t down_confirm = 0U;
+  const uint8_t k_down_confirm_threshold = 50U; /* 50 * 100ms = 5s */
 
   struct netif *netif = (struct netif *) argument;
 /* USER CODE BEGIN ETH link init */
@@ -828,14 +834,27 @@ void ethernet_link_thread(void* argument)
   {
   phy_up = phy_get_link_state(g_phy_addr, &duplex, &speed);
 
+  if (phy_up < 0)
+  {
+    /* Ignore transient PHY read failures. */
+    osDelay(100);
+    continue;
+  }
+
   if(netif_is_link_up(netif) && (phy_up == 0))
   {
-    HAL_ETH_Stop_IT(&heth);
-    netif_set_down(netif);
-    netif_set_link_down(netif);
+    down_confirm++;
+    if (down_confirm >= k_down_confirm_threshold)
+    {
+      HAL_ETH_Stop_IT(&heth);
+      netif_set_down(netif);
+      netif_set_link_down(netif);
+      down_confirm = 0U;
+    }
   }
   else if(!netif_is_link_up(netif) && (phy_up != 0))
   {
+    down_confirm = 0U;
     linkchanged = 1U;
 
     if(linkchanged)
@@ -849,6 +868,10 @@ void ethernet_link_thread(void* argument)
       netif_set_up(netif);
       netif_set_link_up(netif);
     }
+  }
+  else
+  {
+    down_confirm = 0U;
   }
 
 /* USER CODE BEGIN ETH link Thread core code for User BSP */

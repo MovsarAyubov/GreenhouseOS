@@ -125,6 +125,9 @@
 #define LWIP_NETCONN 1
 #undef LWIP_SOCKET
 #define LWIP_SOCKET 0
+/* Enable netconn receive timeouts to avoid blocking RTOS tasks forever. */
+#undef LWIP_SO_RCVTIMEO
+#define LWIP_SO_RCVTIMEO 1
 
 /* USER CODE END 1 */
 

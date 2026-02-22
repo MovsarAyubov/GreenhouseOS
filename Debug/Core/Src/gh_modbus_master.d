@@ -1,9 +1,6 @@
-Core/Src/gh_net_adapter.o: ../Core/Src/gh_net_adapter.c \
- ../Core/Inc/gh_net_adapter.h \
- ../Middlewares/Third_Party/LwIP/src/include/lwip/api.h \
- ../Middlewares/Third_Party/LwIP/src/include/lwip/opt.h \
- ../LWIP/Target/lwipopts.h ../Core/Inc/main.h \
- ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal.h \
+Core/Src/gh_modbus_master.o: ../Core/Src/gh_modbus_master.c \
+ ../Core/Inc/gh_modbus_master.h ../Core/Inc/gh_runtime_state.h \
+ ../Core/Inc/main.h ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal.h \
  ../Core/Inc/stm32f4xx_hal_conf.h \
  ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_rcc.h \
  ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_def.h \
@@ -34,20 +31,6 @@ Core/Src/gh_net_adapter.o: ../Core/Src/gh_net_adapter.c \
  ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_tim.h \
  ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_tim_ex.h \
  ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_uart.h \
- ../Middlewares/Third_Party/LwIP/src/include/lwip/debug.h \
- ../Middlewares/Third_Party/LwIP/src/include/lwip/arch.h \
- ../Middlewares/Third_Party/LwIP/system/arch/cc.h \
- ../Middlewares/Third_Party/LwIP/system/arch/cpu.h \
- ../Middlewares/Third_Party/LwIP/src/include/lwip/netbuf.h \
- ../Middlewares/Third_Party/LwIP/src/include/lwip/pbuf.h \
- ../Middlewares/Third_Party/LwIP/src/include/lwip/err.h \
- ../Middlewares/Third_Party/LwIP/src/include/lwip/ip_addr.h \
- ../Middlewares/Third_Party/LwIP/src/include/lwip/def.h \
- ../Middlewares/Third_Party/LwIP/src/include/lwip/ip4_addr.h \
- ../Middlewares/Third_Party/LwIP/src/include/lwip/ip6_addr.h \
- ../Middlewares/Third_Party/LwIP/src/include/lwip/def.h \
- ../Middlewares/Third_Party/LwIP/src/include/lwip/sys.h \
- ../Middlewares/Third_Party/LwIP/system/arch/sys_arch.h \
  ../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2/cmsis_os.h \
  ../Middlewares/Third_Party/FreeRTOS/Source/include/FreeRTOS.h \
  ../Core/Inc/FreeRTOSConfig.h \
@@ -58,11 +41,10 @@ Core/Src/gh_net_adapter.o: ../Core/Src/gh_net_adapter.c \
  ../Middlewares/Third_Party/FreeRTOS/Source/include/mpu_wrappers.h \
  ../Middlewares/Third_Party/FreeRTOS/Source/include/task.h \
  ../Middlewares/Third_Party/FreeRTOS/Source/include/list.h \
- ../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2/cmsis_os2.h
-../Core/Inc/gh_net_adapter.h:
-../Middlewares/Third_Party/LwIP/src/include/lwip/api.h:
-../Middlewares/Third_Party/LwIP/src/include/lwip/opt.h:
-../LWIP/Target/lwipopts.h:
+ ../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2/cmsis_os2.h \
+ ../Core/Inc/gh_modbus_map.h
+../Core/Inc/gh_modbus_master.h:
+../Core/Inc/gh_runtime_state.h:
 ../Core/Inc/main.h:
 ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal.h:
 ../Core/Inc/stm32f4xx_hal_conf.h:
@@ -95,20 +77,6 @@ Core/Src/gh_net_adapter.o: ../Core/Src/gh_net_adapter.c \
 ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_tim.h:
 ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_tim_ex.h:
 ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_uart.h:
-../Middlewares/Third_Party/LwIP/src/include/lwip/debug.h:
-../Middlewares/Third_Party/LwIP/src/include/lwip/arch.h:
-../Middlewares/Third_Party/LwIP/system/arch/cc.h:
-../Middlewares/Third_Party/LwIP/system/arch/cpu.h:
-../Middlewares/Third_Party/LwIP/src/include/lwip/netbuf.h:
-../Middlewares/Third_Party/LwIP/src/include/lwip/pbuf.h:
-../Middlewares/Third_Party/LwIP/src/include/lwip/err.h:
-../Middlewares/Third_Party/LwIP/src/include/lwip/ip_addr.h:
-../Middlewares/Third_Party/LwIP/src/include/lwip/def.h:
-../Middlewares/Third_Party/LwIP/src/include/lwip/ip4_addr.h:
-../Middlewares/Third_Party/LwIP/src/include/lwip/ip6_addr.h:
-../Middlewares/Third_Party/LwIP/src/include/lwip/def.h:
-../Middlewares/Third_Party/LwIP/src/include/lwip/sys.h:
-../Middlewares/Third_Party/LwIP/system/arch/sys_arch.h:
 ../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2/cmsis_os.h:
 ../Middlewares/Third_Party/FreeRTOS/Source/include/FreeRTOS.h:
 ../Core/Inc/FreeRTOSConfig.h:
@@ -120,3 +88,4 @@ Core/Src/gh_net_adapter.o: ../Core/Src/gh_net_adapter.c \
 ../Middlewares/Third_Party/FreeRTOS/Source/include/task.h:
 ../Middlewares/Third_Party/FreeRTOS/Source/include/list.h:
 ../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2/cmsis_os2.h:
+../Core/Inc/gh_modbus_map.h:

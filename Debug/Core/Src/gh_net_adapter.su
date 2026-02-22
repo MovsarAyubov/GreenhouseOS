@@ -1,6 +1,0 @@
-../Core/Src/gh_net_adapter.c:19:6:NetAdapter_Init	16	static
-../Core/Src/gh_net_adapter.c:39:6:NetAdapter_ServerPoll	16	static
-../Core/Src/gh_net_adapter.c:61:6:NetAdapter_IsConnected	4	static
-../Core/Src/gh_net_adapter.c:66:9:NetAdapter_Recv	40	static
-../Core/Src/gh_net_adapter.c:122:6:NetAdapter_Send	24	static
-../Core/Src/gh_net_adapter.c:136:6:NetAdapter_CloseClient	8	static

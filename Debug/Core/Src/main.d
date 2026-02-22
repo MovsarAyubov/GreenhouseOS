@@ -76,7 +76,9 @@ Core/Src/main.o: ../Core/Src/main.c ../Core/Inc/main.h \
  ../Middlewares/Third_Party/LwIP/system/arch/sys_arch.h \
  ../LWIP/Target/ethernetif.h \
  ../Middlewares/Third_Party/LwIP/src/include/lwip/tcpip.h \
- ../Core/Inc/gh_net_adapter.h
+ ../Core/Inc/gh_crc32.h ../Core/Inc/gh_modbus_master.h \
+ ../Core/Inc/gh_modbus_map.h ../Core/Inc/gh_modbus_tcp_server.h \
+ ../Core/Inc/gh_config_storage.h
 ../Core/Inc/main.h:
 ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal.h:
 ../Core/Inc/stm32f4xx_hal_conf.h:
@@ -155,4 +157,8 @@ Core/Src/main.o: ../Core/Src/main.c ../Core/Inc/main.h \
 ../Middlewares/Third_Party/LwIP/system/arch/sys_arch.h:
 ../LWIP/Target/ethernetif.h:
 ../Middlewares/Third_Party/LwIP/src/include/lwip/tcpip.h:
-../Core/Inc/gh_net_adapter.h:
+../Core/Inc/gh_crc32.h:
+../Core/Inc/gh_modbus_master.h:
+../Core/Inc/gh_modbus_map.h:
+../Core/Inc/gh_modbus_tcp_server.h:
+../Core/Inc/gh_config_storage.h:

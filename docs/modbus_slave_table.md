@@ -4,7 +4,7 @@
 Секция: `kModbusMap`
 
 Формат строки:
-`{slave_id, start_register, sensor_count, global_sensor_base}`
+`{slave_id, block_no, start_register, sensor_count, global_sensor_base}`
 
 Ограничения:
 - максимум слейвов: `12`
@@ -18,13 +18,13 @@
 ```c
 static const modbus_sensor_map_t kModbusMap[] =
 {
-  {1U, 0U, 3U, 0U},
-  {2U, 0U, 12U, 3U},
-  {3U, 0U, 8U, 15U},
-  {4U, 0U, 12U, 23U}
+  {1U, 1U, 0U, 3U, 0U},
+  {2U, 2U, 0U, 8U, 8U},
+  {3U, 3U, 0U, 8U, 16U},
+  {4U, 4U, 0U, 8U, 24U}
 };
 ```
 
 Как читать `global_sensor_base`:
 - это индекс в общем массиве из 150 датчиков,
-- например `{3U, 0U, 8U, 15U}` значит датчики слейва 3 попадут в позиции `15..22`.
+- например `{3U, 3U, 0U, 8U, 16U}` значит датчики слейва 3 попадут в позиции `16..23`.

@@ -14,7 +14,10 @@
 - `2 WATER_RAIL` — температура воды "труба рельса", C
 - `3 WATER_GROW` — температура воды "труба роста", C
 - `4 WATER_UNDERTRAY` — температура воды "подлотковая труба", C
-- `5 WINDOW_POS` — положение окон, %
+- `5 WATER_UPPER_HEAT` — температура воды "верхний обогрев", C
+- `6 WINDOWS_POS_A` — положение форточек, группа A, %
+- `7 WINDOWS_POS_B` — положение форточек, группа B, %
+- `8 CURTAIN_POS` — положение штор, %
 
 ### 2.2. Источник карты блоков (обязательно)
 Карта блоков не хардкодится в ПК. После подключения ПК должен:
@@ -45,7 +48,8 @@
 ### 3.1. Экран "Блоки"
 Для каждого блока карточка/строка:
 - статус связи блока,
-- `Air Temp`, `Air Hum`, `Water Rail`, `Water Grow`, `Water Undertray`, `Window Pos`,
+- `Air Temp`, `Air Hum`, `Water Rail`, `Water Grow`, `Water Undertray`,
+- `Water Upper Heat`, `Windows Pos A`, `Windows Pos B`, `Curtain Pos`,
 - время последнего обновления,
 - индикатор качества (`OK/STALE/FAULT/OFFLINE`).
 - список блоков формируется из `BLOCK_LAYOUT_RESP`, а не из фиксированного числа.
@@ -63,8 +67,8 @@
 
 ### 4.1. Таблица telemetry
 Оставить текущий формат, добавить вычисляемые поля при выводе/экспорте:
-- `block_no = sensor_id / 6 + 1`
-- `channel_index = sensor_id % 6`
+- `block_no = sensor_id / channels_per_block + 1`
+- `channel_index = sensor_id % channels_per_block`
 - `channel_name` по словарю каналов.
 
 ### 4.2. Экспорт
@@ -79,7 +83,7 @@
 ## 6. Валидация и приемка
 1. При подключении и получении snapshot:
 - блок 1 показывает 3 реальных значения,
-- 3 неактивных канала блока 1 = `OFFLINE`.
+- неактивные каналы блока 1 (до `channels_per_block`) = `OFFLINE`.
 2. При добавлении блока 2 в мастере:
 - UI без перекомпиляции начинает показывать блок 2 после нового `BLOCK_LAYOUT_RESP`.
 3. На ленте событий `source` отображается как `Блок/Канал`.
@@ -88,3 +92,89 @@
 - отрисовка не блокирует UI,
 - обновление каждые 5 секунд,
 - reconnect/resync без потери отображения структуры блоков.
+
+## 8. Пример функции декодирования для ПК (C#)
+```csharp
+public sealed class BlockLayoutItem
+{
+    public byte BlockNo { get; init; }
+    public byte SlaveId { get; init; }
+    public ushort StartReg { get; init; }
+    public ushort SensorCount { get; init; }
+    public ushort SensorBase { get; init; }
+}
+
+public sealed class SensorDecoded
+{
+    public bool Found { get; init; }
+    public int BlockNo { get; init; }
+    public int ChannelIndex { get; init; }
+    public string ChannelName { get; init; } = "Unknown";
+}
+
+public static class SensorDecoder
+{
+    private static readonly string[] ChannelNames =
+    {
+        "AIR_TEMP",
+        "AIR_HUM",
+        "WATER_RAIL",
+        "WATER_GROW",
+        "WATER_UNDERTRAY",
+        "WATER_UPPER_HEAT",
+        "WINDOWS_POS_A",
+        "WINDOWS_POS_B",
+        "CURTAIN_POS"
+    };
+
+    // sensorId -> Block/Channel по текущему BLOCK_LAYOUT_RESP
+    public static SensorDecoded DecodeSensorId(
+        int sensorId,
+        IReadOnlyList<BlockLayoutItem> layoutItems)
+    {
+        if (sensorId < 0 || layoutItems == null)
+        {
+            return new SensorDecoded { Found = false };
+        }
+
+        foreach (var item in layoutItems)
+        {
+            var first = item.SensorBase;
+            var last = item.SensorBase + item.SensorCount - 1;
+            if (item.SensorCount == 0) continue;
+
+            if (sensorId >= first && sensorId <= last)
+            {
+                var channelIndex = sensorId - first;
+                var channelName = channelIndex < ChannelNames.Length
+                    ? ChannelNames[channelIndex]
+                    : $"CH_{channelIndex}";
+
+                return new SensorDecoded
+                {
+                    Found = true,
+                    BlockNo = item.BlockNo,
+                    ChannelIndex = channelIndex,
+                    ChannelName = channelName
+                };
+            }
+        }
+
+        return new SensorDecoded { Found = false };
+    }
+}
+```
+
+## 9. Учет автономного режима слейвов (v2)
+- У слейвов нет прямой связи с ПК; обмен только через мастер.
+- Если мастер недоступен, ПК не может получать онлайн-статус слейвов.
+- После восстановления мастера ПК должен запрашивать resync и обновлять:
+  - текущие значения каналов,
+  - карту блоков (`BLOCK_LAYOUT_RESP`),
+  - доступные диагностические статусы слейвов (если мастер их проксирует).
+
+Рекомендация для UI:
+- для блока показывать источник управления:
+  - `REMOTE` (по мастеру),
+  - `AUTONOMOUS` (локально на слейве),
+  если этот статус доступен через мастер.
