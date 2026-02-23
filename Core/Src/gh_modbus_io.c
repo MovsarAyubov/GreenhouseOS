@@ -10,7 +10,6 @@
 #define MODBUS_FUNC_READ_HOLDING      0x03U
 #define MODBUS_FUNC_WRITE_SINGLE      0x06U
 #define MODBUS_FUNC_WRITE_MULTIPLE    0x10U
-#define MODBUS_MAX_REGS_PER_REQ       32U
 #define MODBUS_CTRL_BASE              100U
 #define MODBUS_CTRL_END               121U
 #define MODBUS_CTRL_APPLY_CMD         122U
@@ -19,7 +18,16 @@
 #define MODBUS_LIGHT_STAGE1_REG       134U
 #define MODBUS_LIGHT_STAGE2_REG       135U
 #define MODBUS_CTRL_REG_COUNT         ((MODBUS_CTRL_END - MODBUS_CTRL_BASE) + 1U)
-#define MODBUS_RTU_RESP_TIMEOUT_MS    300U
+
+static void modbus_count_tx_error(void)
+{
+  g_status.crc_errors_tx++;
+}
+
+static void modbus_count_rx_error(void)
+{
+  g_status.crc_errors_rx++;
+}
 
 static uint16_t modbus_crc16(const uint8_t *data, uint16_t len)
 {
@@ -88,9 +96,10 @@ bool modbus_read_holding_registers(uint8_t slave_id,
 
   uart_drain_rx(&huart2);
   rs485_set_tx(true);
-  if (HAL_UART_Transmit(&huart2, req, sizeof(req), 100U) != HAL_OK)
+  if (HAL_UART_Transmit(&huart2, req, sizeof(req), MODBUS_UART_TX_TIMEOUT_MS) != HAL_OK)
   {
     rs485_set_tx(false);
+    modbus_count_tx_error();
     return false;
   }
   rs485_set_tx(false);
@@ -103,12 +112,14 @@ bool modbus_read_holding_registers(uint8_t slave_id,
 
   if ((resp[0] != slave_id) || (resp[1] != MODBUS_FUNC_READ_HOLDING) || (resp[2] != (uint8_t)(reg_count * 2U)))
   {
+    modbus_count_rx_error();
     return false;
   }
 
   resp_crc = (uint16_t)resp[exp_len - 2U] | ((uint16_t)resp[exp_len - 1U] << 8U);
   if (modbus_crc16(resp, (uint16_t)(exp_len - 2U)) != resp_crc)
   {
+    modbus_count_rx_error();
     return false;
   }
 
@@ -139,9 +150,10 @@ bool modbus_write_single_holding_register(uint8_t slave_id, uint16_t reg, uint16
 
   uart_drain_rx(&huart2);
   rs485_set_tx(true);
-  if (HAL_UART_Transmit(&huart2, req, sizeof(req), 100U) != HAL_OK)
+  if (HAL_UART_Transmit(&huart2, req, sizeof(req), MODBUS_UART_TX_TIMEOUT_MS) != HAL_OK)
   {
     rs485_set_tx(false);
+    modbus_count_tx_error();
     return false;
   }
   rs485_set_tx(false);
@@ -156,6 +168,7 @@ bool modbus_write_single_holding_register(uint8_t slave_id, uint16_t reg, uint16
       (resp[4] != req[4]) || (resp[5] != req[5]) ||
       (modbus_crc16(resp, 6U) != resp_crc))
   {
+    modbus_count_rx_error();
     return false;
   }
   return true;
@@ -197,9 +210,10 @@ bool modbus_write_multiple_holding_registers(uint8_t slave_id,
 
   uart_drain_rx(&huart2);
   rs485_set_tx(true);
-  if (HAL_UART_Transmit(&huart2, req, (uint16_t)(req_len + 2U), 100U) != HAL_OK)
+  if (HAL_UART_Transmit(&huart2, req, (uint16_t)(req_len + 2U), MODBUS_UART_TX_TIMEOUT_MS) != HAL_OK)
   {
     rs485_set_tx(false);
+    modbus_count_tx_error();
     return false;
   }
   rs485_set_tx(false);
@@ -215,6 +229,7 @@ bool modbus_write_multiple_holding_registers(uint8_t slave_id,
       (resp[4] != req[4]) || (resp[5] != req[5]) ||
       (modbus_crc16(resp, 6U) != resp_crc))
   {
+    modbus_count_rx_error();
     return false;
   }
   return true;

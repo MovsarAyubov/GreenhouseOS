@@ -15,6 +15,11 @@ This baseline records decisions confirmed for the current firmware line.
 - Health watchdog supervises `CONTROL`, `MODBUS`, `CONFIG`, and `TCP` tasks.
 - If watchdog miss is persistent, firmware stops refreshing IWDG and allows automatic reset.
 
+## RS485/Modbus baseline
+- RTU master uses deterministic 5-second full-cycle timing.
+- Each Modbus read/write operation uses bounded retry (`MODBUS_RETRY_COUNT`) with linear backoff (`MODBUS_RETRY_BACKOFF_MS`).
+- TX failures and RX frame integrity failures are accounted in `g_status` counters.
+
 ## Source of truth in code
 - Runtime constants: `Core/Inc/gh_runtime_state.h`
 - RTU master loop: `Core/Src/gh_modbus_master.c`

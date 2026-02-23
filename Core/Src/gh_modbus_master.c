@@ -17,6 +17,47 @@
 #define GH_RTU_CTRL_SP_WATER_UNDER_REG 109U
 #define GH_RTU_APPLY_TRIGGER_REG      122U
 
+static bool gh_modbus_read_holding_retry(uint8_t slave_id,
+                                         uint16_t start_reg,
+                                         uint16_t reg_count,
+                                         uint16_t *out_regs)
+{
+  uint8_t attempt;
+
+  for (attempt = 0U; attempt < MODBUS_RETRY_COUNT; attempt++)
+  {
+    if (modbus_read_holding_registers(slave_id, start_reg, reg_count, out_regs))
+    {
+      return true;
+    }
+    if ((attempt + 1U) < MODBUS_RETRY_COUNT)
+    {
+      osDelay(MODBUS_RETRY_BACKOFF_MS * (attempt + 1U));
+    }
+  }
+
+  return false;
+}
+
+static bool gh_modbus_write_single_retry(uint8_t slave_id, uint16_t reg, uint16_t value)
+{
+  uint8_t attempt;
+
+  for (attempt = 0U; attempt < MODBUS_RETRY_COUNT; attempt++)
+  {
+    if (modbus_write_single_holding_register(slave_id, reg, value))
+    {
+      return true;
+    }
+    if ((attempt + 1U) < MODBUS_RETRY_COUNT)
+    {
+      osDelay(MODBUS_RETRY_BACKOFF_MS * (attempt + 1U));
+    }
+  }
+
+  return false;
+}
+
 void GH_ModbusMasterTask_Run(void *argument)
 {
   uint16_t regs[GH_RTU_READ_REG_COUNT];
@@ -41,10 +82,10 @@ void GH_ModbusMasterTask_Run(void *argument)
     for (s = GH_RTU_SLAVE_FIRST; s <= GH_RTU_SLAVE_LAST; s++)
     {
       now = HAL_GetTick();
-      ok = modbus_read_holding_registers((uint8_t)s,
-                                         GH_RTU_READ_START_REG,
-                                         GH_RTU_READ_REG_COUNT,
-                                         regs);
+      ok = gh_modbus_read_holding_retry((uint8_t)s,
+                                        GH_RTU_READ_START_REG,
+                                        GH_RTU_READ_REG_COUNT,
+                                        regs);
       if (ok)
       {
         for (i = 0U; i < GH_RTU_SENSORS_PER_SLAVE; i++)
@@ -77,7 +118,7 @@ void GH_ModbusMasterTask_Run(void *argument)
         }
       }
 
-      if (modbus_read_holding_registers((uint8_t)s, GH_RTU_DIAG_BASE_REG, GH_RTU_DIAG_COUNT, diag_regs))
+      if (gh_modbus_read_holding_retry((uint8_t)s, GH_RTU_DIAG_BASE_REG, GH_RTU_DIAG_COUNT, diag_regs))
       {
         GH_ModbusMap_UpdateDiag((uint8_t)s, diag_regs[0], diag_regs[1], diag_regs[2]);
         g_status.control_mode = (uint8_t)(diag_regs[0] & 0x00FFU);
@@ -90,22 +131,22 @@ void GH_ModbusMasterTask_Run(void *argument)
       if (GH_ModbusMap_GetApplyRequest((uint8_t)s, &req))
       {
         /* Mapping from master TCP setpoints to current slave control map. */
-        apply_ok = modbus_write_single_holding_register((uint8_t)s, GH_RTU_CTRL_MODE_CMD_REG, req.setpoints[0]);
-        apply_ok = apply_ok && modbus_write_single_holding_register((uint8_t)s,
-                                                                     GH_RTU_CTRL_SP_WATER_RAIL_REG,
-                                                                     req.setpoints[1]);
-        apply_ok = apply_ok && modbus_write_single_holding_register((uint8_t)s,
-                                                                     GH_RTU_CTRL_SP_WATER_GROW_REG,
-                                                                     req.setpoints[2]);
-        apply_ok = apply_ok && modbus_write_single_holding_register((uint8_t)s,
-                                                                     GH_RTU_CTRL_SP_WATER_UPPER_REG,
-                                                                     req.setpoints[3]);
-        apply_ok = apply_ok && modbus_write_single_holding_register((uint8_t)s,
-                                                                     GH_RTU_CTRL_SP_WATER_UNDER_REG,
-                                                                     req.setpoints[4]);
-        apply_ok = apply_ok && modbus_write_single_holding_register((uint8_t)s,
-                                                                    GH_RTU_APPLY_TRIGGER_REG,
-                                                                    req.trigger);
+        apply_ok = gh_modbus_write_single_retry((uint8_t)s, GH_RTU_CTRL_MODE_CMD_REG, req.setpoints[0]);
+        apply_ok = apply_ok && gh_modbus_write_single_retry((uint8_t)s,
+                                                             GH_RTU_CTRL_SP_WATER_RAIL_REG,
+                                                             req.setpoints[1]);
+        apply_ok = apply_ok && gh_modbus_write_single_retry((uint8_t)s,
+                                                             GH_RTU_CTRL_SP_WATER_GROW_REG,
+                                                             req.setpoints[2]);
+        apply_ok = apply_ok && gh_modbus_write_single_retry((uint8_t)s,
+                                                             GH_RTU_CTRL_SP_WATER_UPPER_REG,
+                                                             req.setpoints[3]);
+        apply_ok = apply_ok && gh_modbus_write_single_retry((uint8_t)s,
+                                                             GH_RTU_CTRL_SP_WATER_UNDER_REG,
+                                                             req.setpoints[4]);
+        apply_ok = apply_ok && gh_modbus_write_single_retry((uint8_t)s,
+                                                             GH_RTU_APPLY_TRIGGER_REG,
+                                                             req.trigger);
         GH_ModbusMap_MarkApplyResult((uint8_t)s, req.trigger, apply_ok);
         if (!apply_ok)
         {
@@ -113,7 +154,7 @@ void GH_ModbusMasterTask_Run(void *argument)
         }
       }
 
-      osDelay(1U);
+      osDelay(MODBUS_INTER_SLAVE_DELAY_MS);
     }
 
     task_heartbeat_kick(TASK_BIT_MODBUS);
@@ -124,7 +165,7 @@ void GH_ModbusMasterTask_Run(void *argument)
     }
     else
     {
-      osDelay(1U);
+      osDelay(MODBUS_INTER_SLAVE_DELAY_MS);
     }
   }
 }
