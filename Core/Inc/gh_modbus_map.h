@@ -45,6 +45,7 @@ void GH_ModbusMap_ReportConfigResult(uint16_t token,
                                      config_result_code_t result,
                                      uint32_t active_version);
 
+/* Legacy bootstrap pointer for third-party Modbus stack. Avoid direct writes. */
 uint16_t *GH_ModbusMap_GetBackingStore(void);
 uint16_t GH_ModbusMap_GetBackingStoreSize(void);
 

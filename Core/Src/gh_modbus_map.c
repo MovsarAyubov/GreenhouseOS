@@ -47,6 +47,46 @@ enum
 static uint16_t s_holding[GH_MB_TOTAL_REGS];
 static uint32_t s_last_ok_ms[GH_MB_MAX_SLAVES];
 static uint16_t s_last_submit_token = 0U;
+static osMutexId_t s_map_mutex = NULL;
+
+static bool map_ensure_mutex(void)
+{
+  if (s_map_mutex != NULL)
+  {
+    return true;
+  }
+
+  if (osKernelGetState() != osKernelRunning)
+  {
+    return true;
+  }
+
+  s_map_mutex = osMutexNew(NULL);
+  return (s_map_mutex != NULL);
+}
+
+static bool map_lock(void)
+{
+  if (!map_ensure_mutex())
+  {
+    return false;
+  }
+
+  if (s_map_mutex == NULL)
+  {
+    return true;
+  }
+
+  return (osMutexAcquire(s_map_mutex, osWaitForever) == osOK);
+}
+
+static void map_unlock(void)
+{
+  if (s_map_mutex != NULL)
+  {
+    (void)osMutexRelease(s_map_mutex);
+  }
+}
 
 static bool addr_to_index(uint16_t addr, uint16_t qty, uint16_t *out_idx)
 {
@@ -113,13 +153,25 @@ static uint32_t cfg_get_u32(uint16_t off_hi, uint16_t off_lo)
          (uint32_t)s_holding[cfg_index(off_lo)];
 }
 
-void GH_ModbusMap_ReportConfigResult(uint16_t token,
+static void cfg_report_result_nolock(uint16_t token,
                                      config_result_code_t result,
                                      uint32_t active_version)
 {
   s_holding[cfg_index(CFG_OFF_RESULT_CODE)] = (uint16_t)result;
   s_holding[cfg_index(CFG_OFF_RESULT_TOKEN)] = token;
   cfg_set_u32(CFG_OFF_ACTIVE_VER_HI, CFG_OFF_ACTIVE_VER_LO, active_version);
+}
+
+void GH_ModbusMap_ReportConfigResult(uint16_t token,
+                                     config_result_code_t result,
+                                     uint32_t active_version)
+{
+  if (!map_lock())
+  {
+    return;
+  }
+  cfg_report_result_nolock(token, result, active_version);
+  map_unlock();
 }
 
 static bool cfg_try_submit(uint16_t token)
@@ -141,7 +193,7 @@ static bool cfg_try_submit(uint16_t token)
   if ((osKernelGetState() != osKernelRunning) || (qConfigStoreHandle == NULL))
   {
     g_setpoints_apply_in_progress = false;
-    GH_ModbusMap_ReportConfigResult(token, CFG_RESULT_REJECT_QUEUE_FULL, g_active_config.version);
+    cfg_report_result_nolock(token, CFG_RESULT_REJECT_QUEUE_FULL, g_active_config.version);
     publish_event(EVENT_SEV_WARN, EVENT_CODE_CFG_REJECTED, 0U, (float)CFG_RESULT_REJECT_QUEUE_FULL);
     return false;
   }
@@ -152,13 +204,13 @@ static bool cfg_try_submit(uint16_t token)
   if (osMessageQueuePut(qConfigStoreHandle, &req, 0U, 0U) != osOK)
   {
     g_setpoints_apply_in_progress = false;
-    GH_ModbusMap_ReportConfigResult(token, CFG_RESULT_REJECT_QUEUE_FULL, g_active_config.version);
+    cfg_report_result_nolock(token, CFG_RESULT_REJECT_QUEUE_FULL, g_active_config.version);
     publish_event(EVENT_SEV_WARN, EVENT_CODE_CFG_REJECTED, 0U, (float)CFG_RESULT_REJECT_QUEUE_FULL);
     return false;
   }
 
   g_setpoints_apply_in_progress = true;
-  GH_ModbusMap_ReportConfigResult(token, CFG_RESULT_QUEUED, g_active_config.version);
+  cfg_report_result_nolock(token, CFG_RESULT_QUEUED, g_active_config.version);
   s_last_submit_token = token;
   return true;
 }
@@ -187,6 +239,12 @@ void GH_ModbusMap_Init(void)
   uint8_t s;
   uint16_t base;
 
+  (void)map_ensure_mutex();
+  if (!map_lock())
+  {
+    return;
+  }
+
   memset(s_holding, 0, sizeof(s_holding));
   memset(s_last_ok_ms, 0, sizeof(s_last_ok_ms));
   s_last_submit_token = 0U;
@@ -205,6 +263,7 @@ void GH_ModbusMap_Init(void)
   s_holding[cfg_index(CFG_OFF_RESULT_TOKEN)] = 0U;
   cfg_set_u32(CFG_OFF_ACTIVE_VER_HI, CFG_OFF_ACTIVE_VER_LO, g_active_config.version);
   s_holding[cfg_index(CFG_OFF_SUBMIT_TOKEN)] = 0U;
+  map_unlock();
 }
 
 void GH_ModbusMap_UpdateAges(uint32_t now_ms)
@@ -212,6 +271,11 @@ void GH_ModbusMap_UpdateAges(uint32_t now_ms)
   uint8_t s;
   uint16_t base;
   uint32_t age_sec;
+
+  if (!map_lock())
+  {
+    return;
+  }
 
   for (s = 1U; s <= GH_MB_MAX_SLAVES; s++)
   {
@@ -233,6 +297,7 @@ void GH_ModbusMap_UpdateAges(uint32_t now_ms)
     }
     s_holding[base + REG_OFF_LAST_OK_AGE_SEC] = (uint16_t)age_sec;
   }
+  map_unlock();
 }
 
 bool GH_ModbusMap_ReadRange(uint16_t start_addr, uint16_t qty, uint16_t *out_regs)
@@ -244,7 +309,12 @@ bool GH_ModbusMap_ReadRange(uint16_t start_addr, uint16_t qty, uint16_t *out_reg
     return false;
   }
 
+  if (!map_lock())
+  {
+    return false;
+  }
   memcpy(out_regs, &s_holding[idx], (uint32_t)qty * sizeof(uint16_t));
+  map_unlock();
   return true;
 }
 
@@ -255,8 +325,13 @@ bool GH_ModbusMap_WriteSingle(uint16_t addr, uint16_t value)
   {
     return false;
   }
+  if (!map_lock())
+  {
+    return false;
+  }
   s_holding[idx] = value;
   cfg_maybe_submit_after_write(idx, 1U);
+  map_unlock();
   return true;
 }
 
@@ -269,8 +344,13 @@ bool GH_ModbusMap_WriteRange(uint16_t start_addr, uint16_t qty, const uint16_t *
     return false;
   }
 
+  if (!map_lock())
+  {
+    return false;
+  }
   memcpy(&s_holding[idx], values, (uint32_t)qty * sizeof(uint16_t));
   cfg_maybe_submit_after_write(idx, qty);
+  map_unlock();
   return true;
 }
 
@@ -287,6 +367,10 @@ void GH_ModbusMap_UpdateTelemetry(uint8_t slave_id,
   {
     return;
   }
+  if (!map_lock())
+  {
+    return;
+  }
 
   for (i = 0U; i < 9U; i++)
   {
@@ -298,6 +382,7 @@ void GH_ModbusMap_UpdateTelemetry(uint8_t slave_id,
   s_holding[base + REG_OFF_LAST_OK_AGE_SEC] = 0U;
   s_last_ok_ms[slave_id - 1U] = now_ms;
   bump_data_version(base);
+  map_unlock();
 }
 
 void GH_ModbusMap_ReportTimeout(uint8_t slave_id, uint32_t now_ms)
@@ -309,8 +394,13 @@ void GH_ModbusMap_ReportTimeout(uint8_t slave_id, uint32_t now_ms)
   {
     return;
   }
+  if (!map_lock())
+  {
+    return;
+  }
   s_holding[base + REG_OFF_ERR_TIMEOUT]++;
   s_holding[base + REG_OFF_SLAVE_STATUS] = 0x0002U; /* online=0, stale=1 */
+  map_unlock();
 }
 
 void GH_ModbusMap_UpdateDiag(uint8_t slave_id,
@@ -323,9 +413,14 @@ void GH_ModbusMap_UpdateDiag(uint8_t slave_id,
   {
     return;
   }
+  if (!map_lock())
+  {
+    return;
+  }
   s_holding[base + REG_OFF_ERR_TIMEOUT] = err_timeout;
   s_holding[base + REG_OFF_ERR_CRC] = err_crc;
   s_holding[base + REG_OFF_ERR_EXCEPTION] = err_exception;
+  map_unlock();
 }
 
 bool GH_ModbusMap_GetApplyRequest(uint8_t slave_id, gh_slave_apply_request_t *out_req)
@@ -338,11 +433,16 @@ bool GH_ModbusMap_GetApplyRequest(uint8_t slave_id, gh_slave_apply_request_t *ou
   {
     return false;
   }
+  if (!map_lock())
+  {
+    return false;
+  }
 
   trigger = s_holding[base + REG_OFF_APPLY_TRIGGER];
   applied = s_holding[base + REG_OFF_LAST_APPLIED_TRIGGER];
   if (trigger == applied)
   {
+    map_unlock();
     return false;
   }
 
@@ -356,6 +456,7 @@ bool GH_ModbusMap_GetApplyRequest(uint8_t slave_id, gh_slave_apply_request_t *ou
   out_req->setpoints[6] = s_holding[base + REG_OFF_MIN_OFF_SEC];
   out_req->out_cmd_mask = s_holding[base + REG_OFF_OUT_CMD_MASK];
 
+  map_unlock();
   return true;
 }
 
@@ -366,11 +467,16 @@ void GH_ModbusMap_MarkApplyResult(uint8_t slave_id, uint16_t trigger, bool appli
   {
     return;
   }
+  if (!map_lock())
+  {
+    return;
+  }
   if (applied)
   {
     s_holding[base + REG_OFF_LAST_APPLIED_TRIGGER] = trigger;
     bump_data_version(base);
   }
+  map_unlock();
 }
 
 uint16_t *GH_ModbusMap_GetBackingStore(void)

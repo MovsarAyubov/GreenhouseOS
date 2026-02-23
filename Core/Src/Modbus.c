@@ -1512,6 +1512,19 @@ uint8_t validateRequest(modbusHandler_t *modH)
 	        return EXC_FUNC_CODE;
 	    }
 
+#if ENABLE_TCP == 1
+	    if (modH->xTypeHW == TCP_HW)
+	    {
+	      if ((modH->u8Buffer[FUNC] != MB_FC_READ_REGISTERS) &&
+	          (modH->u8Buffer[FUNC] != MB_FC_WRITE_REGISTER) &&
+	          (modH->u8Buffer[FUNC] != MB_FC_WRITE_MULTIPLE_REGISTERS))
+	      {
+	        modH->u16errCnt ++;
+	        return EXC_FUNC_CODE;
+	      }
+	    }
+#endif
+
 	    // check start address & nb range
 	    uint16_t u16AdRegs = 0;
 	    uint16_t u16NRegs = 0;

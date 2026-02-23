@@ -27,6 +27,11 @@ This baseline records decisions confirmed for the current firmware line.
 - Storage task validates `version`, `CRC32`, and payload float ranges before flash write.
 - Flash writes use retry policy and A/B fallback before reject.
 
+## Modbus map concurrency baseline
+- Map read/write API (`GH_ModbusMap_ReadRange/WriteSingle/WriteRange/...`) is protected by internal RTOS mutex.
+- TCP Modbus requests use map API hooks (no direct data-path writes for `FC=3/6/16`).
+- Modbus TCP function set is restricted to `FC=3`, `FC=6`, `FC=16` to keep register ownership contract deterministic.
+
 ## Source of truth in code
 - Runtime constants: `Core/Inc/gh_runtime_state.h`
 - RTU master loop: `Core/Src/gh_modbus_master.c`

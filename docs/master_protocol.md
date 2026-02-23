@@ -44,6 +44,12 @@ Result codes:
 - `14` `FLASH_FAIL`
 - `15` `APPLY_QUEUE_FAIL`
 
+## Register ownership contract
+- Per-slave telemetry/diag windows (`0..1279`) are produced by `ModbusMasterTask` via `GH_ModbusMap_Update*`.
+- Per-slave setpoint/apply fields in same windows are written from TCP (`FC=6/16`) and consumed by master via `GH_ModbusMap_GetApplyRequest`.
+- Global config window (`1280..1359`) request fields are written from TCP and consumed by `ConfigStorageTask`.
+- Global config result fields are written by `ConfigStorageTask`/`ControlTask` and read by TCP clients.
+
 ## Master to slave RS485/RTU cycle
 - Master polls slave IDs `1..20`.
 - One full poll cycle runs every `5 seconds` (waits for remaining cycle budget).
