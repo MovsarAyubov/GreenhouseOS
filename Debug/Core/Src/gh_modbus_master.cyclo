@@ -1,1 +1,3 @@
-../Core/Src/gh_modbus_master.c:20:6:GH_ModbusMasterTask_Run	21
+../Core/Src/gh_modbus_master.c:20:13:gh_modbus_read_holding_retry	4
+../Core/Src/gh_modbus_master.c:42:13:gh_modbus_write_single_retry	4
+../Core/Src/gh_modbus_master.c:61:6:GH_ModbusMasterTask_Run	22

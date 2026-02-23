@@ -1,4 +1,5 @@
 #include "gh_runtime_state.h"
+#include "gh_modbus_io.h"
 
 #include "gh_crc32.h"
 
@@ -18,6 +19,9 @@
 #define MODBUS_LIGHT_STAGE1_REG       134U
 #define MODBUS_LIGHT_STAGE2_REG       135U
 #define MODBUS_CTRL_REG_COUNT         ((MODBUS_CTRL_END - MODBUS_CTRL_BASE) + 1U)
+#define GH_MODBUS_IO_EVT_TX_DONE      (1UL << 0)
+#define GH_MODBUS_IO_EVT_RX_DONE      (1UL << 1)
+#define GH_MODBUS_IO_EVT_ERROR        (1UL << 2)
 
 static void modbus_count_tx_error(void)
 {
@@ -27,6 +31,43 @@ static void modbus_count_tx_error(void)
 static void modbus_count_rx_error(void)
 {
   g_status.crc_errors_rx++;
+}
+
+static osMutexId_t s_modbus_io_mutex = NULL;
+static osEventFlagsId_t s_modbus_io_events = NULL;
+static bool s_modbus_io_ready = false;
+
+bool GH_ModbusIo_OnUartTxCplt(UART_HandleTypeDef *huart)
+{
+  if (!s_modbus_io_ready || (s_modbus_io_events == NULL) || (huart != &huart2))
+  {
+    return false;
+  }
+
+  (void)osEventFlagsSet(s_modbus_io_events, GH_MODBUS_IO_EVT_TX_DONE);
+  return true;
+}
+
+bool GH_ModbusIo_OnUartRxCplt(UART_HandleTypeDef *huart)
+{
+  if (!s_modbus_io_ready || (s_modbus_io_events == NULL) || (huart != &huart2))
+  {
+    return false;
+  }
+
+  (void)osEventFlagsSet(s_modbus_io_events, GH_MODBUS_IO_EVT_RX_DONE);
+  return true;
+}
+
+bool GH_ModbusIo_OnUartError(UART_HandleTypeDef *huart)
+{
+  if (!s_modbus_io_ready || (s_modbus_io_events == NULL) || (huart != &huart2))
+  {
+    return false;
+  }
+
+  (void)osEventFlagsSet(s_modbus_io_events, GH_MODBUS_IO_EVT_ERROR);
+  return true;
 }
 
 static uint16_t modbus_crc16(const uint8_t *data, uint16_t len)
@@ -58,6 +99,36 @@ static void rs485_set_tx(bool tx_en)
   HAL_GPIO_WritePin(RS485_DE_RE_PORT, RS485_DE_RE_PIN, tx_en ? GPIO_PIN_SET : GPIO_PIN_RESET);
 }
 
+static bool modbus_io_ensure_ready(void)
+{
+  if (s_modbus_io_ready)
+  {
+    return true;
+  }
+
+  if (osKernelGetState() != osKernelRunning)
+  {
+    return false;
+  }
+
+  s_modbus_io_mutex = osMutexNew(NULL);
+  if (s_modbus_io_mutex == NULL)
+  {
+    return false;
+  }
+
+  s_modbus_io_events = osEventFlagsNew(NULL);
+  if (s_modbus_io_events == NULL)
+  {
+    (void)osMutexDelete(s_modbus_io_mutex);
+    s_modbus_io_mutex = NULL;
+    return false;
+  }
+
+  s_modbus_io_ready = true;
+  return true;
+}
+
 static void uart_drain_rx(UART_HandleTypeDef *huart)
 {
   uint8_t b;
@@ -65,6 +136,88 @@ static void uart_drain_rx(UART_HandleTypeDef *huart)
   {
     /* Drain stale bytes to keep Modbus frame boundaries clean. */
   }
+}
+
+static bool modbus_uart_tx_it(const uint8_t *data, uint16_t len)
+{
+  uint32_t flags;
+  uint32_t tc_wait_start_ms;
+
+  (void)osEventFlagsClear(s_modbus_io_events,
+                          GH_MODBUS_IO_EVT_TX_DONE | GH_MODBUS_IO_EVT_ERROR);
+
+  rs485_set_tx(true);
+  if (HAL_UART_Transmit_IT(&huart2, (uint8_t *)data, len) != HAL_OK)
+  {
+    rs485_set_tx(false);
+    modbus_count_tx_error();
+    return false;
+  }
+
+  flags = osEventFlagsWait(s_modbus_io_events,
+                           GH_MODBUS_IO_EVT_TX_DONE | GH_MODBUS_IO_EVT_ERROR,
+                           osFlagsWaitAny,
+                           MODBUS_UART_TX_TIMEOUT_MS);
+  if ((flags & osFlagsError) != 0U)
+  {
+    (void)HAL_UART_AbortTransmit(&huart2);
+    rs485_set_tx(false);
+    modbus_count_tx_error();
+    return false;
+  }
+  if ((flags & GH_MODBUS_IO_EVT_ERROR) != 0U)
+  {
+    (void)HAL_UART_AbortTransmit(&huart2);
+    rs485_set_tx(false);
+    modbus_count_tx_error();
+    return false;
+  }
+
+  tc_wait_start_ms = HAL_GetTick();
+  while (__HAL_UART_GET_FLAG(&huart2, UART_FLAG_TC) == RESET)
+  {
+    if ((HAL_GetTick() - tc_wait_start_ms) >= MODBUS_UART_TX_TIMEOUT_MS)
+    {
+      (void)HAL_UART_AbortTransmit(&huart2);
+      rs485_set_tx(false);
+      modbus_count_tx_error();
+      return false;
+    }
+  }
+  rs485_set_tx(false);
+  return true;
+}
+
+static bool modbus_uart_rx_it(uint8_t *data, uint16_t len, uint32_t timeout_ms)
+{
+  uint32_t flags;
+
+  (void)osEventFlagsClear(s_modbus_io_events,
+                          GH_MODBUS_IO_EVT_RX_DONE | GH_MODBUS_IO_EVT_ERROR);
+  if (HAL_UART_Receive_IT(&huart2, data, len) != HAL_OK)
+  {
+    modbus_count_rx_error();
+    return false;
+  }
+
+  flags = osEventFlagsWait(s_modbus_io_events,
+                           GH_MODBUS_IO_EVT_RX_DONE | GH_MODBUS_IO_EVT_ERROR,
+                           osFlagsWaitAny,
+                           timeout_ms);
+  if ((flags & osFlagsError) != 0U)
+  {
+    (void)HAL_UART_AbortReceive(&huart2);
+    modbus_count_rx_error();
+    return false;
+  }
+  if ((flags & GH_MODBUS_IO_EVT_ERROR) != 0U)
+  {
+    (void)HAL_UART_AbortReceive(&huart2);
+    modbus_count_rx_error();
+    return false;
+  }
+
+  return true;
 }
 
 bool modbus_read_holding_registers(uint8_t slave_id,
@@ -83,6 +236,14 @@ bool modbus_read_holding_registers(uint8_t slave_id,
   {
     return false;
   }
+  if (!modbus_io_ensure_ready())
+  {
+    return false;
+  }
+  if (osMutexAcquire(s_modbus_io_mutex, osWaitForever) != osOK)
+  {
+    return false;
+  }
 
   req[0] = slave_id;
   req[1] = MODBUS_FUNC_READ_HOLDING;
@@ -95,24 +256,23 @@ bool modbus_read_holding_registers(uint8_t slave_id,
   req[7] = (uint8_t)(req_crc >> 8U);
 
   uart_drain_rx(&huart2);
-  rs485_set_tx(true);
-  if (HAL_UART_Transmit(&huart2, req, sizeof(req), MODBUS_UART_TX_TIMEOUT_MS) != HAL_OK)
+  if (!modbus_uart_tx_it(req, (uint16_t)sizeof(req)))
   {
-    rs485_set_tx(false);
-    modbus_count_tx_error();
+    (void)osMutexRelease(s_modbus_io_mutex);
     return false;
   }
-  rs485_set_tx(false);
 
   exp_len = (uint16_t)(5U + (reg_count * 2U));
-  if (HAL_UART_Receive(&huart2, resp, exp_len, MODBUS_RTU_RESP_TIMEOUT_MS) != HAL_OK)
+  if (!modbus_uart_rx_it(resp, exp_len, MODBUS_RTU_RESP_TIMEOUT_MS))
   {
+    (void)osMutexRelease(s_modbus_io_mutex);
     return false;
   }
 
   if ((resp[0] != slave_id) || (resp[1] != MODBUS_FUNC_READ_HOLDING) || (resp[2] != (uint8_t)(reg_count * 2U)))
   {
     modbus_count_rx_error();
+    (void)osMutexRelease(s_modbus_io_mutex);
     return false;
   }
 
@@ -120,6 +280,7 @@ bool modbus_read_holding_registers(uint8_t slave_id,
   if (modbus_crc16(resp, (uint16_t)(exp_len - 2U)) != resp_crc)
   {
     modbus_count_rx_error();
+    (void)osMutexRelease(s_modbus_io_mutex);
     return false;
   }
 
@@ -128,6 +289,7 @@ bool modbus_read_holding_registers(uint8_t slave_id,
     out_regs[i] = (uint16_t)(((uint16_t)resp[3U + (2U * i)] << 8U) |
                               (uint16_t)resp[3U + (2U * i) + 1U]);
   }
+  (void)osMutexRelease(s_modbus_io_mutex);
   return true;
 }
 
@@ -148,18 +310,25 @@ bool modbus_write_single_holding_register(uint8_t slave_id, uint16_t reg, uint16
   req[6] = (uint8_t)(crc & 0xFFU);
   req[7] = (uint8_t)(crc >> 8U);
 
-  uart_drain_rx(&huart2);
-  rs485_set_tx(true);
-  if (HAL_UART_Transmit(&huart2, req, sizeof(req), MODBUS_UART_TX_TIMEOUT_MS) != HAL_OK)
+  if (!modbus_io_ensure_ready())
   {
-    rs485_set_tx(false);
-    modbus_count_tx_error();
     return false;
   }
-  rs485_set_tx(false);
-
-  if (HAL_UART_Receive(&huart2, resp, sizeof(resp), MODBUS_RTU_RESP_TIMEOUT_MS) != HAL_OK)
+  if (osMutexAcquire(s_modbus_io_mutex, osWaitForever) != osOK)
   {
+    return false;
+  }
+
+  uart_drain_rx(&huart2);
+  if (!modbus_uart_tx_it(req, (uint16_t)sizeof(req)))
+  {
+    (void)osMutexRelease(s_modbus_io_mutex);
+    return false;
+  }
+
+  if (!modbus_uart_rx_it(resp, (uint16_t)sizeof(resp), MODBUS_RTU_RESP_TIMEOUT_MS))
+  {
+    (void)osMutexRelease(s_modbus_io_mutex);
     return false;
   }
 
@@ -169,8 +338,10 @@ bool modbus_write_single_holding_register(uint8_t slave_id, uint16_t reg, uint16
       (modbus_crc16(resp, 6U) != resp_crc))
   {
     modbus_count_rx_error();
+    (void)osMutexRelease(s_modbus_io_mutex);
     return false;
   }
+  (void)osMutexRelease(s_modbus_io_mutex);
   return true;
 }
 
@@ -187,6 +358,14 @@ bool modbus_write_multiple_holding_registers(uint8_t slave_id,
   uint16_t req_len;
 
   if ((reg_count == 0U) || (reg_count > MODBUS_MAX_REGS_PER_REQ))
+  {
+    return false;
+  }
+  if (!modbus_io_ensure_ready())
+  {
+    return false;
+  }
+  if (osMutexAcquire(s_modbus_io_mutex, osWaitForever) != osOK)
   {
     return false;
   }
@@ -209,17 +388,15 @@ bool modbus_write_multiple_holding_registers(uint8_t slave_id,
   req[req_len + 1U] = (uint8_t)(crc >> 8U);
 
   uart_drain_rx(&huart2);
-  rs485_set_tx(true);
-  if (HAL_UART_Transmit(&huart2, req, (uint16_t)(req_len + 2U), MODBUS_UART_TX_TIMEOUT_MS) != HAL_OK)
+  if (!modbus_uart_tx_it(req, (uint16_t)(req_len + 2U)))
   {
-    rs485_set_tx(false);
-    modbus_count_tx_error();
+    (void)osMutexRelease(s_modbus_io_mutex);
     return false;
   }
-  rs485_set_tx(false);
 
-  if (HAL_UART_Receive(&huart2, resp, sizeof(resp), MODBUS_RTU_RESP_TIMEOUT_MS) != HAL_OK)
+  if (!modbus_uart_rx_it(resp, (uint16_t)sizeof(resp), MODBUS_RTU_RESP_TIMEOUT_MS))
   {
+    (void)osMutexRelease(s_modbus_io_mutex);
     return false;
   }
 
@@ -230,8 +407,10 @@ bool modbus_write_multiple_holding_registers(uint8_t slave_id,
       (modbus_crc16(resp, 6U) != resp_crc))
   {
     modbus_count_rx_error();
+    (void)osMutexRelease(s_modbus_io_mutex);
     return false;
   }
+  (void)osMutexRelease(s_modbus_io_mutex);
   return true;
 }
 

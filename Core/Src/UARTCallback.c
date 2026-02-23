@@ -10,6 +10,7 @@
 #include "task.h"
 #include "main.h"
 #include "Modbus.h"
+#include "gh_modbus_io.h"
 
 
 /**
@@ -23,6 +24,11 @@
 
 void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
 {
+	if (GH_ModbusIo_OnUartTxCplt(huart))
+	{
+		return;
+	}
+
 	/* Modbus RTU TX callback BEGIN */
 	BaseType_t xHigherPriorityTaskWoken = pdFALSE;
 	int i;
@@ -59,6 +65,11 @@ void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
  */
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *UartHandle)
 {
+	if (GH_ModbusIo_OnUartRxCplt(UartHandle))
+	{
+		return;
+	}
+
 	BaseType_t xHigherPriorityTaskWoken = pdFALSE;
 
 	/* Modbus RTU RX callback BEGIN */
@@ -100,6 +111,10 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *UartHandle)
 
 void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
 {
+ if (GH_ModbusIo_OnUartError(huart))
+ {
+   return;
+ }
 
  int i;
 
@@ -159,4 +174,11 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
 	    portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
 }
 
+#endif
+
+#if  ENABLE_USART_DMA ==  0
+void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
+{
+	(void)GH_ModbusIo_OnUartError(huart);
+}
 #endif

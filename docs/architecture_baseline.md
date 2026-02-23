@@ -18,6 +18,7 @@ This baseline records decisions confirmed for the current firmware line.
 ## RS485/Modbus baseline
 - RTU master uses deterministic 5-second full-cycle timing.
 - Each Modbus read/write operation uses bounded retry (`MODBUS_RETRY_COUNT`) with linear backoff (`MODBUS_RETRY_BACKOFF_MS`).
+- RTU transport uses UART interrupt completion (TX/RX/Error) with RTOS event flags instead of blocking byte waits.
 - TX failures and RX frame integrity failures are accounted in `g_status` counters.
 
 ## Source of truth in code

@@ -42,7 +42,7 @@ Core/Src/gh_modbus_io.o: ../Core/Src/gh_modbus_io.c \
  ../Middlewares/Third_Party/FreeRTOS/Source/include/task.h \
  ../Middlewares/Third_Party/FreeRTOS/Source/include/list.h \
  ../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2/cmsis_os2.h \
- ../Core/Inc/gh_crc32.h
+ ../Core/Inc/gh_modbus_io.h ../Core/Inc/gh_crc32.h
 ../Core/Inc/gh_runtime_state.h:
 ../Core/Inc/main.h:
 ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal.h:
@@ -87,4 +87,5 @@ Core/Src/gh_modbus_io.o: ../Core/Src/gh_modbus_io.c \
 ../Middlewares/Third_Party/FreeRTOS/Source/include/task.h:
 ../Middlewares/Third_Party/FreeRTOS/Source/include/list.h:
 ../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2/cmsis_os2.h:
+../Core/Inc/gh_modbus_io.h:
 ../Core/Inc/gh_crc32.h:
