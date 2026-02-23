@@ -27,10 +27,15 @@
 #define CONFIG_SLOT_B_ADDR            0x08060000UL
 #define CONFIG_SLOT_A_SECTOR          FLASH_SECTOR_6
 #define CONFIG_SLOT_B_SECTOR          FLASH_SECTOR_7
+#define CONFIG_FLASH_WRITE_RETRIES    3U
+#define CONFIG_FLASH_RETRY_DELAY_MS   20U
+#define CONFIG_APPLY_QUEUE_RETRIES    3U
+#define CONFIG_APPLY_QUEUE_DELAY_MS   20U
 
 #define EVENT_CODE_LINK_DOWN          1000U
 #define EVENT_CODE_LINK_UP            1001U
 #define EVENT_CODE_CFG_APPLIED        1100U
+#define EVENT_CODE_CFG_REJECTED       1101U
 #define EVENT_CODE_WDG_MISS           1200U
 #define EVENT_CODE_CTRL_SYNC_FAIL     1300U
 
@@ -60,6 +65,19 @@ typedef enum
   APPLY_FAILED = 1U
 } apply_code_t;
 
+typedef enum
+{
+  CFG_RESULT_IDLE = 0U,
+  CFG_RESULT_QUEUED = 1U,
+  CFG_RESULT_APPLIED = 2U,
+  CFG_RESULT_REJECT_BAD_VERSION = 10U,
+  CFG_RESULT_REJECT_BAD_CRC = 11U,
+  CFG_RESULT_REJECT_RANGE = 12U,
+  CFG_RESULT_REJECT_QUEUE_FULL = 13U,
+  CFG_RESULT_FLASH_FAIL = 14U,
+  CFG_RESULT_APPLY_QUEUE_FAIL = 15U
+} config_result_code_t;
+
 typedef struct
 {
   float value;
@@ -69,6 +87,8 @@ typedef struct
 
 typedef struct
 {
+  uint16_t request_token;
+  uint16_t reserved0;
   uint32_t version;
   uint8_t payload[CONFIG_PAYLOAD_SIZE];
   uint32_t payload_crc;
@@ -114,6 +134,13 @@ typedef struct
   uint8_t payload[CONFIG_PAYLOAD_SIZE];
   uint32_t crc;
 } active_config_t;
+
+typedef struct
+{
+  uint16_t request_token;
+  uint16_t reserved0;
+  active_config_t config;
+} config_apply_req_t;
 
 typedef struct __attribute__((packed))
 {

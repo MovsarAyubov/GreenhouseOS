@@ -21,6 +21,12 @@ This baseline records decisions confirmed for the current firmware line.
 - RTU transport uses UART interrupt completion (TX/RX/Error) with RTOS event flags instead of blocking byte waits.
 - TX failures and RX frame integrity failures are accounted in `g_status` counters.
 
+## Config pipeline baseline
+- Config updates are submitted through Modbus map global config window (`GH_MB_CFG_BASE`).
+- Pipeline is tokenized (`SUBMIT_TOKEN`) and reports explicit result codes (`RESULT_CODE`, `RESULT_TOKEN`).
+- Storage task validates `version`, `CRC32`, and payload float ranges before flash write.
+- Flash writes use retry policy and A/B fallback before reject.
+
 ## Source of truth in code
 - Runtime constants: `Core/Inc/gh_runtime_state.h`
 - RTU master loop: `Core/Src/gh_modbus_master.c`

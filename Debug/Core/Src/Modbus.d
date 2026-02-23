@@ -47,6 +47,7 @@ Core/Src/Modbus.o: ../Core/Src/Modbus.c \
  ../Middlewares/Third_Party/FreeRTOS/Source/include/timers.h \
  ../Middlewares/Third_Party/FreeRTOS/Source/include/semphr.h \
  ../Middlewares/Third_Party/FreeRTOS/Source/include/queue.h \
+ ../Core/Inc/gh_modbus_map.h ../Core/Inc/gh_runtime_state.h \
  ../Middlewares/Third_Party/LwIP/src/include/lwip/api.h \
  ../Middlewares/Third_Party/LwIP/src/include/lwip/opt.h \
  ../LWIP/Target/lwipopts.h \
@@ -123,6 +124,8 @@ Core/Src/Modbus.o: ../Core/Src/Modbus.c \
 ../Middlewares/Third_Party/FreeRTOS/Source/include/timers.h:
 ../Middlewares/Third_Party/FreeRTOS/Source/include/semphr.h:
 ../Middlewares/Third_Party/FreeRTOS/Source/include/queue.h:
+../Core/Inc/gh_modbus_map.h:
+../Core/Inc/gh_runtime_state.h:
 ../Middlewares/Third_Party/LwIP/src/include/lwip/api.h:
 ../Middlewares/Third_Party/LwIP/src/include/lwip/opt.h:
 ../LWIP/Target/lwipopts.h:

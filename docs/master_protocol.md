@@ -16,6 +16,33 @@ Date: `2026-02-23`.
 - Holding read (`FC=3`).
 - Single holding write (`FC=6`).
 - Multiple holding write (`FC=16`).
+- For TCP requests, read/write operations are routed through `GH_ModbusMap_*` hooks (not direct raw array writes).
+
+## Config Pipeline Registers (global window)
+- Base index: `GH_MB_CFG_BASE = 1280` (SCADA offset: `42280`).
+- Window size: `GH_MB_CFG_REGS = 80`.
+
+Register map (`base + off`):
+- `+0` `SUBMIT_TOKEN` (W): non-zero changing token triggers enqueue to `qConfigStoreHandle`.
+- `+1` `RESULT_CODE` (R): pipeline result code.
+- `+2` `RESULT_TOKEN` (R): token of last reported result.
+- `+3..+4` `ACTIVE_VERSION` (R, hi/lo).
+- `+5..+6` `LAST_REQ_VERSION` (R, hi/lo).
+- `+7..+8` `LAST_REQ_CRC32` (R, hi/lo).
+- `+10..+11` `REQ_VERSION` (W, hi/lo).
+- `+12..+13` `REQ_CRC32` (W, hi/lo).
+- `+16..+79` `REQ_PAYLOAD_WORDS[64]` (W).
+
+Result codes:
+- `0` `IDLE`
+- `1` `QUEUED`
+- `2` `APPLIED`
+- `10` `REJECT_BAD_VERSION`
+- `11` `REJECT_BAD_CRC`
+- `12` `REJECT_RANGE`
+- `13` `REJECT_QUEUE_FULL`
+- `14` `FLASH_FAIL`
+- `15` `APPLY_QUEUE_FAIL`
 
 ## Master to slave RS485/RTU cycle
 - Master polls slave IDs `1..20`.

@@ -397,7 +397,7 @@ int main(void)
   /* USER CODE END RTOS_TIMERS */
 
   /* USER CODE BEGIN RTOS_QUEUES */
-  qConfigApplyHandle = osMessageQueueNew(4U, sizeof(active_config_t), NULL);
+  qConfigApplyHandle = osMessageQueueNew(4U, sizeof(config_apply_req_t), NULL);
   qConfigStoreHandle = osMessageQueueNew(4U, sizeof(config_update_req_t), NULL);
   /* USER CODE END RTOS_QUEUES */
 
@@ -617,15 +617,19 @@ static void MX_GPIO_Init(void)
 
 void StartControlTask(void *argument)
 {
-  active_config_t cfg = {0};
+  config_apply_req_t apply_req = {0};
   (void)argument;
   for (;;)
   {
-    if (osMessageQueueGet(qConfigApplyHandle, &cfg, NULL, 100U) == osOK)
+    if (osMessageQueueGet(qConfigApplyHandle, &apply_req, NULL, 100U) == osOK)
     {
-      g_active_config = cfg;
+      g_active_config = apply_req.config;
       g_control_sync_pending = 1U;
-      publish_event(EVENT_SEV_INFO, EVENT_CODE_CFG_APPLIED, 0U, (float)cfg.version);
+      g_setpoints_apply_in_progress = false;
+      GH_ModbusMap_ReportConfigResult(apply_req.request_token,
+                                      CFG_RESULT_APPLIED,
+                                      apply_req.config.version);
+      publish_event(EVENT_SEV_INFO, EVENT_CODE_CFG_APPLIED, 0U, (float)apply_req.config.version);
     }
     task_heartbeat_kick(TASK_BIT_CONTROL);
     osDelay(20U);

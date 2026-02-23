@@ -14,6 +14,9 @@
 #include "Modbus.h"
 #include "timers.h"
 #include "semphr.h"
+#ifdef GH_USE_LWIP_NETCONN
+#include "gh_modbus_map.h"
+#endif
 
 
 
@@ -1879,10 +1882,34 @@ int8_t process_FC3(modbusHandler_t *modH)
     uint8_t u8regsno = word( modH->u8Buffer[ NB_HI ], modH->u8Buffer[ NB_LO ] );
     uint8_t u8CopyBufferSize;
     uint16_t i;
+#ifdef GH_USE_LWIP_NETCONN
+    uint16_t regs_local[125];
+#endif
 
     modH->u8Buffer[ 2 ]       = u8regsno * 2;
     modH->u8BufferSize         = 3;
 
+#ifdef GH_USE_LWIP_NETCONN
+    if (modH->xTypeHW == TCP_HW)
+    {
+      if (!GH_ModbusMap_ReadRange(u16StartAdd, u8regsno, regs_local))
+      {
+        buildException(EXC_ADDR_RANGE, modH);
+        u8CopyBufferSize = modH->u8BufferSize + 2;
+        sendTxBuffer(modH);
+        return u8CopyBufferSize;
+      }
+
+      for (i = 0; i < u8regsno; i++)
+      {
+        modH->u8Buffer[modH->u8BufferSize] = highByte(regs_local[i]);
+        modH->u8BufferSize++;
+        modH->u8Buffer[modH->u8BufferSize] = lowByte(regs_local[i]);
+        modH->u8BufferSize++;
+      }
+    }
+    else
+#endif
     for (i = u16StartAdd; i < u16StartAdd + u8regsno; i++)
     {
     	modH->u8Buffer[ modH->u8BufferSize ] = highByte(modH->u16regs[i]);
@@ -1945,6 +1972,19 @@ int8_t process_FC6(modbusHandler_t *modH )
     uint8_t u8CopyBufferSize;
     uint16_t u16val = word( modH->u8Buffer[ NB_HI ], modH->u8Buffer[ NB_LO ] );
 
+#ifdef GH_USE_LWIP_NETCONN
+    if (modH->xTypeHW == TCP_HW)
+    {
+      if (!GH_ModbusMap_WriteSingle(u16add, u16val))
+      {
+        buildException(EXC_ADDR_RANGE, modH);
+        u8CopyBufferSize = modH->u8BufferSize + 2;
+        sendTxBuffer(modH);
+        return u8CopyBufferSize;
+      }
+    }
+    else
+#endif
     modH->u16regs[ u16add ] = u16val;
 
     // keep the same header
@@ -2028,12 +2068,35 @@ int8_t process_FC16(modbusHandler_t *modH )
     uint8_t u8CopyBufferSize;
     uint16_t i;
     uint16_t temp;
+#ifdef GH_USE_LWIP_NETCONN
+    uint16_t regs_local[125];
+#endif
 
     // build header
     modH->u8Buffer[ NB_HI ]   = 0;
     modH->u8Buffer[ NB_LO ]   = (uint8_t) u16regsno; // answer is always 256 or less bytes
     modH->u8BufferSize         = RESPONSE_SIZE;
 
+#ifdef GH_USE_LWIP_NETCONN
+    if (modH->xTypeHW == TCP_HW)
+    {
+      for (i = 0; i < u16regsno; i++)
+      {
+        regs_local[i] = word(
+            modH->u8Buffer[(BYTE_CNT + 1) + i * 2],
+            modH->u8Buffer[(BYTE_CNT + 2) + i * 2]);
+      }
+
+      if (!GH_ModbusMap_WriteRange(u16StartAdd, u16regsno, regs_local))
+      {
+        buildException(EXC_ADDR_RANGE, modH);
+        u8CopyBufferSize = modH->u8BufferSize + 2;
+        sendTxBuffer(modH);
+        return u8CopyBufferSize;
+      }
+    }
+    else
+#endif
     // write registers
     for (i = 0; i < u16regsno; i++)
     {

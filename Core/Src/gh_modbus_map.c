@@ -25,8 +25,28 @@ enum
   REG_OFF_LAST_APPLIED_TRIGGER = 61U
 };
 
+enum
+{
+  CFG_OFF_SUBMIT_TOKEN = 0U,
+  CFG_OFF_RESULT_CODE = 1U,
+  CFG_OFF_RESULT_TOKEN = 2U,
+  CFG_OFF_ACTIVE_VER_HI = 3U,
+  CFG_OFF_ACTIVE_VER_LO = 4U,
+  CFG_OFF_LAST_REQ_VER_HI = 5U,
+  CFG_OFF_LAST_REQ_VER_LO = 6U,
+  CFG_OFF_LAST_REQ_CRC_HI = 7U,
+  CFG_OFF_LAST_REQ_CRC_LO = 8U,
+  CFG_OFF_REQ_VER_HI = 10U,
+  CFG_OFF_REQ_VER_LO = 11U,
+  CFG_OFF_REQ_CRC_HI = 12U,
+  CFG_OFF_REQ_CRC_LO = 13U,
+  CFG_OFF_PAYLOAD_BASE = 16U,
+  CFG_PAYLOAD_WORDS = (CONFIG_PAYLOAD_SIZE / 2U)
+};
+
 static uint16_t s_holding[GH_MB_TOTAL_REGS];
 static uint32_t s_last_ok_ms[GH_MB_MAX_SLAVES];
+static uint16_t s_last_submit_token = 0U;
 
 static bool addr_to_index(uint16_t addr, uint16_t qty, uint16_t *out_idx)
 {
@@ -76,6 +96,92 @@ static void bump_data_version(uint16_t base)
   s_holding[base + REG_OFF_DATA_VERSION]++;
 }
 
+static uint16_t cfg_index(uint16_t off)
+{
+  return (uint16_t)(GH_MB_CFG_BASE + off);
+}
+
+static void cfg_set_u32(uint16_t off_hi, uint16_t off_lo, uint32_t value)
+{
+  s_holding[cfg_index(off_hi)] = (uint16_t)((value >> 16U) & 0xFFFFU);
+  s_holding[cfg_index(off_lo)] = (uint16_t)(value & 0xFFFFU);
+}
+
+static uint32_t cfg_get_u32(uint16_t off_hi, uint16_t off_lo)
+{
+  return ((uint32_t)s_holding[cfg_index(off_hi)] << 16U) |
+         (uint32_t)s_holding[cfg_index(off_lo)];
+}
+
+void GH_ModbusMap_ReportConfigResult(uint16_t token,
+                                     config_result_code_t result,
+                                     uint32_t active_version)
+{
+  s_holding[cfg_index(CFG_OFF_RESULT_CODE)] = (uint16_t)result;
+  s_holding[cfg_index(CFG_OFF_RESULT_TOKEN)] = token;
+  cfg_set_u32(CFG_OFF_ACTIVE_VER_HI, CFG_OFF_ACTIVE_VER_LO, active_version);
+}
+
+static bool cfg_try_submit(uint16_t token)
+{
+  config_update_req_t req = {0};
+  uint16_t i;
+
+  req.request_token = token;
+  req.version = cfg_get_u32(CFG_OFF_REQ_VER_HI, CFG_OFF_REQ_VER_LO);
+  req.payload_crc = cfg_get_u32(CFG_OFF_REQ_CRC_HI, CFG_OFF_REQ_CRC_LO);
+
+  for (i = 0U; i < CFG_PAYLOAD_WORDS; i++)
+  {
+    uint16_t reg = s_holding[cfg_index((uint16_t)(CFG_OFF_PAYLOAD_BASE + i))];
+    req.payload[2U * i] = (uint8_t)(reg >> 8U);
+    req.payload[(2U * i) + 1U] = (uint8_t)(reg & 0xFFU);
+  }
+
+  if ((osKernelGetState() != osKernelRunning) || (qConfigStoreHandle == NULL))
+  {
+    g_setpoints_apply_in_progress = false;
+    GH_ModbusMap_ReportConfigResult(token, CFG_RESULT_REJECT_QUEUE_FULL, g_active_config.version);
+    publish_event(EVENT_SEV_WARN, EVENT_CODE_CFG_REJECTED, 0U, (float)CFG_RESULT_REJECT_QUEUE_FULL);
+    return false;
+  }
+
+  cfg_set_u32(CFG_OFF_LAST_REQ_VER_HI, CFG_OFF_LAST_REQ_VER_LO, req.version);
+  cfg_set_u32(CFG_OFF_LAST_REQ_CRC_HI, CFG_OFF_LAST_REQ_CRC_LO, req.payload_crc);
+
+  if (osMessageQueuePut(qConfigStoreHandle, &req, 0U, 0U) != osOK)
+  {
+    g_setpoints_apply_in_progress = false;
+    GH_ModbusMap_ReportConfigResult(token, CFG_RESULT_REJECT_QUEUE_FULL, g_active_config.version);
+    publish_event(EVENT_SEV_WARN, EVENT_CODE_CFG_REJECTED, 0U, (float)CFG_RESULT_REJECT_QUEUE_FULL);
+    return false;
+  }
+
+  g_setpoints_apply_in_progress = true;
+  GH_ModbusMap_ReportConfigResult(token, CFG_RESULT_QUEUED, g_active_config.version);
+  s_last_submit_token = token;
+  return true;
+}
+
+static void cfg_maybe_submit_after_write(uint16_t start_idx, uint16_t qty)
+{
+  uint16_t submit_idx = cfg_index(CFG_OFF_SUBMIT_TOKEN);
+  uint16_t token;
+
+  if ((start_idx > submit_idx) || ((start_idx + qty) <= submit_idx))
+  {
+    return;
+  }
+
+  token = s_holding[submit_idx];
+  if ((token == 0U) || (token == s_last_submit_token))
+  {
+    return;
+  }
+
+  (void)cfg_try_submit(token);
+}
+
 void GH_ModbusMap_Init(void)
 {
   uint8_t s;
@@ -83,6 +189,7 @@ void GH_ModbusMap_Init(void)
 
   memset(s_holding, 0, sizeof(s_holding));
   memset(s_last_ok_ms, 0, sizeof(s_last_ok_ms));
+  s_last_submit_token = 0U;
 
   for (s = 1U; s <= GH_MB_MAX_SLAVES; s++)
   {
@@ -93,6 +200,11 @@ void GH_ModbusMap_Init(void)
     s_holding[base + REG_OFF_MODE] = 0U;
     s_holding[base + REG_OFF_SLAVE_STATUS] = 0x0002U; /* stale=1 at startup */
   }
+
+  s_holding[cfg_index(CFG_OFF_RESULT_CODE)] = (uint16_t)CFG_RESULT_IDLE;
+  s_holding[cfg_index(CFG_OFF_RESULT_TOKEN)] = 0U;
+  cfg_set_u32(CFG_OFF_ACTIVE_VER_HI, CFG_OFF_ACTIVE_VER_LO, g_active_config.version);
+  s_holding[cfg_index(CFG_OFF_SUBMIT_TOKEN)] = 0U;
 }
 
 void GH_ModbusMap_UpdateAges(uint32_t now_ms)
@@ -144,6 +256,7 @@ bool GH_ModbusMap_WriteSingle(uint16_t addr, uint16_t value)
     return false;
   }
   s_holding[idx] = value;
+  cfg_maybe_submit_after_write(idx, 1U);
   return true;
 }
 
@@ -157,6 +270,7 @@ bool GH_ModbusMap_WriteRange(uint16_t start_addr, uint16_t qty, const uint16_t *
   }
 
   memcpy(&s_holding[idx], values, (uint32_t)qty * sizeof(uint16_t));
+  cfg_maybe_submit_after_write(idx, qty);
   return true;
 }
 

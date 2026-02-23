@@ -1,13 +1,18 @@
 #ifndef GH_MODBUS_MAP_H
 #define GH_MODBUS_MAP_H
 
+#include "gh_runtime_state.h"
+
 #include <stdbool.h>
 #include <stdint.h>
 
 #define GH_MB_MAX_SLAVES      20U
 #define GH_MB_BLOCK_SIZE      64U
 #define GH_MB_HOLDING_BASE    41000U
-#define GH_MB_TOTAL_REGS      (GH_MB_MAX_SLAVES * GH_MB_BLOCK_SIZE)
+#define GH_MB_DATA_REGS       (GH_MB_MAX_SLAVES * GH_MB_BLOCK_SIZE)
+#define GH_MB_CFG_BASE        GH_MB_DATA_REGS
+#define GH_MB_CFG_REGS        80U
+#define GH_MB_TOTAL_REGS      (GH_MB_DATA_REGS + GH_MB_CFG_REGS)
 
 typedef struct
 {
@@ -36,6 +41,9 @@ void GH_ModbusMap_UpdateDiag(uint8_t slave_id,
 
 bool GH_ModbusMap_GetApplyRequest(uint8_t slave_id, gh_slave_apply_request_t *out_req);
 void GH_ModbusMap_MarkApplyResult(uint8_t slave_id, uint16_t trigger, bool applied);
+void GH_ModbusMap_ReportConfigResult(uint16_t token,
+                                     config_result_code_t result,
+                                     uint32_t active_version);
 
 uint16_t *GH_ModbusMap_GetBackingStore(void);
 uint16_t GH_ModbusMap_GetBackingStoreSize(void);
