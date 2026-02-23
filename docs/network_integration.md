@@ -1,30 +1,29 @@
-# Ethernet/LwIP Integration
+# Ethernet/LwIP Integration (Current Firmware)
 
-Current firmware has a transport adapter API in:
-- `Core/Inc/gh_net_adapter.h`
-- `Core/Src/gh_net_adapter.c`
+Date: `2026-02-23`.
 
-## What is implemented
-- Default build: safe stub (no client connected).
-- Optional real TCP server via LwIP `netconn` API with single-client policy (new client replaces old).
+## Implemented
+- Ethernet + LwIP (`netconn`) + FreeRTOS.
+- `Modbus TCP` server on port `502`.
+- Server initialization is in `Core/Src/gh_modbus_tcp_server.c`.
 
-## To enable real TCP server on STM32F407
-1. In CubeMX (`greenhouseOS.ioc`) enable:
-- `ETH` peripheral + RMII/MII pins for your board/PHY
-- `LwIP` middleware with `Netconn API`
-- Keep FreeRTOS enabled
+## Build requirements
+1. `greenhouseOS.ioc` must enable:
+- `ETH` (RMII),
+- `LwIP`,
+- FreeRTOS.
 
-2. Regenerate code.
+2. Preprocessor defines must include:
+- `GH_USE_LWIP_NETCONN`.
 
-3. Add compile define:
-- `GH_USE_LWIP_NETCONN`
+3. Build must include:
+- `Core/Src/gh_modbus_tcp_server.c`.
 
-4. Ensure include paths contain LwIP headers (`lwip/api.h`, `lwip/err.h`).
+## Runtime behavior
+- TCP task waits for `gnetif` readiness, then starts `ModbusInit/ModbusStart`.
+- Listening port is fixed to `502`.
+- Holding map buffer is provided by `GH_ModbusMap_GetBackingStore()`.
 
-5. Confirm `NetAdapter_Init(5000)` is called (already done in `main.c`).
-
-## Behavior
-- TCP server listens on port `5000`.
-- New connect drops old active client.
-- `Recv` supports partial reads through internal `netbuf` offset tracking.
-- Any send/recv fatal error closes client and forces reconnect flow.
+## Important
+- `gh_net_adapter.h/.c` does not exist in the current project.
+- Any docs referencing port `5000` and `NetAdapter` describe an older or planned variant, not current firmware.

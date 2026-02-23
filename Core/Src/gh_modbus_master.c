@@ -4,7 +4,7 @@
 #include "gh_modbus_map.h"
 
 #define GH_RTU_SLAVE_FIRST            1U
-#define GH_RTU_SLAVE_LAST             20U
+#define GH_RTU_SLAVE_LAST             MODBUS_MAX_SLAVES
 #define GH_RTU_READ_START_REG         0U
 #define GH_RTU_SENSORS_PER_SLAVE      9U
 #define GH_RTU_READ_REG_COUNT         9U
@@ -25,6 +25,8 @@ void GH_ModbusMasterTask_Run(void *argument)
   uint16_t i;
   uint16_t s;
   uint16_t global_idx;
+  uint32_t cycle_start_ms = 0U;
+  uint32_t cycle_elapsed_ms = 0U;
   uint32_t now = 0U;
   bool ok;
   bool apply_ok;
@@ -33,11 +35,12 @@ void GH_ModbusMasterTask_Run(void *argument)
 
   for (;;)
   {
-    now = HAL_GetTick();
-    GH_ModbusMap_UpdateAges(now);
+    cycle_start_ms = HAL_GetTick();
+    GH_ModbusMap_UpdateAges(cycle_start_ms);
 
     for (s = GH_RTU_SLAVE_FIRST; s <= GH_RTU_SLAVE_LAST; s++)
     {
+      now = HAL_GetTick();
       ok = modbus_read_holding_registers((uint8_t)s,
                                          GH_RTU_READ_START_REG,
                                          GH_RTU_READ_REG_COUNT,
@@ -114,6 +117,14 @@ void GH_ModbusMasterTask_Run(void *argument)
     }
 
     task_heartbeat_kick(TASK_BIT_MODBUS);
-    osDelay(1U);
+    cycle_elapsed_ms = HAL_GetTick() - cycle_start_ms;
+    if (cycle_elapsed_ms < MODBUS_POLL_PERIOD_MS)
+    {
+      osDelay(MODBUS_POLL_PERIOD_MS - cycle_elapsed_ms);
+    }
+    else
+    {
+      osDelay(1U);
+    }
   }
 }

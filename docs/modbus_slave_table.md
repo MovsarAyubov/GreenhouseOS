@@ -1,30 +1,23 @@
-﻿# Modbus Slave Table
+# Modbus Slave Table
 
-Файл: `Core/Src/main.c`
-Секция: `kModbusMap`
+Date: 2026-02-23 baseline.
 
-Формат строки:
-`{slave_id, block_no, start_register, sensor_count, global_sensor_base}`
+Actual sources in code:
+- `Core/Src/gh_modbus_master.c` (RS485/RTU polling)
+- `Core/Src/gh_modbus_map.c` (Modbus TCP holding map)
+- `Core/Inc/gh_runtime_state.h` (system limits)
 
-Ограничения:
-- максимум слейвов: `12`
-- максимум датчиков на слейв: `12`
-- суммарно датчиков в системе: до `150`
+Limits:
+- max slaves: `20`
+- sensors per slave in current RTU polling: `9` (`reg 0..8`)
+- total sensors in system memory: `180`
 
-Текущая конфигурация:
-- `slave 1`: 3 датчика, начиная с регистра `0`, запись в глобальные датчики `0..2`
+Current RTU polling profile:
+- slave IDs: `1..20`
+- telemetry read: `start_reg=0`, `count=9`
+- diagnostics read: `start_reg=128`, `count=6`
 
-Пример для будущего роста:
-```c
-static const modbus_sensor_map_t kModbusMap[] =
-{
-  {1U, 1U, 0U, 3U, 0U},
-  {2U, 2U, 0U, 8U, 8U},
-  {3U, 3U, 0U, 8U, 16U},
-  {4U, 4U, 0U, 8U, 24U}
-};
-```
-
-Как читать `global_sensor_base`:
-- это индекс в общем массиве из 150 датчиков,
-- например `{3U, 3U, 0U, 8U, 16U}` значит датчики слейва 3 попадут в позиции `16..23`.
+Indexing rule for `g_sensors`:
+- `sensor_id = (slave_id - 1) * 9 + channel`
+- `channel` in `0..8`
+- value is written only if `sensor_id < SENSOR_COUNT`

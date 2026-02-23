@@ -1,9 +1,8 @@
-﻿# Block Channel Map (Master side)
+# Block Channel Map (Master Side)
 
-Источник: `Core/Src/main.c`
-Источник для ПК во время работы: `BLOCK_LAYOUT_RESP` (msg_type `16`).
+Date: 2026-02-23 baseline.
 
-## Каналы одного блока
+Channel order per slave (fixed, RTU registers `0..8`):
 - 0 `AIR_TEMP`
 - 1 `AIR_HUM`
 - 2 `WATER_RAIL`
@@ -14,24 +13,17 @@
 - 7 `WINDOWS_POS_B`
 - 8 `CURTAIN_POS`
 
-## Расчет индекса в snapshot
-- `sensor_id = block_index * channels_per_block + channel_index`
-- `block_no = block_index + 1`
+Where it is applied:
+- RS485 polling and decode: `Core/Src/gh_modbus_master.c`
+- TCP holding map update: `Core/Src/gh_modbus_map.c` (`GH_ModbusMap_UpdateTelemetry`)
 
-## Текущая конфигурация мастера
-Таблица `kModbusMap`:
-- `{slave_id=1, block_no=1, start_reg=0, sensor_count=3, sensor_base=0}`
+Sensor index in flat array:
+- `sensor_id = (slave_id - 1) * 9 + channel_index`
 
-Это означает:
-- значения slave 1 регистров 0..2 попадают в `sensor_id 0..2`:
-  - `0` -> Block1 AIR_TEMP
-  - `1` -> Block1 AIR_HUM
-  - `2` -> Block1 WATER_RAIL
-- `sensor_id 3..8` (каналы блока 1, которых пока нет) помечаются `OFFLINE`.
+Current system limits:
+- `slave_id = 1..20`
+- `SENSOR_COUNT = 180`
 
-## Как расширять
-При добавлении нового блока добавляется строка в `kModbusMap`.
-Пример:
-- `{2U, 2U, 0U, 6U, 6U}`
-
-Значит блок 2 читает 6 каналов и пишет в `sensor_id 6..11`.
+Important:
+- Channels with index >= `SENSOR_COUNT` are ignored by current firmware.
+- Legacy docs that reference `kModbusMap` in `main.c` are obsolete for current codebase.

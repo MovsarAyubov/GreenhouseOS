@@ -7,9 +7,9 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#define SENSOR_COUNT                  150U
-#define MODBUS_MAX_SLAVES             12U
-#define STATUS_MODBUS_TIMEOUT_SLOTS   8U
+#define SENSOR_COUNT                  180U
+#define MODBUS_MAX_SLAVES             20U
+#define STATUS_MODBUS_TIMEOUT_SLOTS   MODBUS_MAX_SLAVES
 #define MODBUS_MAX_SENSORS_PER_SLAVE  12U
 #define MODBUS_MAX_REGS_PER_REQ       32U
 #define BLOCK_CHANNEL_COUNT           9U

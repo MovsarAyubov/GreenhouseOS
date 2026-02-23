@@ -24,14 +24,13 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "gh_crc32.h"
+#include "gh_runtime_state.h"
 #include "gh_modbus_master.h"
 #include "gh_modbus_map.h"
 #include "gh_modbus_tcp_server.h"
 #include "gh_config_storage.h"
 #include <string.h>
-#include <stdbool.h>
 #include <stddef.h>
-#include <stdint.h>
 
 /* USER CODE END Includes */
 
@@ -44,27 +43,6 @@
 /* USER CODE BEGIN PD */
 
 #define RTC_BKP_INIT_MARKER 0x32F2U
-
-#define SENSOR_COUNT                  150U
-#define MODBUS_MAX_SLAVES             12U
-#define STATUS_MODBUS_TIMEOUT_SLOTS   8U
-#define MODBUS_MAX_SENSORS_PER_SLAVE  12U
-#define BLOCK_CHANNEL_COUNT           9U
-#define MODBUS_POLL_PERIOD_MS         5000U
-#define HEARTBEAT_PERIOD_MS           1000U
-
-#define CONFIG_PAYLOAD_SIZE           128U
-#define CONFIG_VALID_MARKER           0xA55A5AA5UL
-#define CONFIG_SLOT_A_ADDR            0x08040000UL /* Sector 6, STM32F407VE */
-#define CONFIG_SLOT_B_ADDR            0x08060000UL /* Sector 7, STM32F407VE */
-#define CONFIG_SLOT_A_SECTOR          FLASH_SECTOR_6
-#define CONFIG_SLOT_B_SECTOR          FLASH_SECTOR_7
-
-#define EVENT_CODE_LINK_DOWN          1000U
-#define EVENT_CODE_LINK_UP            1001U
-#define EVENT_CODE_CFG_APPLIED        1100U
-#define EVENT_CODE_WDG_MISS           1200U
-#define EVENT_CODE_CTRL_SYNC_FAIL     1300U
 
 /* USER CODE END PD */
 
@@ -148,61 +126,6 @@ void StartHealthWatchdogTask(void *argument);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
-typedef enum
-{
-  SENSOR_QUALITY_OK = 0U,
-  SENSOR_QUALITY_STALE = 1U,
-  SENSOR_QUALITY_FAULT = 2U,
-  SENSOR_QUALITY_OFFLINE = 3U
-} sensor_quality_t;
-
-typedef enum
-{
-  EVENT_SEV_INFO = 0U,
-  EVENT_SEV_WARN = 1U,
-  EVENT_SEV_ALARM = 2U,
-  EVENT_SEV_CRIT = 3U
-} event_severity_t;
-
-typedef struct
-{
-  float value;
-  uint8_t quality;
-  uint32_t timestamp_ms;
-} sensor_state_t;
-
-typedef struct
-{
-  uint32_t version;
-  uint8_t payload[CONFIG_PAYLOAD_SIZE];
-  uint32_t payload_crc;
-} config_update_req_t;
-
-typedef struct __attribute__((packed))
-{
-  uint32_t link_up_count;
-  uint32_t link_down_count;
-  uint32_t tcp_connect_count;
-  uint32_t tcp_disconnect_count;
-  uint32_t crc_errors_rx;
-  uint32_t crc_errors_tx;
-  uint32_t snapshot_sent_count;
-  uint32_t events_generated_count;
-  uint32_t events_sent_count;
-  uint32_t events_resent_count;
-  uint32_t events_acked_count;
-  uint32_t modbus_timeouts[STATUS_MODBUS_TIMEOUT_SLOTS];
-  uint32_t flash_write_ok_count;
-  uint32_t flash_write_fail_count;
-  uint32_t last_error_code;
-  uint8_t control_mode;
-  uint8_t autonomous_reason;
-  uint32_t last_master_seen_ms;
-  uint16_t good_cycle_streak;
-  uint8_t last_apply_status;
-  uint8_t reserved0;
-} status_payload_t;
-
 typedef struct __attribute__((packed))
 {
   uint32_t version;
@@ -211,21 +134,6 @@ typedef struct __attribute__((packed))
   uint32_t seq;
   uint32_t valid_marker;
 } config_slot_header_t;
-
-typedef struct
-{
-  uint32_t version;
-  uint8_t payload[CONFIG_PAYLOAD_SIZE];
-  uint32_t crc;
-} active_config_t;
-
-typedef enum
-{
-  TASK_BIT_CONTROL = (1UL << 0),
-  TASK_BIT_MODBUS = (1UL << 1),
-  TASK_BIT_CONFIG = (1UL << 2),
-  TASK_BIT_WDG = (1UL << 3)
-} task_heartbeat_bit_t;
 
 sensor_state_t g_sensors[SENSOR_COUNT];
 uint32_t g_next_event_id = 1U;

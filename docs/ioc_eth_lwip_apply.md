@@ -1,43 +1,41 @@
-﻿# Как применить патч `.ioc` под ETH + LwIP
+# How to apply ETH + LwIP IOC patch
 
-Скрипт: `tools/apply_eth_lwip_ioc.ps1`
+Script: `tools/apply_eth_lwip_ioc.ps1`
 
-## Что он делает
-- Добавляет IP блоки `ETH` и `LWIP` в `greenhouseOS.ioc`.
-- Добавляет RMII-пины:
+## What it does
+- Adds `ETH` and `LWIP` IP blocks into `greenhouseOS.ioc`.
+- Adds RMII pins:
   - `PA1, PA2, PA7, PC1, PC4, PC5, PB11, PB12, PB13`
-- Включает LwIP в static IP режиме:
+- Forces LwIP static IP:
   - `IP: 192.168.50.20`
   - `Mask: 255.255.255.0`
   - `Gateway: 192.168.50.1`
-- Включает `Netconn`, отключает `Sockets`.
-- Создает backup: `greenhouseOS.ioc.bak_eth_lwip`.
+- Enables `Netconn`, disables `Sockets`.
+- Creates backup: `greenhouseOS.ioc.bak_eth_lwip`.
 
-## Как выполнить
-1. Закройте `greenhouseOS.ioc` в CubeIDE/CubeMX.
-2. В корне проекта выполните в PowerShell:
+## How to run
+1. Close `greenhouseOS.ioc` in CubeIDE/CubeMX.
+2. Run in project root:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\tools\apply_eth_lwip_ioc.ps1
 ```
 
-3. Откройте `greenhouseOS.ioc` в CubeIDE.
-4. Проверьте в GUI:
-- `Connectivity -> ETH`: `RMII`, PHY Address = `1` (при необходимости изменить на ваш аппаратный адрес)
-- `Middleware -> LwIP`: DHCP Off, static IP как выше, Netconn On, Sockets Off.
-5. Нажмите `Generate Code`.
+3. Re-open `greenhouseOS.ioc` in CubeIDE.
+4. Verify in GUI:
+- `Connectivity -> ETH`: `RMII`, PHY Address = `1` (or your board value)
+- `Middleware -> LwIP`: DHCP Off, static IP as above, Netconn On, Sockets Off
+5. Click `Generate Code`.
 
-## После генерации
-1. В `Project Properties -> C/C++ Build -> Settings -> MCU GCC Compiler -> Preprocessor` добавьте define:
+## After generation
+1. Add define in `Project Properties -> C/C++ Build -> Settings -> MCU GCC Compiler -> Preprocessor`:
 - `GH_USE_LWIP_NETCONN`
 
-2. Проверьте, что в проекте есть:
-- `Core/Src/gh_net_adapter.c`
-- `Core/Inc/gh_net_adapter.h`
+2. Verify file is included in build:
+- `Core/Src/gh_modbus_tcp_server.c`
 
-3. Если `gh_net_adapter.c` не попал в build, добавьте файл в проект (Right click -> Resource Configurations -> Exclude from Build: снять).
-
-## Важно
-- На разных платах PHY address может быть `0` или `1`.
-- Если сеть point-to-point без роутера, gateway можно поставить `0.0.0.0`.
-- Если CubeMX подсветит конфликт пинов RMII, сначала исправьте разводку/вариант интерфейса платы.
+## Important
+- Different boards may use PHY address `0` or `1`.
+- For point-to-point link without router, gateway can be `0.0.0.0`.
+- If CubeMX reports RMII pin conflicts, resolve board pinmux first.
+- Current firmware baseline uses `Modbus TCP` on port `502`.
