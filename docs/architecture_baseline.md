@@ -32,6 +32,11 @@ This baseline records decisions confirmed for the current firmware line.
 - TCP Modbus requests use map API hooks (no direct data-path writes for `FC=3/6/16`).
 - Modbus TCP function set is restricted to `FC=3`, `FC=6`, `FC=16` to keep register ownership contract deterministic.
 
+## Quality gate baseline
+- CI workflow runs full quality gate for each push/PR.
+- Gate includes dual-profile firmware build (`Debug` and `Release`), static-analysis compile, unit tests, and HIL checklist validation.
+- Runtime telemetry tracks stack high-water marks for key tasks and heap free/min-ever metrics.
+
 ## Source of truth in code
 - Runtime constants: `Core/Inc/gh_runtime_state.h`
 - RTU master loop: `Core/Src/gh_modbus_master.c`

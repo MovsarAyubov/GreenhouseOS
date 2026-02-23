@@ -126,6 +126,14 @@ typedef struct __attribute__((packed))
   uint16_t good_cycle_streak;
   uint8_t last_apply_status;
   uint8_t reserved0;
+  uint16_t stack_hwm_control_words;
+  uint16_t stack_hwm_modbus_words;
+  uint16_t stack_hwm_config_words;
+  uint16_t stack_hwm_tcp_words;
+  uint16_t stack_hwm_wdg_words;
+  uint16_t reserved1;
+  uint32_t heap_free_bytes;
+  uint32_t heap_min_ever_bytes;
 } status_payload_t;
 
 typedef struct

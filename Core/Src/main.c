@@ -29,6 +29,7 @@
 #include "gh_modbus_map.h"
 #include "gh_modbus_tcp_server.h"
 #include "gh_config_storage.h"
+#include "task.h"
 #include <string.h>
 #include <stddef.h>
 
@@ -203,6 +204,24 @@ static bool iwdg_init(uint8_t prescaler, uint16_t reload)
 static void iwdg_refresh(void)
 {
   IWDG->KR = IWDG_KR_KEY_RELOAD;
+}
+
+static uint16_t task_stack_hwm_words(osThreadId_t thread_id)
+{
+  UBaseType_t words;
+
+  if (thread_id == NULL)
+  {
+    return 0U;
+  }
+
+  words = uxTaskGetStackHighWaterMark((TaskHandle_t)thread_id);
+  if (words > 0xFFFFU)
+  {
+    words = 0xFFFFU;
+  }
+
+  return (uint16_t)words;
 }
 
 static void sensors_init_defaults(void)
@@ -661,6 +680,14 @@ void StartHealthWatchdogTask(void *argument)
   (void)argument;
   for (;;)
   {
+    g_status.stack_hwm_control_words = task_stack_hwm_words(controlTaskHandle);
+    g_status.stack_hwm_modbus_words = task_stack_hwm_words(modbusMasterTaskHandle);
+    g_status.stack_hwm_config_words = task_stack_hwm_words(configStorageTaskHandle);
+    g_status.stack_hwm_tcp_words = task_stack_hwm_words(modbusTcpServerTaskHandle);
+    g_status.stack_hwm_wdg_words = task_stack_hwm_words(healthWatchdogTaskHandle);
+    g_status.heap_free_bytes = xPortGetFreeHeapSize();
+    g_status.heap_min_ever_bytes = xPortGetMinimumEverFreeHeapSize();
+
     allow_iwdg_refresh = true;
     taskENTER_CRITICAL();
     snapshot_flags = g_watchdog_flags;

@@ -7,7 +7,7 @@
 #include <math.h>
 #include <string.h>
 
-static bool cfg_payload_values_valid(const uint8_t *payload)
+bool GH_ConfigStorage_PayloadValuesValid(const uint8_t *payload)
 {
   uint16_t i;
 
@@ -24,8 +24,8 @@ static bool cfg_payload_values_valid(const uint8_t *payload)
   return true;
 }
 
-static bool cfg_validate_request(const config_update_req_t *req,
-                                 config_result_code_t *out_result)
+bool GH_ConfigStorage_ValidateRequest(const config_update_req_t *req,
+                                      config_result_code_t *out_result)
 {
   uint32_t crc;
 
@@ -47,7 +47,7 @@ static bool cfg_validate_request(const config_update_req_t *req,
     return false;
   }
 
-  if (!cfg_payload_values_valid(req->payload))
+  if (!GH_ConfigStorage_PayloadValuesValid(req->payload))
   {
     *out_result = CFG_RESULT_REJECT_RANGE;
     return false;
@@ -143,7 +143,7 @@ void GH_ConfigStorageTask_Run(void *argument)
       pending.crc = req.payload_crc;
       memcpy(pending.payload, req.payload, CONFIG_PAYLOAD_SIZE);
 
-      if (!cfg_validate_request(&req, &validation_result))
+      if (!GH_ConfigStorage_ValidateRequest(&req, &validation_result))
       {
         GH_ModbusMap_ReportConfigResult(req.request_token, validation_result, g_active_config.version);
         publish_event(EVENT_SEV_WARN, EVENT_CODE_CFG_REJECTED, 0U, (float)validation_result);
