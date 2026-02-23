@@ -43,6 +43,15 @@
 /* USER CODE BEGIN PD */
 
 #define RTC_BKP_INIT_MARKER 0x32F2U
+#define RTC_BKP_RESET_REASON_DR RTC_BKP_DR2
+#define RESET_REASON_ERROR_HANDLER 0xE001U
+#define RESET_REASON_WATCHDOG_MISS 0xE101U
+#define IWDG_PRESCALER_VALUE 0x06U /* divider 256 */
+#define IWDG_RELOAD_VALUE    1000U
+#define IWDG_KR_KEY_ENABLE   0xCCCCU
+#define IWDG_KR_KEY_RELOAD   0xAAAAU
+#define IWDG_KR_KEY_WRITE    0x5555U
+#define IWDG_SR_WAIT_MAX_LOOPS 100000U
 
 /* USER CODE END PD */
 
@@ -111,6 +120,9 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_RTC_Init(void);
+static void MX_IWDG_Init(void);
+static bool iwdg_init(uint8_t prescaler, uint16_t reload);
+static void iwdg_refresh(void);
 void StartDefaultTask(void *argument);
 
 /* USER CODE BEGIN PFP */
@@ -140,7 +152,7 @@ uint32_t g_next_event_id = 1U;
 
 static uint32_t g_watchdog_flags = 0U;
 static const uint32_t g_watchdog_all_mask =
-  TASK_BIT_CONTROL | TASK_BIT_MODBUS | TASK_BIT_CONFIG;
+  TASK_BIT_CONTROL | TASK_BIT_MODBUS | TASK_BIT_CONFIG | TASK_BIT_TCP;
 
 status_payload_t g_status = {0};
 active_config_t g_active_config = {0};
@@ -154,6 +166,43 @@ void task_heartbeat_kick(task_heartbeat_bit_t bit)
   taskENTER_CRITICAL();
   g_watchdog_flags |= (uint32_t)bit;
   taskEXIT_CRITICAL();
+}
+
+static void store_reset_reason(uint32_t reason)
+{
+  RTC_HandleTypeDef rtc = {0};
+  __HAL_RCC_PWR_CLK_ENABLE();
+  HAL_PWR_EnableBkUpAccess();
+  __HAL_RCC_RTC_ENABLE();
+  rtc.Instance = RTC;
+  HAL_RTCEx_BKUPWrite(&rtc, RTC_BKP_RESET_REASON_DR, reason);
+}
+
+static bool iwdg_init(uint8_t prescaler, uint16_t reload)
+{
+  uint32_t loops = 0U;
+
+  IWDG->KR = IWDG_KR_KEY_WRITE;
+  IWDG->PR = (uint32_t)(prescaler & (uint8_t)IWDG_PR_PR);
+  IWDG->RLR = (uint32_t)(reload & (uint16_t)IWDG_RLR_RL);
+
+  while ((IWDG->SR & (IWDG_SR_PVU | IWDG_SR_RVU)) != 0U)
+  {
+    loops++;
+    if (loops > IWDG_SR_WAIT_MAX_LOOPS)
+    {
+      return false;
+    }
+  }
+
+  IWDG->KR = IWDG_KR_KEY_RELOAD;
+  IWDG->KR = IWDG_KR_KEY_ENABLE;
+  return true;
+}
+
+static void iwdg_refresh(void)
+{
+  IWDG->KR = IWDG_KR_KEY_RELOAD;
 }
 
 static void sensors_init_defaults(void)
@@ -324,6 +373,7 @@ int main(void)
   MX_GPIO_Init();
   MX_USART2_UART_Init();
   MX_RTC_Init();
+  MX_IWDG_Init();
   /* USER CODE BEGIN 2 */
   sensors_init_defaults();
   config_load_or_default();
@@ -520,6 +570,19 @@ static void MX_USART2_UART_Init(void)
 }
 
 /**
+  * @brief IWDG Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_IWDG_Init(void)
+{
+  if (!iwdg_init((uint8_t)IWDG_PRESCALER_VALUE, (uint16_t)IWDG_RELOAD_VALUE))
+  {
+    Error_Handler();
+  }
+}
+
+/**
   * @brief GPIO Initialization Function
   * @param None
   * @retval None
@@ -589,10 +652,12 @@ void StartHealthWatchdogTask(void *argument)
   uint32_t snapshot_flags;
   uint32_t miss_streak = 0U;
   uint32_t grace_until_ms = HAL_GetTick() + 5000U;
+  bool allow_iwdg_refresh;
   bool miss_latched = false;
   (void)argument;
   for (;;)
   {
+    allow_iwdg_refresh = true;
     taskENTER_CRITICAL();
     snapshot_flags = g_watchdog_flags;
     g_watchdog_flags = 0U;
@@ -601,6 +666,7 @@ void StartHealthWatchdogTask(void *argument)
     if ((int32_t)(HAL_GetTick() - grace_until_ms) < 0)
     {
       task_heartbeat_kick(TASK_BIT_WDG);
+      iwdg_refresh();
       osDelay(1000U);
       continue;
     }
@@ -611,8 +677,10 @@ void StartHealthWatchdogTask(void *argument)
       if (miss_streak >= 3U)
       {
         g_status.last_error_code = EVENT_CODE_WDG_MISS;
+        allow_iwdg_refresh = false;
         if (!miss_latched)
         {
+          store_reset_reason(RESET_REASON_WATCHDOG_MISS);
           publish_event(EVENT_SEV_CRIT, EVENT_CODE_WDG_MISS, 0U, (float)(snapshot_flags & 0xFFFFU));
           miss_latched = true;
         }
@@ -621,12 +689,16 @@ void StartHealthWatchdogTask(void *argument)
     else
     {
       miss_streak = 0U;
-      /* Integration point: HAL_IWDG_Refresh(&hiwdg); */
       miss_latched = false;
       if (g_status.last_error_code == EVENT_CODE_WDG_MISS)
       {
         g_status.last_error_code = 0U;
       }
+    }
+
+    if (allow_iwdg_refresh)
+    {
+      iwdg_refresh();
     }
     task_heartbeat_kick(TASK_BIT_WDG);
     osDelay(1000U);
@@ -685,8 +757,9 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
-  /* User can add his own implementation to report the HAL error return state */
   __disable_irq();
+  store_reset_reason(RESET_REASON_ERROR_HANDLER);
+  NVIC_SystemReset();
   while (1)
   {
   }

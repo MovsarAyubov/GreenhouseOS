@@ -121,7 +121,8 @@ typedef enum
   TASK_BIT_CONTROL = (1UL << 0),
   TASK_BIT_MODBUS = (1UL << 1),
   TASK_BIT_CONFIG = (1UL << 2),
-  TASK_BIT_WDG = (1UL << 3)
+  TASK_BIT_WDG = (1UL << 3),
+  TASK_BIT_TCP = (1UL << 4)
 } task_heartbeat_bit_t;
 
 extern UART_HandleTypeDef huart2;

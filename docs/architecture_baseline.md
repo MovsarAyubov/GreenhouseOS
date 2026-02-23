@@ -10,6 +10,11 @@ This baseline records decisions confirmed for the current firmware line.
 - Master polling period: one full cycle every `5 seconds`
 - Sensor buffer size (`SENSOR_COUNT`): `180`
 
+## Recovery and watchdog baseline
+- `Error_Handler` stores reset reason into RTC backup register and triggers software reset.
+- Health watchdog supervises `CONTROL`, `MODBUS`, `CONFIG`, and `TCP` tasks.
+- If watchdog miss is persistent, firmware stops refreshing IWDG and allows automatic reset.
+
 ## Source of truth in code
 - Runtime constants: `Core/Inc/gh_runtime_state.h`
 - RTU master loop: `Core/Src/gh_modbus_master.c`
