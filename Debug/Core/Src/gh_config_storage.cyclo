@@ -1,1 +1,5 @@
-../Core/Src/gh_config_storage.c:7:6:GH_ConfigStorageTask_Run	4
+../Core/Src/gh_config_storage.c:10:6:GH_ConfigStorage_PayloadValuesValid	5
+../Core/Src/gh_config_storage.c:27:6:GH_ConfigStorage_ValidateRequest	6
+../Core/Src/gh_config_storage.c:60:13:cfg_write_slot_with_retries	4
+../Core/Src/gh_config_storage.c:81:13:cfg_store_ab_with_fallback	8
+../Core/Src/gh_config_storage.c:126:6:GH_ConfigStorageTask_Run	8

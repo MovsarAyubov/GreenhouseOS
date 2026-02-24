@@ -29,6 +29,7 @@
 #include <time.h>
 #include <sys/time.h>
 #include <sys/times.h>
+#include "main.h"
 
 
 /* Variables */
@@ -61,7 +62,7 @@ int _kill(int pid, int sig)
 void _exit (int status)
 {
   _kill(status, -1);
-  while (1) {}    /* Make sure we hang here */
+  NVIC_SystemReset();
 }
 
 __attribute__((weak)) int _read(int file, char *ptr, int len)

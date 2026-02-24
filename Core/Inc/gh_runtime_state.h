@@ -19,7 +19,19 @@
 #define MODBUS_RETRY_BACKOFF_MS       20U
 #define MODBUS_UART_TX_TIMEOUT_MS     100U
 #define MODBUS_RTU_RESP_TIMEOUT_MS    300U
+#define MODBUS_ENABLED_SLAVE_MASK     0x00000001UL
+#define MODBUS_OFFLINE_REPROBE_MS     30000U
 #define HEARTBEAT_PERIOD_MS           1000U
+#define WDG_TIMEOUT_CONTROL_MS        2000U
+#define MODBUS_WDG_REQ_BUDGET_MS      ((MODBUS_RETRY_COUNT * \
+                                         (MODBUS_UART_TX_TIMEOUT_MS + MODBUS_RTU_RESP_TIMEOUT_MS)) + \
+                                        ((MODBUS_RETRY_COUNT > 1U) ? \
+                                         ((MODBUS_RETRY_COUNT - 1U) * MODBUS_RETRY_BACKOFF_MS) : 0U))
+#define MODBUS_WDG_CYCLE_BUDGET_MS    ((MODBUS_MAX_SLAVES * \
+                                         ((2U * MODBUS_WDG_REQ_BUDGET_MS) + MODBUS_INTER_SLAVE_DELAY_MS)) + 5000U)
+#define WDG_TIMEOUT_MODBUS_MS         MODBUS_WDG_CYCLE_BUDGET_MS
+#define WDG_TIMEOUT_CONFIG_MS         5000U
+#define WDG_TIMEOUT_TCP_MS            5000U
 
 #define CONFIG_PAYLOAD_SIZE           128U
 #define CONFIG_VALID_MARKER           0xA55A5AA5UL

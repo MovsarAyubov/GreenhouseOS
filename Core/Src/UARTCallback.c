@@ -12,6 +12,8 @@
 #include "Modbus.h"
 #include "gh_modbus_io.h"
 
+#define GH_UART_DMA_RESTART_RETRIES 2U
+
 
 /**
  * @brief
@@ -125,10 +127,17 @@ void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
 
     		if(mHandlers[i]->xTypeHW == USART_HW_DMA)
     		{
-    			while(HAL_UARTEx_ReceiveToIdle_DMA(mHandlers[i]->port, mHandlers[i]->xBufferRX.uxBuffer, MAX_BUFFER) != HAL_OK)
-    		    {
-    					HAL_UART_DMAStop(mHandlers[i]->port);
-   				}
+    			uint8_t tries;
+    			for (tries = 0U; tries < GH_UART_DMA_RESTART_RETRIES; tries++)
+    			{
+    				if (HAL_UARTEx_ReceiveToIdle_DMA(mHandlers[i]->port,
+    				                                 mHandlers[i]->xBufferRX.uxBuffer,
+    				                                 MAX_BUFFER) == HAL_OK)
+    				{
+    					break;
+    				}
+    				HAL_UART_DMAStop(mHandlers[i]->port);
+    			}
 				__HAL_DMA_DISABLE_IT(mHandlers[i]->port->hdmarx, DMA_IT_HT); // we don't need half-transfer interrupt
 
     		}
@@ -157,10 +166,16 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
 		    				mHandlers[i]->xBufferRX.u8available = Size;
 		    				mHandlers[i]->xBufferRX.overflow = false;
 
-		    				while(HAL_UARTEx_ReceiveToIdle_DMA(mHandlers[i]->port, mHandlers[i]->xBufferRX.uxBuffer, MAX_BUFFER) != HAL_OK)
+		    				uint8_t tries;
+		    				for (tries = 0U; tries < GH_UART_DMA_RESTART_RETRIES; tries++)
 		    				{
+		    					if (HAL_UARTEx_ReceiveToIdle_DMA(mHandlers[i]->port,
+		    					                                 mHandlers[i]->xBufferRX.uxBuffer,
+		    					                                 MAX_BUFFER) == HAL_OK)
+		    					{
+		    						break;
+		    					}
 		    					HAL_UART_DMAStop(mHandlers[i]->port);
-
 		    				}
 		    				__HAL_DMA_DISABLE_IT(mHandlers[i]->port->hdmarx, DMA_IT_HT); // we don't need half-transfer interrupt
 

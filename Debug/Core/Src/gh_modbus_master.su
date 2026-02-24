@@ -1,3 +1,5 @@
-../Core/Src/gh_modbus_master.c:20:13:gh_modbus_read_holding_retry	32	static
-../Core/Src/gh_modbus_master.c:42:13:gh_modbus_write_single_retry	24	static
-../Core/Src/gh_modbus_master.c:61:6:GH_ModbusMasterTask_Run	120	static
+../Core/Src/gh_modbus_master.c:20:13:gh_slave_id_valid	16	static
+../Core/Src/gh_modbus_master.c:25:13:gh_slave_enabled	24	static
+../Core/Src/gh_modbus_master.c:38:13:gh_modbus_read_holding_retry	32	static
+../Core/Src/gh_modbus_master.c:63:13:gh_modbus_write_single_retry	24	static
+../Core/Src/gh_modbus_master.c:85:6:GH_ModbusMasterTask_Run	120	static

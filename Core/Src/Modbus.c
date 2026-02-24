@@ -227,108 +227,151 @@ const unsigned char fctsupported[] =
  */
 void ModbusInit(modbusHandler_t * modH)
 {
+  bool create_slave_task;
 
-  if (numberHandlers < MAX_M_HANDLERS)
+  if (modH == NULL)
   {
+    return;
+  }
 
-	  //Initialize the ring buffer
+  if (numberHandlers >= MAX_M_HANDLERS)
+  {
+    modH->i8lastError = ERR_EXCEPTION;
+    return;
+  }
 
-	  RingClear(&modH->xBufferRX);
+  RingClear(&modH->xBufferRX);
+  modH->QueueTelegramHandle = NULL;
+  modH->myTaskModbusAHandle = NULL;
+  modH->xTimerT35 = NULL;
+  modH->xTimerTimeout = NULL;
+  modH->ModBusSphrHandle = NULL;
+  modH->i8lastError = 0;
 
-	  if(modH->uModbusType == MB_SLAVE)
-	  {
-		  //Create Modbus task slave
+  if ((modH->uModbusType != MB_SLAVE) && (modH->uModbusType != MB_MASTER))
+  {
+    modH->i8lastError = ERR_EXCEPTION;
+    return;
+  }
+
+  create_slave_task = (modH->uModbusType == MB_SLAVE);
+
+  if (!create_slave_task)
+  {
+    modH->xTimerTimeout = xTimerCreate("xTimerTimeout",
+                                       modH->u16timeOut,
+                                       pdFALSE,
+                                       (void *)modH->xTimerTimeout,
+                                       (TimerCallbackFunction_t)vTimerCallbackTimeout);
+    if (modH->xTimerTimeout == NULL)
+    {
+      modH->i8lastError = ERR_EXCEPTION;
+      return;
+    }
+
+    modH->QueueTelegramHandle = osMessageQueueNew(MAX_TELEGRAMS, sizeof(modbus_t), &QueueTelegram_attributes);
+    if (modH->QueueTelegramHandle == NULL)
+    {
+      (void)xTimerDelete(modH->xTimerTimeout, 0U);
+      modH->xTimerTimeout = NULL;
+      modH->i8lastError = ERR_EXCEPTION;
+      return;
+    }
+  }
+
+  modH->xTimerT35 = xTimerCreate("TimerT35",
+                                 T35,
+                                 pdFALSE,
+                                 (void *)modH->xTimerT35,
+                                 (TimerCallbackFunction_t)vTimerCallbackT35);
+  if (modH->xTimerT35 == NULL)
+  {
+    if (modH->QueueTelegramHandle != NULL)
+    {
+      (void)osMessageQueueDelete(modH->QueueTelegramHandle);
+      modH->QueueTelegramHandle = NULL;
+    }
+    if (modH->xTimerTimeout != NULL)
+    {
+      (void)xTimerDelete(modH->xTimerTimeout, 0U);
+      modH->xTimerTimeout = NULL;
+    }
+    modH->i8lastError = ERR_EXCEPTION;
+    return;
+  }
+
+  modH->ModBusSphrHandle = osSemaphoreNew(1U, 1U, &ModBusSphr_attributes);
+  if (modH->ModBusSphrHandle == NULL)
+  {
+    (void)xTimerDelete(modH->xTimerT35, 0U);
+    modH->xTimerT35 = NULL;
+    if (modH->QueueTelegramHandle != NULL)
+    {
+      (void)osMessageQueueDelete(modH->QueueTelegramHandle);
+      modH->QueueTelegramHandle = NULL;
+    }
+    if (modH->xTimerTimeout != NULL)
+    {
+      (void)xTimerDelete(modH->xTimerTimeout, 0U);
+      modH->xTimerTimeout = NULL;
+    }
+    modH->i8lastError = ERR_EXCEPTION;
+    return;
+  }
+
+  if (create_slave_task)
+  {
 #if ENABLE_TCP == 1
-		  if( modH->xTypeHW == TCP_HW)
-		  {
-			  modH->myTaskModbusAHandle = osThreadNew(StartTaskModbusSlave, modH, &myTaskModbusA_attributesTCP);
-		  }
-		  else{
-			  modH->myTaskModbusAHandle = osThreadNew(StartTaskModbusSlave, modH, &myTaskModbusA_attributes);
-		  }
+    if (modH->xTypeHW == TCP_HW)
+    {
+      modH->myTaskModbusAHandle = osThreadNew(StartTaskModbusSlave, modH, &myTaskModbusA_attributesTCP);
+    }
+    else
+    {
+      modH->myTaskModbusAHandle = osThreadNew(StartTaskModbusSlave, modH, &myTaskModbusA_attributes);
+    }
 #else
-		  modH->myTaskModbusAHandle = osThreadNew(StartTaskModbusSlave, modH, &myTaskModbusA_attributes);
+    modH->myTaskModbusAHandle = osThreadNew(StartTaskModbusSlave, modH, &myTaskModbusA_attributes);
 #endif
-
-
-	  }
-	  else if (modH->uModbusType == MB_MASTER)
-	  {
-		  //Create Modbus task Master  and Queue for telegrams
-
-#if ENABLE_TCP == 1
-		  if( modH->xTypeHW == TCP_HW)
-		  {
-		     modH->myTaskModbusAHandle = osThreadNew(StartTaskModbusMaster, modH, &myTaskModbusB_attributesTCP);
-		  }
-		  else
-		  {
-		     modH->myTaskModbusAHandle = osThreadNew(StartTaskModbusMaster, modH, &myTaskModbusB_attributes);
-		  }
-#else
-		  modH->myTaskModbusAHandle = osThreadNew(StartTaskModbusMaster, modH, &myTaskModbusB_attributes);
-#endif
-
-
-
-		  modH->xTimerTimeout=xTimerCreate("xTimerTimeout",  // Just a text name, not used by the kernel.
-				  	  	modH->u16timeOut ,     		// The timer period in ticks.
-						pdFALSE,         // The timers will auto-reload themselves when they expire.
-						( void * )modH->xTimerTimeout,     // Assign each timer a unique id equal to its array index.
-						(TimerCallbackFunction_t) vTimerCallbackTimeout  // Each timer calls the same callback when it expires.
-                  	  	);
-
-		  if(modH->xTimerTimeout == NULL)
-		  {
-			  while(1); //error creating timer, check heap and stack size
-		  }
-
-
-		  modH->QueueTelegramHandle = osMessageQueueNew (MAX_TELEGRAMS, sizeof(modbus_t), &QueueTelegram_attributes);
-
-		  if(modH->QueueTelegramHandle == NULL)
-		  {
-			  while(1); //error creating queue for telegrams, check heap and stack size
-		  }
-
-	  }
-	  else
-	  {
-		  while(1); //Error Modbus type not supported choose a valid Type
-	  }
-
-	  if  (modH->myTaskModbusAHandle == NULL)
-	  {
-		  while(1); //Error creating Modbus task, check heap and stack size
-	  }
-
-
-	  modH->xTimerT35 = xTimerCreate("TimerT35",         // Just a text name, not used by the kernel.
-		  	  	  	  	  	  	  	T35 ,     // The timer period in ticks.
-                                    pdFALSE,         // The timers will auto-reload themselves when they expire.
-									( void * )modH->xTimerT35,     // Assign each timer a unique id equal to its array index.
-                                    (TimerCallbackFunction_t) vTimerCallbackT35     // Each timer calls the same callback when it expires.
-                                    );
-	  if (modH->xTimerT35 == NULL)
-	  {
-		  while(1); //Error creating the timer, check heap and stack size
-	  }
-
-
-	  modH->ModBusSphrHandle = osSemaphoreNew(1, 1, &ModBusSphr_attributes);
-
-	  if(modH->ModBusSphrHandle == NULL)
-	  {
-		  while(1); //Error creating the semaphore, check heap and stack size
-	  }
-
-	  mHandlers[numberHandlers] = modH;
-	  numberHandlers++;
   }
   else
   {
-	  while(1); //error no more Modbus handlers supported
+#if ENABLE_TCP == 1
+    if (modH->xTypeHW == TCP_HW)
+    {
+      modH->myTaskModbusAHandle = osThreadNew(StartTaskModbusMaster, modH, &myTaskModbusB_attributesTCP);
+    }
+    else
+    {
+      modH->myTaskModbusAHandle = osThreadNew(StartTaskModbusMaster, modH, &myTaskModbusB_attributes);
+    }
+#else
+    modH->myTaskModbusAHandle = osThreadNew(StartTaskModbusMaster, modH, &myTaskModbusB_attributes);
+#endif
   }
+
+  if (modH->myTaskModbusAHandle == NULL)
+  {
+    (void)osSemaphoreDelete(modH->ModBusSphrHandle);
+    modH->ModBusSphrHandle = NULL;
+    (void)xTimerDelete(modH->xTimerT35, 0U);
+    modH->xTimerT35 = NULL;
+    if (modH->QueueTelegramHandle != NULL)
+    {
+      (void)osMessageQueueDelete(modH->QueueTelegramHandle);
+      modH->QueueTelegramHandle = NULL;
+    }
+    if (modH->xTimerTimeout != NULL)
+    {
+      (void)xTimerDelete(modH->xTimerTimeout, 0U);
+      modH->xTimerTimeout = NULL;
+    }
+    modH->i8lastError = ERR_EXCEPTION;
+    return;
+  }
+
+  mHandlers[numberHandlers] = modH;
+  numberHandlers++;
 
 }
 
@@ -345,16 +388,18 @@ void ModbusInit(modbusHandler_t * modH)
  */
 void ModbusStart(modbusHandler_t * modH)
 {
+	uint32_t wait_start;
 
 	if(modH->xTypeHW != USART_HW && modH->xTypeHW != TCP_HW && modH->xTypeHW != USB_CDC_HW  && modH->xTypeHW != USART_HW_DMA )
 	{
-
-		while(1); //ERROR select the type of hardware
+		modH->i8lastError = ERR_EXCEPTION; // Invalid HW type configuration.
+		return;
 	}
 
 	if (modH->xTypeHW == USART_HW_DMA && ENABLE_USART_DMA == 0  )
 	{
-		while(1); //ERROR To use USART_HW_DMA you need to enable it in the ModbusConfig.h file
+		modH->i8lastError = ERR_EXCEPTION; // DMA type requested while DMA support is disabled.
+		return;
 	}
 
 
@@ -370,13 +415,19 @@ void ModbusStart(modbusHandler_t * modH)
 
           if (modH->uModbusType == MB_SLAVE &&  modH->u16regs == NULL )
           {
-          	while(1); //ERROR define the DATA pointer shared through Modbus
+          	modH->i8lastError = ERR_BAD_ADDRESS; // Missing register map pointer for slave.
+          	return;
           }
 
           //check that port is initialized
+          wait_start = HAL_GetTick();
           while (HAL_UART_GetState(modH->port) != HAL_UART_STATE_READY)
           {
-
+        	  if ((HAL_GetTick() - wait_start) > 200U)
+        	  {
+        		  modH->i8lastError = ERR_TIME_OUT;
+        		  return;
+        	  }
           }
 
 #if ENABLE_USART_DMA ==1
@@ -386,10 +437,9 @@ void ModbusStart(modbusHandler_t * modH)
 
         	  if(HAL_UARTEx_ReceiveToIdle_DMA(modH->port, modH->xBufferRX.uxBuffer, MAX_BUFFER ) != HAL_OK)
         	   {
-        	         while(1)
-        	         {
-        	                    	  //error in your initialization code
-        	         }
+        		  HAL_UART_DMAStop(modH->port);
+        		  modH->i8lastError = ERR_EXCEPTION;
+        		  return;
         	   }
         	  __HAL_DMA_DISABLE_IT(modH->port->hdmarx, DMA_IT_HT); // we don't need half-transfer interrupt
 
@@ -399,10 +449,8 @@ void ModbusStart(modbusHandler_t * modH)
         	  // Receive data from serial port for Modbus using interrupt
         	  if(HAL_UART_Receive_IT(modH->port, &modH->dataRX, 1) != HAL_OK)
         	  {
-        	           while(1)
-        	           {
-        	                       	  //error in your initialization code
-        	           }
+        		  modH->i8lastError = ERR_EXCEPTION;
+        		  return;
         	  }
 
           }
@@ -412,29 +460,23 @@ void ModbusStart(modbusHandler_t * modH)
           // Receive data from serial port for Modbus using interrupt
           if(HAL_UART_Receive_IT(modH->port, &modH->dataRX, 1) != HAL_OK)
           {
-                while(1)
-                {
-                     	  //error in your initialization code
-                 }
+        	  modH->i8lastError = ERR_EXCEPTION;
+        	  return;
           }
 
 #endif
 
           if(modH->u8id !=0 && modH->uModbusType == MB_MASTER )
           {
-        	  while(1)
-        	  {
-        	     	  //error Master ID must be zero
-        	  }
+        	  modH->i8lastError = ERR_BAD_SLAVE_ID; // Master ID must be zero.
+        	  return;
 
           }
 
           if(modH->u8id ==0 && modH->uModbusType == MB_SLAVE )
           {
-             	  while(1)
-               	  {
-                  	     	  //error Master ID must be zero
-               	  }
+        	  modH->i8lastError = ERR_BAD_SLAVE_ID; // Slave ID cannot be zero.
+        	  return;
 
            }
 
@@ -460,7 +502,8 @@ void ModbusStartCDC(modbusHandler_t * modH)
 
     if (modH->uModbusType == MB_SLAVE &&  modH->u16regs == NULL )
     {
-    	while(1); //ERROR define the DATA pointer shared through Modbus
+    	modH->i8lastError = ERR_BAD_ADDRESS;
+    	return;
     }
 
     modH->u8lastRec = modH->u8BufferSize = 0;
@@ -525,6 +568,16 @@ bool TCPwaitConnData(modbusHandler_t *modH)
 	  modH->newconnIndex = 0;
   }
   clientconn = &modH->newconns[modH->newconnIndex];
+
+  if (modH->conn == NULL)
+  {
+      TCPinitserver(modH);
+      if (modH->conn == NULL)
+      {
+          osDelay(100U);
+          return xTCPvalid;
+      }
+  }
 
 
   //NULL means there is a free connection slot, so we can accept an incoming client connection
@@ -679,20 +732,16 @@ void  TCPinitserver(modbusHandler_t *modH)
 		    	 netconn_listen(modH->conn);
 		    	 netconn_set_recvtimeout(modH->conn, 1); // this is necessary to make it non blocking
 		     }
-		     else{
-		    		  while(1)
-		    		  {
-		    			  // error binding the TCP Modbus port check your configuration
-		    		  }
-		    	  }
+		     else
+		     {
+                 netconn_delete(modH->conn);
+                 modH->conn = NULL;
+             }
 		  }
-		  else{
-			  while(1)
-			  {
-				  // error creating new connection check your configuration,
-				  // this function must be called after the scheduler is started
-			  }
-		  }
+		  else
+          {
+              modH->conn = NULL;
+          }
 	  }
 }
 
@@ -865,7 +914,8 @@ void ModbusQuery(modbusHandler_t * modH, modbus_t telegram )
 	xQueueSendToBack(modH->QueueTelegramHandle, &telegram, 0);
 	}
 	else{
-		while(1);// error a slave cannot send queries as a master
+		modH->i8lastError = ERR_NOT_MASTER;
+		return;
 	}
 }
 
@@ -881,7 +931,8 @@ uint32_t ModbusQueryV2(modbusHandler_t * modH, modbus_t telegram )
 
 	}
 	else{
-		while(1);// error a slave cannot send queries as a master
+		modH->i8lastError = ERR_NOT_MASTER;
+		return (uint32_t)ERR_NOT_MASTER;
 	}
 }
 
@@ -1089,10 +1140,7 @@ static  mb_err_op_t TCPconnectserver(modbusHandler_t * modH, modbus_t *telegram)
 		 clientconn->conn = netconn_new(NETCONN_TCP);
 	     if (clientconn->conn  == NULL)
 	     {
-	   	     while(1)
-	   	     {
-	     	  // error creating new connection check your configuration and heap size
-	     	 }
+	    	 return ERR_TIME_OUT;
 	     }
 
 

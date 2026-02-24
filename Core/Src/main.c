@@ -53,6 +53,11 @@
 #define IWDG_KR_KEY_RELOAD   0xAAAAU
 #define IWDG_KR_KEY_WRITE    0x5555U
 #define IWDG_SR_WAIT_MAX_LOOPS 100000U
+#if defined(DEBUG)
+#define GH_ENABLE_IWDG 0U
+#else
+#define GH_ENABLE_IWDG 1U
+#endif
 
 /* USER CODE END PD */
 
@@ -151,9 +156,10 @@ typedef struct __attribute__((packed))
 sensor_state_t g_sensors[SENSOR_COUNT];
 uint32_t g_next_event_id = 1U;
 
-static uint32_t g_watchdog_flags = 0U;
-static const uint32_t g_watchdog_all_mask =
-  TASK_BIT_CONTROL | TASK_BIT_MODBUS | TASK_BIT_CONFIG | TASK_BIT_TCP;
+static volatile uint32_t g_last_kick_control_ms = 0U;
+static volatile uint32_t g_last_kick_modbus_ms = 0U;
+static volatile uint32_t g_last_kick_config_ms = 0U;
+static volatile uint32_t g_last_kick_tcp_ms = 0U;
 
 status_payload_t g_status = {0};
 active_config_t g_active_config = {0};
@@ -164,8 +170,28 @@ volatile uint8_t g_control_sync_pending = 0U;
 
 void task_heartbeat_kick(task_heartbeat_bit_t bit)
 {
+  uint32_t now_ms = HAL_GetTick();
+
   taskENTER_CRITICAL();
-  g_watchdog_flags |= (uint32_t)bit;
+  switch (bit)
+  {
+    case TASK_BIT_CONTROL:
+      g_last_kick_control_ms = now_ms;
+      break;
+    case TASK_BIT_MODBUS:
+      g_last_kick_modbus_ms = now_ms;
+      break;
+    case TASK_BIT_CONFIG:
+      g_last_kick_config_ms = now_ms;
+      break;
+    case TASK_BIT_TCP:
+      g_last_kick_tcp_ms = now_ms;
+      break;
+    case TASK_BIT_WDG:
+      break;
+    default:
+      break;
+  }
   taskEXIT_CRITICAL();
 }
 
@@ -179,8 +205,22 @@ static void store_reset_reason(uint32_t reason)
   HAL_RTCEx_BKUPWrite(&rtc, RTC_BKP_RESET_REASON_DR, reason);
 }
 
+static bool task_heartbeat_missed(uint32_t now_ms, uint32_t last_kick_ms, uint32_t timeout_ms)
+{
+  if (last_kick_ms == 0U)
+  {
+    return true;
+  }
+  return ((uint32_t)(now_ms - last_kick_ms) > timeout_ms);
+}
+
 static bool iwdg_init(uint8_t prescaler, uint16_t reload)
 {
+#if (GH_ENABLE_IWDG == 0U)
+  (void)prescaler;
+  (void)reload;
+  return true;
+#else
   uint32_t loops = 0U;
 
   IWDG->KR = IWDG_KR_KEY_WRITE;
@@ -199,6 +239,7 @@ static bool iwdg_init(uint8_t prescaler, uint16_t reload)
   IWDG->KR = IWDG_KR_KEY_RELOAD;
   IWDG->KR = IWDG_KR_KEY_ENABLE;
   return true;
+#endif
 }
 
 static void iwdg_refresh(void)
@@ -440,16 +481,8 @@ int main(void)
   osKernelStart();
 
   /* We should never get here as control is now taken by the scheduler */
-
-  /* Infinite loop */
-  /* USER CODE BEGIN WHILE */
-  while (1)
-  {
-    /* USER CODE END WHILE */
-
-    /* USER CODE BEGIN 3 */
-  }
-  /* USER CODE END 3 */
+  Error_Handler();
+  return 0;
 }
 
 /**
@@ -672,7 +705,12 @@ void StartConfigStorageTask(void *argument)
 
 void StartHealthWatchdogTask(void *argument)
 {
-  uint32_t snapshot_flags;
+  uint32_t now_ms;
+  uint32_t last_control_ms;
+  uint32_t last_modbus_ms;
+  uint32_t last_config_ms;
+  uint32_t last_tcp_ms;
+  uint32_t missing_mask;
   uint32_t miss_streak = 0U;
   uint32_t grace_until_ms = HAL_GetTick() + 5000U;
   bool allow_iwdg_refresh;
@@ -689,20 +727,44 @@ void StartHealthWatchdogTask(void *argument)
     g_status.heap_min_ever_bytes = xPortGetMinimumEverFreeHeapSize();
 
     allow_iwdg_refresh = true;
+    now_ms = HAL_GetTick();
     taskENTER_CRITICAL();
-    snapshot_flags = g_watchdog_flags;
-    g_watchdog_flags = 0U;
+    last_control_ms = g_last_kick_control_ms;
+    last_modbus_ms = g_last_kick_modbus_ms;
+    last_config_ms = g_last_kick_config_ms;
+    last_tcp_ms = g_last_kick_tcp_ms;
     taskEXIT_CRITICAL();
 
-    if ((int32_t)(HAL_GetTick() - grace_until_ms) < 0)
+    if ((int32_t)(now_ms - grace_until_ms) < 0)
     {
       task_heartbeat_kick(TASK_BIT_WDG);
-      iwdg_refresh();
+      if (GH_ENABLE_IWDG != 0U)
+      {
+        iwdg_refresh();
+      }
       osDelay(1000U);
       continue;
     }
 
-    if ((snapshot_flags & g_watchdog_all_mask) != g_watchdog_all_mask)
+    missing_mask = 0U;
+    if (task_heartbeat_missed(now_ms, last_control_ms, WDG_TIMEOUT_CONTROL_MS))
+    {
+      missing_mask |= TASK_BIT_CONTROL;
+    }
+    if (task_heartbeat_missed(now_ms, last_modbus_ms, WDG_TIMEOUT_MODBUS_MS))
+    {
+      missing_mask |= TASK_BIT_MODBUS;
+    }
+    if (task_heartbeat_missed(now_ms, last_config_ms, WDG_TIMEOUT_CONFIG_MS))
+    {
+      missing_mask |= TASK_BIT_CONFIG;
+    }
+    if (task_heartbeat_missed(now_ms, last_tcp_ms, WDG_TIMEOUT_TCP_MS))
+    {
+      missing_mask |= TASK_BIT_TCP;
+    }
+
+    if (missing_mask != 0U)
     {
       miss_streak++;
       if (miss_streak >= 3U)
@@ -712,7 +774,7 @@ void StartHealthWatchdogTask(void *argument)
         if (!miss_latched)
         {
           store_reset_reason(RESET_REASON_WATCHDOG_MISS);
-          publish_event(EVENT_SEV_CRIT, EVENT_CODE_WDG_MISS, 0U, (float)(snapshot_flags & 0xFFFFU));
+          publish_event(EVENT_SEV_CRIT, EVENT_CODE_WDG_MISS, 0U, (float)(missing_mask & 0xFFFFU));
           miss_latched = true;
         }
       }
@@ -727,7 +789,7 @@ void StartHealthWatchdogTask(void *argument)
       }
     }
 
-    if (allow_iwdg_refresh)
+    if ((GH_ENABLE_IWDG != 0U) && allow_iwdg_refresh)
     {
       iwdg_refresh();
     }
@@ -791,9 +853,6 @@ void Error_Handler(void)
   __disable_irq();
   store_reset_reason(RESET_REASON_ERROR_HANDLER);
   NVIC_SystemReset();
-  while (1)
-  {
-  }
   /* USER CODE END Error_Handler_Debug */
 }
 
