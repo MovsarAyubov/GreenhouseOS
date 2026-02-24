@@ -32,6 +32,14 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 
+#define GH_RTC_BKP_INIT_MARKER        0x32F2U
+#define GH_RTC_BKP_RESET_REASON_DR    RTC_BKP_DR2
+#define GH_RESET_REASON_NMI           0xE201U
+#define GH_RESET_REASON_HARDFAULT     0xE202U
+#define GH_RESET_REASON_MEMMANAGE     0xE203U
+#define GH_RESET_REASON_BUSFAULT      0xE204U
+#define GH_RESET_REASON_USAGEFAULT    0xE205U
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -47,10 +55,23 @@
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN PFP */
 
+static void gh_store_fault_reset_reason(uint32_t reason);
+
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
+static void gh_store_fault_reset_reason(uint32_t reason)
+{
+  RTC_HandleTypeDef rtc = {0};
+  __HAL_RCC_PWR_CLK_ENABLE();
+  HAL_PWR_EnableBkUpAccess();
+  __HAL_RCC_RTC_ENABLE();
+  rtc.Instance = RTC;
+  HAL_RTCEx_BKUPWrite(&rtc, RTC_BKP_DR1, GH_RTC_BKP_INIT_MARKER);
+  HAL_RTCEx_BKUPWrite(&rtc, GH_RTC_BKP_RESET_REASON_DR, reason);
+}
 
 /* USER CODE END 0 */
 
@@ -76,6 +97,7 @@ void NMI_Handler(void)
   /* USER CODE END NonMaskableInt_IRQn 0 */
   /* USER CODE BEGIN NonMaskableInt_IRQn 1 */
   __disable_irq();
+  gh_store_fault_reset_reason(GH_RESET_REASON_NMI);
   NVIC_SystemReset();
   /* USER CODE END NonMaskableInt_IRQn 1 */
 }
@@ -89,6 +111,7 @@ void HardFault_Handler(void)
 
   /* USER CODE END HardFault_IRQn 0 */
   __disable_irq();
+  gh_store_fault_reset_reason(GH_RESET_REASON_HARDFAULT);
   NVIC_SystemReset();
 }
 
@@ -101,6 +124,7 @@ void MemManage_Handler(void)
 
   /* USER CODE END MemoryManagement_IRQn 0 */
   __disable_irq();
+  gh_store_fault_reset_reason(GH_RESET_REASON_MEMMANAGE);
   NVIC_SystemReset();
 }
 
@@ -113,6 +137,7 @@ void BusFault_Handler(void)
 
   /* USER CODE END BusFault_IRQn 0 */
   __disable_irq();
+  gh_store_fault_reset_reason(GH_RESET_REASON_BUSFAULT);
   NVIC_SystemReset();
 }
 
@@ -125,6 +150,7 @@ void UsageFault_Handler(void)
 
   /* USER CODE END UsageFault_IRQn 0 */
   __disable_irq();
+  gh_store_fault_reset_reason(GH_RESET_REASON_USAGEFAULT);
   NVIC_SystemReset();
 }
 

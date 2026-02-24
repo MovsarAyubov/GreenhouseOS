@@ -43,7 +43,7 @@
 #define ETHIF_TX_TIMEOUT (2000U)
 /* USER CODE BEGIN OS_THREAD_STACK_SIZE_WITH_RTOS */
 /* Stack size of the interface thread */
-#define INTERFACE_THREAD_STACK_SIZE ( 350 )
+#define INTERFACE_THREAD_STACK_SIZE ( 512U * 4U )
 /* USER CODE END OS_THREAD_STACK_SIZE_WITH_RTOS */
 /* Network interface name */
 #define IFNAME0 's'
@@ -63,14 +63,56 @@
 #define DP83848_PHY_BSR               0x01U
 #define DP83848_PHY_ID1               0x02U
 #define DP83848_PHY_ID2               0x03U
+#define PHY_BMCR_REG                  0x00U
+#define PHY_BMCR_RESET                0x8000U
 #define DP83848_PHY_PHYSTS            0x10U
 #define DP83848_BSR_LINK_STATUS       0x0004U
 #define DP83848_PHYSTS_SPEED_10M      0x0002U
 #define DP83848_PHYSTS_DUPLEX_FULL    0x0004U
+#define PHY_ID1_TI_DP83848            0x2000U
+#define PHY_ID1_SMSC_FAMILY           0x0007U
+#define GH_PHY_POWERUP_DELAY_MS       300U
+#define GH_PHY_RESET_POLL_MS          10U
+#define GH_PHY_RESET_TIMEOUT_MS       500U
+#define GH_ETH_INIT_RETRIES           20U
+#define GH_ETH_INIT_RETRY_DELAY_MS    50U
 
 int32_t ETH_PHY_IO_ReadReg(uint32_t DevAddr, uint32_t RegAddr, uint32_t *pRegVal);
+int32_t ETH_PHY_IO_WriteReg(uint32_t DevAddr, uint32_t RegAddr, uint32_t RegVal);
+extern ETH_HandleTypeDef heth;
 
 static uint32_t g_phy_addr = DP83848_PHY_ADDR_DEFAULT;
+static uint8_t g_mac_addr[6] = {0x02U, 0x80U, 0xE1U, 0x00U, 0x00U, 0x01U};
+volatile uint32_t g_eth_diag_phy_addr = 0U;
+volatile int32_t g_eth_diag_phy_link_state = -1;
+volatile uint32_t g_eth_diag_phy_scan_ok = 0U;
+volatile uint32_t g_eth_diag_rx_sem_ok = 0U;
+volatile uint32_t g_eth_diag_tx_sem_ok = 0U;
+volatile uint32_t g_eth_diag_input_task_ok = 0U;
+
+static void phy_build_local_mac(void)
+{
+  uint32_t uid0 = HAL_GetUIDw0();
+  uint32_t uid1 = HAL_GetUIDw1();
+  uint32_t uid2 = HAL_GetUIDw2();
+
+  /* Locally administered unicast MAC derived from MCU UID. */
+  g_mac_addr[0] = 0x02U;
+  g_mac_addr[1] = (uint8_t)(uid0 & 0xFFU);
+  g_mac_addr[2] = (uint8_t)((uid0 >> 8) & 0xFFU);
+  g_mac_addr[3] = (uint8_t)(uid1 & 0xFFU);
+  g_mac_addr[4] = (uint8_t)((uid2 >> 8) & 0xFFU);
+  g_mac_addr[5] = (uint8_t)((uid2 >> 16) & 0xFFU);
+
+  if ((g_mac_addr[1] | g_mac_addr[2] | g_mac_addr[3] | g_mac_addr[4] | g_mac_addr[5]) == 0U)
+  {
+    g_mac_addr[1] = 0x80U;
+    g_mac_addr[2] = 0xE1U;
+    g_mac_addr[3] = 0x00U;
+    g_mac_addr[4] = 0x00U;
+    g_mac_addr[5] = 0x01U;
+  }
+}
 
 static bool phy_addr_is_valid(uint32_t phy_addr)
 {
@@ -94,16 +136,38 @@ static bool phy_addr_is_valid(uint32_t phy_addr)
   {
     return false;
   }
+
+  if ((id1 != PHY_ID1_TI_DP83848) && (id1 != PHY_ID1_SMSC_FAMILY))
+  {
+    return false;
+  }
+
   return true;
 }
 
 static bool phy_find_address(uint32_t *phy_addr_out)
 {
+  uint32_t bsr = 0U;
   uint32_t addr;
+
   if (phy_addr_is_valid(DP83848_PHY_ADDR_DEFAULT))
   {
     *phy_addr_out = DP83848_PHY_ADDR_DEFAULT;
     return true;
+  }
+
+  for (addr = 0U; addr < 32U; addr++)
+  {
+    if (phy_addr_is_valid(addr))
+    {
+      if ((ETH_PHY_IO_ReadReg(addr, DP83848_PHY_BSR, &bsr) == 0) &&
+          (ETH_PHY_IO_ReadReg(addr, DP83848_PHY_BSR, &bsr) == 0) &&
+          ((bsr & DP83848_BSR_LINK_STATUS) != 0U))
+      {
+        *phy_addr_out = addr;
+        return true;
+      }
+    }
   }
 
   for (addr = 0U; addr < 32U; addr++)
@@ -137,6 +201,8 @@ static int32_t phy_get_link_state(uint32_t phy_addr, uint32_t *duplex, uint32_t 
 
   if (ETH_PHY_IO_ReadReg(phy_addr, DP83848_PHY_PHYSTS, &physts) < 0)
   {
+    /* Link status is known from BSR. If speed/duplex reg is unavailable,
+       keep defaults and report link up. */
     *duplex = ETH_FULLDUPLEX_MODE;
     *speed = ETH_SPEED_100M;
     return 1;
@@ -145,6 +211,68 @@ static int32_t phy_get_link_state(uint32_t phy_addr, uint32_t *duplex, uint32_t 
   *duplex = ((physts & DP83848_PHYSTS_DUPLEX_FULL) != 0U) ? ETH_FULLDUPLEX_MODE : ETH_HALFDUPLEX_MODE;
   *speed = ((physts & DP83848_PHYSTS_SPEED_10M) != 0U) ? ETH_SPEED_10M : ETH_SPEED_100M;
   return 1;
+}
+
+static bool eth_hal_init_retry(void)
+{
+  uint32_t attempt;
+
+  for (attempt = 0U; attempt < GH_ETH_INIT_RETRIES; attempt++)
+  {
+    if (HAL_ETH_Init(&heth) == HAL_OK)
+    {
+      return true;
+    }
+    HAL_Delay(GH_ETH_INIT_RETRY_DELAY_MS);
+  }
+  return false;
+}
+
+static bool eth_start_it_retry(void)
+{
+  if (HAL_ETH_Start_IT(&heth) == HAL_OK)
+  {
+    return true;
+  }
+
+  if (!eth_hal_init_retry())
+  {
+    return false;
+  }
+  return (HAL_ETH_Start_IT(&heth) == HAL_OK);
+}
+
+static bool phy_software_reset(uint32_t phy_addr)
+{
+  uint32_t bmcr = 0U;
+  uint32_t elapsed = 0U;
+
+  if (ETH_PHY_IO_ReadReg(phy_addr, PHY_BMCR_REG, &bmcr) < 0)
+  {
+    return false;
+  }
+
+  bmcr |= PHY_BMCR_RESET;
+  if (ETH_PHY_IO_WriteReg(phy_addr, PHY_BMCR_REG, bmcr) < 0)
+  {
+    return false;
+  }
+
+  while (elapsed < GH_PHY_RESET_TIMEOUT_MS)
+  {
+    HAL_Delay(GH_PHY_RESET_POLL_MS);
+    elapsed += GH_PHY_RESET_POLL_MS;
+
+    if (ETH_PHY_IO_ReadReg(phy_addr, PHY_BMCR_REG, &bmcr) < 0)
+    {
+      continue;
+    }
+    if ((bmcr & PHY_BMCR_RESET) == 0U)
+    {
+      return true;
+    }
+  }
+  return false;
 }
 
 /* USER CODE END 1 */
@@ -277,15 +405,9 @@ static void low_level_init(struct netif *netif)
   ETH_MACConfigTypeDef MACConf = {0};
   /* Start ETH HAL Init */
 
-   uint8_t MACAddr[6] ;
   heth.Instance = ETH;
-  MACAddr[0] = 0x00;
-  MACAddr[1] = 0x80;
-  MACAddr[2] = 0xE1;
-  MACAddr[3] = 0x00;
-  MACAddr[4] = 0x00;
-  MACAddr[5] = 0x00;
-  heth.Init.MACAddr = &MACAddr[0];
+  phy_build_local_mac();
+  heth.Init.MACAddr = g_mac_addr;
   heth.Init.MediaInterface = HAL_ETH_RMII_MODE;
   heth.Init.TxDesc = DMATxDscrTab;
   heth.Init.RxDesc = DMARxDscrTab;
@@ -295,7 +417,8 @@ static void low_level_init(struct netif *netif)
 
   /* USER CODE END MACADDRESS */
 
-  hal_eth_init_status = HAL_ETH_Init(&heth);
+  HAL_Delay(GH_PHY_POWERUP_DELAY_MS);
+  hal_eth_init_status = eth_hal_init_retry() ? HAL_OK : HAL_ERROR;
 
   memset(&TxConfig, 0 , sizeof(ETH_TxPacketConfig));
   TxConfig.Attributes = ETH_TX_PACKETS_FEATURES_CSUM | ETH_TX_PACKETS_FEATURES_CRCPAD;
@@ -333,9 +456,11 @@ static void low_level_init(struct netif *netif)
 
   /* create a binary semaphore used for informing ethernetif of frame reception */
   RxPktSemaphore = osSemaphoreNew(1, 0, NULL);
+  g_eth_diag_rx_sem_ok = (RxPktSemaphore != NULL) ? 1U : 0U;
 
   /* create a binary semaphore used for informing ethernetif of frame transmission */
   TxPktSemaphore = osSemaphoreNew(1, 0, NULL);
+  g_eth_diag_tx_sem_ok = (TxPktSemaphore != NULL) ? 1U : 0U;
 
   /* create the task that handles the ETH_MAC */
 /* USER CODE BEGIN OS_THREAD_NEW_CMSIS_RTOS_V2 */
@@ -343,7 +468,7 @@ static void low_level_init(struct netif *netif)
   attributes.name = "EthIf";
   attributes.stack_size = INTERFACE_THREAD_STACK_SIZE;
   attributes.priority = osPriorityRealtime;
-  osThreadNew(ethernetif_input, netif, &attributes);
+  g_eth_diag_input_task_ok = (osThreadNew(ethernetif_input, netif, &attributes) != NULL) ? 1U : 0U;
 /* USER CODE END OS_THREAD_NEW_CMSIS_RTOS_V2 */
 
 /* USER CODE BEGIN PHY_PRE_CONFIG */
@@ -355,14 +480,22 @@ static void low_level_init(struct netif *netif)
     /* Fallback: keep interface usable even if PHY ID probing fails on some boards.
        Link thread will keep polling and update actual state. */
     g_phy_addr = DP83848_PHY_ADDR_DEFAULT;
+    g_eth_diag_phy_scan_ok = 0U;
   }
+  else
+  {
+    g_eth_diag_phy_scan_ok = 1U;
+  }
+  g_eth_diag_phy_addr = g_phy_addr;
+  (void)phy_software_reset(g_phy_addr);
 
   if (hal_eth_init_status == HAL_OK)
   {
     phy_up = phy_get_link_state(g_phy_addr, &duplex, &speed);
+    g_eth_diag_phy_link_state = phy_up;
 
     /* Get link state */
-    if(phy_up == 0)
+    if(phy_up <= 0)
     {
       netif_set_link_down(netif);
       netif_set_down(netif);
@@ -374,10 +507,16 @@ static void low_level_init(struct netif *netif)
     MACConf.DuplexMode = duplex;
     MACConf.Speed = speed;
     HAL_ETH_SetMACConfig(&heth, &MACConf);
-
-    HAL_ETH_Start_IT(&heth);
-    netif_set_up(netif);
-    netif_set_link_up(netif);
+    if (eth_start_it_retry())
+    {
+      netif_set_up(netif);
+      netif_set_link_up(netif);
+    }
+    else
+    {
+      netif_set_link_down(netif);
+      netif_set_down(netif);
+    }
 
 /* USER CODE BEGIN PHY_POST_CONFIG */
 
@@ -387,7 +526,8 @@ static void low_level_init(struct netif *netif)
   }
   else
   {
-    Error_Handler();
+    netif_set_link_down(netif);
+    netif_set_down(netif);
   }
 #endif /* LWIP_ARP || LWIP_ETHERNET */
 
@@ -823,7 +963,9 @@ void ethernet_link_thread(void* argument)
   int32_t phy_up = 0;
   uint32_t linkchanged = 0U, speed = 0U, duplex = 0U;
   uint8_t down_confirm = 0U;
+  uint8_t phy_read_fail_count = 0U;
   const uint8_t k_down_confirm_threshold = 50U; /* 50 * 100ms = 5s */
+  const uint8_t k_phy_rescan_threshold = 10U;   /* 10 * 100ms = 1s */
 
   struct netif *netif = (struct netif *) argument;
 /* USER CODE BEGIN ETH link init */
@@ -833,13 +975,30 @@ void ethernet_link_thread(void* argument)
   for(;;)
   {
   phy_up = phy_get_link_state(g_phy_addr, &duplex, &speed);
+  g_eth_diag_phy_addr = g_phy_addr;
+  g_eth_diag_phy_link_state = phy_up;
 
   if (phy_up < 0)
   {
-    /* Ignore transient PHY read failures. */
+    phy_read_fail_count++;
+    if (phy_read_fail_count >= k_phy_rescan_threshold)
+    {
+      uint32_t new_phy_addr = g_phy_addr;
+      if (phy_find_address(&new_phy_addr))
+      {
+        g_phy_addr = new_phy_addr;
+        g_eth_diag_phy_scan_ok = 1U;
+      }
+      else
+      {
+        g_eth_diag_phy_scan_ok = 0U;
+      }
+      phy_read_fail_count = 0U;
+    }
     osDelay(100);
     continue;
   }
+  phy_read_fail_count = 0U;
 
   if(netif_is_link_up(netif) && (phy_up == 0))
   {
@@ -864,9 +1023,16 @@ void ethernet_link_thread(void* argument)
       MACConf.DuplexMode = duplex;
       MACConf.Speed = speed;
       HAL_ETH_SetMACConfig(&heth, &MACConf);
-      HAL_ETH_Start_IT(&heth);
-      netif_set_up(netif);
-      netif_set_link_up(netif);
+      if (eth_start_it_retry())
+      {
+        netif_set_up(netif);
+        netif_set_link_up(netif);
+      }
+      else
+      {
+        netif_set_down(netif);
+        netif_set_link_down(netif);
+      }
     }
   }
   else

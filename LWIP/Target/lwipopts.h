@@ -128,6 +128,11 @@
 /* Enable netconn receive timeouts to avoid blocking RTOS tasks forever. */
 #undef LWIP_SO_RCVTIMEO
 #define LWIP_SO_RCVTIMEO 1
+/* Increase lwIP core thread stack to improve startup robustness. */
+#undef TCPIP_THREAD_STACKSIZE
+#define TCPIP_THREAD_STACKSIZE 2048
+#undef DEFAULT_THREAD_STACKSIZE
+#define DEFAULT_THREAD_STACKSIZE 2048
 
 /* USER CODE END 1 */
 

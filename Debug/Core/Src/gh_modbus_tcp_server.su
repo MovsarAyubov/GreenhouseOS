@@ -1,1 +1,1 @@
-../Core/Src/gh_modbus_tcp_server.c:19:6:GH_ModbusTcpServerTask_Run	24	static
+../Core/Src/gh_modbus_tcp_server.c:20:6:GH_ModbusTcpServerTask_Run	24	static

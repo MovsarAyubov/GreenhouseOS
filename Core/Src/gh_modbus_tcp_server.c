@@ -5,6 +5,7 @@
 #include "Modbus.h"
 #include "cmsis_os.h"
 #include "lwip.h"
+#include "lwip/netif.h"
 
 #define GH_TCP_NETIF_WAIT_STEP_MS 100U
 #define GH_TCP_NETIF_WAIT_TIMEOUT_MS 10000U
@@ -24,6 +25,15 @@ void GH_ModbusTcpServerTask_Run(void *argument)
   uint16_t *regs;
   for (;;)
   {
+    if (!netif_is_up(&gnetif) || !netif_is_link_up(&gnetif))
+    {
+      s_mb_started = false;
+      s_mb_init_attempted = false;
+      task_heartbeat_kick(TASK_BIT_TCP);
+      osDelay(GH_TCP_NETIF_WAIT_STEP_MS);
+      continue;
+    }
+
     if (!s_mb_started)
     {
       if (!s_mb_init_attempted)
