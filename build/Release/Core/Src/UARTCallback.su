@@ -1,0 +1,3 @@
+C:\Users\AUTcomp\STM32CubeIDE\workspace_1.17.0\greenhouseOS\Core\Src\UARTCallback.c:27:6:HAL_UART_TxCpltCallback	24	static
+C:\Users\AUTcomp\STM32CubeIDE\workspace_1.17.0\greenhouseOS\Core\Src\UARTCallback.c:68:6:HAL_UART_RxCpltCallback	40	static
+C:\Users\AUTcomp\STM32CubeIDE\workspace_1.17.0\greenhouseOS\Core\Src\UARTCallback.c:195:6:HAL_UART_ErrorCallback	0	static

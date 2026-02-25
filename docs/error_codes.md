@@ -41,6 +41,11 @@
 | `13` | `CFG_RESULT_REJECT_QUEUE_FULL` | Очередь занята/переполнена | Запрос не принят к обработке | повторить позже |
 | `14` | `CFG_RESULT_FLASH_FAIL` | Ошибка записи в flash | Конфиг не сохранен | проверить flash сектор/питание, retry |
 | `15` | `CFG_RESULT_APPLY_QUEUE_FAIL` | Не удалось передать в apply queue | Конфиг не применен после записи | анализ загрузки задач/очередей |
+| `20` | `CFG_RESULT_REJECT_TOPOLOGY_SCHEMA` | Ошибка формата `topology_config v2` | Неверный magic/version/структура заголовка | проверить сериализацию и schema version |
+| `21` | `CFG_RESULT_REJECT_TOPOLOGY_BOUNDS` | Нарушены границы таблиц топологии | Offsets/size/count выходят за допустимый диапазон | проверить offsets/counts/total_size |
+| `22` | `CFG_RESULT_REJECT_TOPOLOGY_CRC` | Ошибка CRC topology payload | Повреждение header/body топологии | пересчитать CRC и отправить заново |
+| `23` | `CFG_RESULT_REJECT_TOPOLOGY_COLLISION` | Пересечение секций таблиц | Описания tables перекрываются | исправить layout таблиц |
+| `24` | `CFG_RESULT_REJECT_TOPOLOGY_BUDGET` | Превышены лимиты MCU | modules/requests/points/commands больше budget | снизить размер топологии |
 
 ## 3) Reset Reason Codes (сохраненные причины перезапуска)
 
@@ -92,4 +97,3 @@
 - `g_persist_last_reset_reason`: причина последнего reset (из RTC backup).
 - `mHandlers[0]->i8lastError`: последняя ошибка Modbus стека.
 - `g_status.modbus_timeouts[n]`: таймауты обмена по каждому slave (индекс `n = slave_id - 1`).
-

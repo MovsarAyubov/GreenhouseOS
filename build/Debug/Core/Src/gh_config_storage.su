@@ -1,0 +1,12 @@
+C:\Users\AUTcomp\STM32CubeIDE\workspace_1.17.0\greenhouseOS\Core\Src\gh_config_storage.c:17:13:topo_runtime_clear	4	static
+C:\Users\AUTcomp\STM32CubeIDE\workspace_1.17.0\greenhouseOS\Core\Src\gh_config_storage.c:30:13:topo_safe_mul_u32	24	static
+C:\Users\AUTcomp\STM32CubeIDE\workspace_1.17.0\greenhouseOS\Core\Src\gh_config_storage.c:44:13:topo_section_bounds	32	static
+C:\Users\AUTcomp\STM32CubeIDE\workspace_1.17.0\greenhouseOS\Core\Src\gh_config_storage.c:84:13:topo_ranges_overlap	16	static
+C:\Users\AUTcomp\STM32CubeIDE\workspace_1.17.0\greenhouseOS\Core\Src\gh_config_storage.c:97:6:GH_TopologyV2_IsPayload	24	static
+C:\Users\AUTcomp\STM32CubeIDE\workspace_1.17.0\greenhouseOS\Core\Src\gh_config_storage.c:110:6:GH_TopologyV2_ValidatePayload	224	static
+C:\Users\AUTcomp\STM32CubeIDE\workspace_1.17.0\greenhouseOS\Core\Src\gh_config_storage.c:214:6:GH_TopologyV2_SyncRuntimeFromConfig	88	static
+C:\Users\AUTcomp\STM32CubeIDE\workspace_1.17.0\greenhouseOS\Core\Src\gh_config_storage.c:246:6:GH_ConfigStorage_PayloadValuesValid	24	static
+C:\Users\AUTcomp\STM32CubeIDE\workspace_1.17.0\greenhouseOS\Core\Src\gh_config_storage.c:263:6:GH_ConfigStorage_ValidateRequest	24	static
+C:\Users\AUTcomp\STM32CubeIDE\workspace_1.17.0\greenhouseOS\Core\Src\gh_config_storage.c:301:13:cfg_write_slot_with_retries	32	static
+C:\Users\AUTcomp\STM32CubeIDE\workspace_1.17.0\greenhouseOS\Core\Src\gh_config_storage.c:322:13:cfg_store_ab_with_fallback	32	static
+C:\Users\AUTcomp\STM32CubeIDE\workspace_1.17.0\greenhouseOS\Core\Src\gh_config_storage.c:367:6:GH_ConfigStorageTask_Run	440	static

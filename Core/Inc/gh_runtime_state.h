@@ -87,7 +87,12 @@ typedef enum
   CFG_RESULT_REJECT_RANGE = 12U,
   CFG_RESULT_REJECT_QUEUE_FULL = 13U,
   CFG_RESULT_FLASH_FAIL = 14U,
-  CFG_RESULT_APPLY_QUEUE_FAIL = 15U
+  CFG_RESULT_APPLY_QUEUE_FAIL = 15U,
+  CFG_RESULT_REJECT_TOPOLOGY_SCHEMA = 20U,
+  CFG_RESULT_REJECT_TOPOLOGY_BOUNDS = 21U,
+  CFG_RESULT_REJECT_TOPOLOGY_CRC = 22U,
+  CFG_RESULT_REJECT_TOPOLOGY_COLLISION = 23U,
+  CFG_RESULT_REJECT_TOPOLOGY_BUDGET = 24U
 } config_result_code_t;
 
 typedef struct
@@ -202,6 +207,15 @@ extern volatile uint32_t g_eth_diag_phy_scan_ok;
 extern volatile uint32_t g_eth_diag_rx_sem_ok;
 extern volatile uint32_t g_eth_diag_tx_sem_ok;
 extern volatile uint32_t g_eth_diag_input_task_ok;
+extern volatile uint8_t g_topology_v2_active;
+extern volatile uint16_t g_topology_v2_ver_major;
+extern volatile uint16_t g_topology_v2_ver_minor;
+extern volatile uint32_t g_topology_v2_generation;
+extern volatile uint16_t g_topology_v2_module_count;
+extern volatile uint16_t g_topology_v2_req_count;
+extern volatile uint16_t g_topology_v2_point_count;
+extern volatile uint16_t g_topology_v2_cmd_count;
+extern volatile uint16_t g_topology_v2_policy_count;
 
 bool modbus_read_holding_registers(uint8_t slave_id,
                                    uint16_t start_reg,

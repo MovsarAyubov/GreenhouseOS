@@ -29,6 +29,7 @@
 #include "gh_modbus_map.h"
 #include "gh_modbus_tcp_server.h"
 #include "gh_config_storage.h"
+#include "gh_topology_v2.h"
 #include "task.h"
 #include <string.h>
 #include <stddef.h>
@@ -184,6 +185,15 @@ volatile uint32_t g_persist_wdg_miss_count = 0U;
 volatile uint32_t g_persist_fault_reset_count = 0U;
 volatile uint32_t g_persist_last_event_code = 0U;
 volatile uint32_t g_persist_last_reset_reason = 0U;
+volatile uint8_t g_topology_v2_active = 0U;
+volatile uint16_t g_topology_v2_ver_major = 0U;
+volatile uint16_t g_topology_v2_ver_minor = 0U;
+volatile uint32_t g_topology_v2_generation = 0U;
+volatile uint16_t g_topology_v2_module_count = 0U;
+volatile uint16_t g_topology_v2_req_count = 0U;
+volatile uint16_t g_topology_v2_point_count = 0U;
+volatile uint16_t g_topology_v2_cmd_count = 0U;
+volatile uint16_t g_topology_v2_policy_count = 0U;
 
 bool g_setpoints_apply_in_progress = false;
 volatile uint8_t g_control_sync_pending = 0U;
@@ -486,6 +496,8 @@ static void config_load_or_default(void)
     }
     g_active_config.crc = gh_crc32_compute(g_active_config.payload, CONFIG_PAYLOAD_SIZE);
   }
+
+  GH_TopologyV2_SyncRuntimeFromConfig(&g_active_config);
 }
 
 void publish_event(uint8_t severity, uint16_t code, uint16_t source, float value)
@@ -776,6 +788,7 @@ void StartControlTask(void *argument)
     if (osMessageQueueGet(qConfigApplyHandle, &apply_req, NULL, 100U) == osOK)
     {
       g_active_config = apply_req.config;
+      GH_TopologyV2_SyncRuntimeFromConfig(&g_active_config);
       g_control_sync_pending = 1U;
       g_setpoints_apply_in_progress = false;
       GH_ModbusMap_ReportConfigResult(apply_req.request_token,

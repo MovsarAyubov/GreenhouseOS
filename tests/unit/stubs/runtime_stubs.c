@@ -12,6 +12,28 @@ uint32_t g_next_event_id = 1U;
 uint32_t g_config_seq = 1U;
 volatile uint8_t g_control_sync_pending = 0U;
 bool g_setpoints_apply_in_progress = false;
+volatile uint8_t g_topology_v2_active = 0U;
+volatile uint16_t g_topology_v2_ver_major = 0U;
+volatile uint16_t g_topology_v2_ver_minor = 0U;
+volatile uint32_t g_topology_v2_generation = 0U;
+volatile uint16_t g_topology_v2_module_count = 0U;
+volatile uint16_t g_topology_v2_req_count = 0U;
+volatile uint16_t g_topology_v2_point_count = 0U;
+volatile uint16_t g_topology_v2_cmd_count = 0U;
+volatile uint16_t g_topology_v2_policy_count = 0U;
+volatile uint32_t g_persist_boot_count = 0U;
+volatile uint32_t g_persist_poweron_count = 0U;
+volatile uint32_t g_persist_error_handler_count = 0U;
+volatile uint32_t g_persist_wdg_miss_count = 0U;
+volatile uint32_t g_persist_fault_reset_count = 0U;
+volatile uint32_t g_persist_last_event_code = 0U;
+volatile uint32_t g_persist_last_reset_reason = 0U;
+volatile uint32_t g_eth_diag_phy_addr = 0U;
+volatile int32_t g_eth_diag_phy_link_state = 0;
+volatile uint32_t g_eth_diag_phy_scan_ok = 0U;
+volatile uint32_t g_eth_diag_rx_sem_ok = 0U;
+volatile uint32_t g_eth_diag_tx_sem_ok = 0U;
+volatile uint32_t g_eth_diag_input_task_ok = 0U;
 
 void task_heartbeat_kick(task_heartbeat_bit_t bit)
 {

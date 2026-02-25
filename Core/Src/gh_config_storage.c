@@ -3,9 +3,245 @@
 #include "gh_runtime_state.h"
 #include "gh_crc32.h"
 #include "gh_modbus_map.h"
+#include "gh_topology_v2.h"
 
 #include <math.h>
 #include <string.h>
+
+typedef struct
+{
+  uint32_t start;
+  uint32_t end;
+} topo_range_t;
+
+static void topo_runtime_clear(void)
+{
+  g_topology_v2_active = 0U;
+  g_topology_v2_ver_major = 0U;
+  g_topology_v2_ver_minor = 0U;
+  g_topology_v2_generation = 0U;
+  g_topology_v2_module_count = 0U;
+  g_topology_v2_req_count = 0U;
+  g_topology_v2_point_count = 0U;
+  g_topology_v2_cmd_count = 0U;
+  g_topology_v2_policy_count = 0U;
+}
+
+static bool topo_safe_mul_u32(uint32_t a, uint32_t b, uint32_t *out)
+{
+  if (out == NULL)
+  {
+    return false;
+  }
+  if ((a != 0U) && (b > (0xFFFFFFFFUL / a)))
+  {
+    return false;
+  }
+  *out = a * b;
+  return true;
+}
+
+static bool topo_section_bounds(uint32_t off,
+                                uint32_t count,
+                                uint32_t elem_size,
+                                uint32_t total_size,
+                                topo_range_t *out_range)
+{
+  uint32_t bytes;
+
+  if (out_range == NULL)
+  {
+    return false;
+  }
+
+  out_range->start = 0U;
+  out_range->end = 0U;
+
+  if (count == 0U)
+  {
+    return true;
+  }
+
+  if ((off < sizeof(gh_topology_v2_header_t)) || (off >= total_size) || ((off & 0x1U) != 0U))
+  {
+    return false;
+  }
+
+  if (!topo_safe_mul_u32(count, elem_size, &bytes) || (bytes == 0U))
+  {
+    return false;
+  }
+  if (off > (total_size - bytes))
+  {
+    return false;
+  }
+
+  out_range->start = off;
+  out_range->end = off + bytes;
+  return true;
+}
+
+static bool topo_ranges_overlap(const topo_range_t *a, const topo_range_t *b)
+{
+  if ((a == NULL) || (b == NULL))
+  {
+    return false;
+  }
+  if ((a->end <= a->start) || (b->end <= b->start))
+  {
+    return false;
+  }
+  return !((a->end <= b->start) || (b->end <= a->start));
+}
+
+bool GH_TopologyV2_IsPayload(const uint8_t *payload, uint32_t payload_len)
+{
+  uint32_t magic;
+
+  if ((payload == NULL) || (payload_len < sizeof(uint32_t)))
+  {
+    return false;
+  }
+
+  memcpy(&magic, payload, sizeof(magic));
+  return (magic == GH_TOPOLOGY_V2_MAGIC);
+}
+
+bool GH_TopologyV2_ValidatePayload(const uint8_t *payload,
+                                   uint32_t payload_len,
+                                   config_result_code_t *out_result)
+{
+  gh_topology_v2_header_t hdr;
+  gh_topology_v2_header_t hdr_crc_copy;
+  topo_range_t ranges[5];
+  uint8_t i;
+  uint8_t j;
+  uint32_t body_crc;
+  uint32_t header_crc;
+
+  if (out_result == NULL)
+  {
+    return false;
+  }
+  *out_result = CFG_RESULT_REJECT_TOPOLOGY_SCHEMA;
+
+  if ((payload == NULL) || (payload_len < sizeof(hdr)))
+  {
+    return false;
+  }
+
+  memcpy(&hdr, payload, sizeof(hdr));
+  if (hdr.magic != GH_TOPOLOGY_V2_MAGIC)
+  {
+    return false;
+  }
+  if (hdr.ver_major != GH_TOPOLOGY_V2_VERSION_MAJOR)
+  {
+    return false;
+  }
+  if ((hdr.total_size < sizeof(hdr)) || (hdr.total_size > payload_len))
+  {
+    *out_result = CFG_RESULT_REJECT_TOPOLOGY_BOUNDS;
+    return false;
+  }
+
+  memcpy(&hdr_crc_copy, &hdr, sizeof(hdr_crc_copy));
+  hdr_crc_copy.header_crc32 = 0U;
+  header_crc = gh_crc32_compute((const uint8_t *)&hdr_crc_copy, sizeof(hdr_crc_copy));
+  body_crc = gh_crc32_compute(&payload[sizeof(hdr)], hdr.total_size - sizeof(hdr));
+  if ((header_crc != hdr.header_crc32) || (body_crc != hdr.body_crc32))
+  {
+    *out_result = CFG_RESULT_REJECT_TOPOLOGY_CRC;
+    return false;
+  }
+
+  if ((hdr.module_count > GH_TOPOLOGY_V2_MAX_MODULES) ||
+      (hdr.req_count > GH_TOPOLOGY_V2_MAX_REQ_PROFILES) ||
+      (hdr.point_count > GH_TOPOLOGY_V2_MAX_POINTS) ||
+      (hdr.cmd_count > GH_TOPOLOGY_V2_MAX_COMMANDS) ||
+      (hdr.policy_count > GH_TOPOLOGY_V2_MAX_POLICIES))
+  {
+    *out_result = CFG_RESULT_REJECT_TOPOLOGY_BUDGET;
+    return false;
+  }
+
+  if (!topo_section_bounds(hdr.off_modules,
+                           hdr.module_count,
+                           sizeof(gh_topology_v2_module_t),
+                           hdr.total_size,
+                           &ranges[0]) ||
+      !topo_section_bounds(hdr.off_requests,
+                           hdr.req_count,
+                           sizeof(gh_topology_v2_req_t),
+                           hdr.total_size,
+                           &ranges[1]) ||
+      !topo_section_bounds(hdr.off_points,
+                           hdr.point_count,
+                           sizeof(gh_topology_v2_point_t),
+                           hdr.total_size,
+                           &ranges[2]) ||
+      !topo_section_bounds(hdr.off_commands,
+                           hdr.cmd_count,
+                           sizeof(gh_topology_v2_cmd_t),
+                           hdr.total_size,
+                           &ranges[3]) ||
+      !topo_section_bounds(hdr.off_policies,
+                           hdr.policy_count,
+                           sizeof(gh_topology_v2_policy_t),
+                           hdr.total_size,
+                           &ranges[4]))
+  {
+    *out_result = CFG_RESULT_REJECT_TOPOLOGY_BOUNDS;
+    return false;
+  }
+
+  for (i = 0U; i < 5U; i++)
+  {
+    for (j = (uint8_t)(i + 1U); j < 5U; j++)
+    {
+      if (topo_ranges_overlap(&ranges[i], &ranges[j]))
+      {
+        *out_result = CFG_RESULT_REJECT_TOPOLOGY_COLLISION;
+        return false;
+      }
+    }
+  }
+
+  *out_result = CFG_RESULT_IDLE;
+  return true;
+}
+
+void GH_TopologyV2_SyncRuntimeFromConfig(const active_config_t *cfg)
+{
+  gh_topology_v2_header_t hdr;
+  config_result_code_t result = CFG_RESULT_IDLE;
+
+  topo_runtime_clear();
+
+  if (cfg == NULL)
+  {
+    return;
+  }
+  if (!GH_TopologyV2_IsPayload(cfg->payload, CONFIG_PAYLOAD_SIZE))
+  {
+    return;
+  }
+  if (!GH_TopologyV2_ValidatePayload(cfg->payload, CONFIG_PAYLOAD_SIZE, &result))
+  {
+    return;
+  }
+
+  memcpy(&hdr, cfg->payload, sizeof(hdr));
+  g_topology_v2_active = 1U;
+  g_topology_v2_ver_major = hdr.ver_major;
+  g_topology_v2_ver_minor = hdr.ver_minor;
+  g_topology_v2_generation = hdr.generation;
+  g_topology_v2_module_count = hdr.module_count;
+  g_topology_v2_req_count = hdr.req_count;
+  g_topology_v2_point_count = hdr.point_count;
+  g_topology_v2_cmd_count = hdr.cmd_count;
+  g_topology_v2_policy_count = hdr.policy_count;
+}
 
 bool GH_ConfigStorage_PayloadValuesValid(const uint8_t *payload)
 {
@@ -45,6 +281,11 @@ bool GH_ConfigStorage_ValidateRequest(const config_update_req_t *req,
   {
     *out_result = CFG_RESULT_REJECT_BAD_CRC;
     return false;
+  }
+
+  if (GH_TopologyV2_IsPayload(req->payload, CONFIG_PAYLOAD_SIZE))
+  {
+    return GH_TopologyV2_ValidatePayload(req->payload, CONFIG_PAYLOAD_SIZE, out_result);
   }
 
   if (!GH_ConfigStorage_PayloadValuesValid(req->payload))
