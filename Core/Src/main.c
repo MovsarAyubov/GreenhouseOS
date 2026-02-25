@@ -45,8 +45,19 @@
 
 #define RTC_BKP_INIT_MARKER 0x32F2U
 #define RTC_BKP_RESET_REASON_DR RTC_BKP_DR2
+#define RTC_BKP_DIAG_MAGIC_DR RTC_BKP_DR3
+#define RTC_BKP_BOOT_COUNT_DR RTC_BKP_DR4
+#define RTC_BKP_POWERON_COUNT_DR RTC_BKP_DR5
+#define RTC_BKP_ERROR_HANDLER_COUNT_DR RTC_BKP_DR6
+#define RTC_BKP_WDG_MISS_COUNT_DR RTC_BKP_DR7
+#define RTC_BKP_FAULT_RESET_COUNT_DR RTC_BKP_DR8
+#define RTC_BKP_LAST_EVENT_CODE_DR RTC_BKP_DR9
+#define RTC_BKP_LAST_RESET_REASON_DR RTC_BKP_DR10
+#define RTC_BKP_DIAG_MAGIC 0x47484447UL
 #define RESET_REASON_ERROR_HANDLER 0xE001U
 #define RESET_REASON_WATCHDOG_MISS 0xE101U
+#define RESET_REASON_FAULT_RANGE_MIN 0xE200U
+#define RESET_REASON_FAULT_RANGE_MAX 0xE2FFU
 #define IWDG_PRESCALER_VALUE 0x06U /* divider 256 */
 #define IWDG_RELOAD_VALUE    1000U
 #define IWDG_KR_KEY_ENABLE   0xCCCCU
@@ -129,6 +140,8 @@ static void MX_RTC_Init(void);
 static void MX_IWDG_Init(void);
 static bool iwdg_init(uint8_t prescaler, uint16_t reload);
 static void iwdg_refresh(void);
+static void persist_diag_bootstrap(void);
+static void persist_diag_update_last_event(uint16_t code);
 void StartDefaultTask(void *argument);
 
 /* USER CODE BEGIN PFP */
@@ -164,6 +177,13 @@ static volatile uint32_t g_last_kick_tcp_ms = 0U;
 status_payload_t g_status = {0};
 active_config_t g_active_config = {0};
 uint32_t g_config_seq = 1U;
+volatile uint32_t g_persist_boot_count = 0U;
+volatile uint32_t g_persist_poweron_count = 0U;
+volatile uint32_t g_persist_error_handler_count = 0U;
+volatile uint32_t g_persist_wdg_miss_count = 0U;
+volatile uint32_t g_persist_fault_reset_count = 0U;
+volatile uint32_t g_persist_last_event_code = 0U;
+volatile uint32_t g_persist_last_reset_reason = 0U;
 
 bool g_setpoints_apply_in_progress = false;
 volatile uint8_t g_control_sync_pending = 0U;
@@ -203,6 +223,84 @@ static void store_reset_reason(uint32_t reason)
   __HAL_RCC_RTC_ENABLE();
   rtc.Instance = RTC;
   HAL_RTCEx_BKUPWrite(&rtc, RTC_BKP_RESET_REASON_DR, reason);
+}
+
+static uint32_t persist_diag_read(uint32_t reg)
+{
+  return HAL_RTCEx_BKUPRead(&hrtc, reg);
+}
+
+static void persist_diag_write(uint32_t reg, uint32_t value)
+{
+  HAL_RTCEx_BKUPWrite(&hrtc, reg, value);
+}
+
+static uint32_t persist_diag_increment(uint32_t reg)
+{
+  uint32_t value = persist_diag_read(reg);
+  value++;
+  persist_diag_write(reg, value);
+  return value;
+}
+
+static void persist_diag_bootstrap(void)
+{
+  uint32_t reset_reason;
+  uint32_t magic;
+
+  HAL_PWR_EnableBkUpAccess();
+
+  magic = persist_diag_read(RTC_BKP_DIAG_MAGIC_DR);
+  if (magic != RTC_BKP_DIAG_MAGIC)
+  {
+    persist_diag_write(RTC_BKP_DIAG_MAGIC_DR, RTC_BKP_DIAG_MAGIC);
+    persist_diag_write(RTC_BKP_BOOT_COUNT_DR, 0U);
+    persist_diag_write(RTC_BKP_POWERON_COUNT_DR, 0U);
+    persist_diag_write(RTC_BKP_ERROR_HANDLER_COUNT_DR, 0U);
+    persist_diag_write(RTC_BKP_WDG_MISS_COUNT_DR, 0U);
+    persist_diag_write(RTC_BKP_FAULT_RESET_COUNT_DR, 0U);
+    persist_diag_write(RTC_BKP_LAST_EVENT_CODE_DR, 0U);
+    persist_diag_write(RTC_BKP_LAST_RESET_REASON_DR, 0U);
+  }
+
+  g_persist_boot_count = persist_diag_increment(RTC_BKP_BOOT_COUNT_DR);
+
+  reset_reason = persist_diag_read(RTC_BKP_RESET_REASON_DR);
+  g_persist_last_reset_reason = reset_reason;
+  persist_diag_write(RTC_BKP_LAST_RESET_REASON_DR, reset_reason);
+
+  if (reset_reason == RESET_REASON_WATCHDOG_MISS)
+  {
+    g_persist_wdg_miss_count = persist_diag_increment(RTC_BKP_WDG_MISS_COUNT_DR);
+  }
+  else if (reset_reason == RESET_REASON_ERROR_HANDLER)
+  {
+    g_persist_error_handler_count = persist_diag_increment(RTC_BKP_ERROR_HANDLER_COUNT_DR);
+  }
+  else if ((reset_reason >= RESET_REASON_FAULT_RANGE_MIN) &&
+           (reset_reason <= RESET_REASON_FAULT_RANGE_MAX))
+  {
+    g_persist_fault_reset_count = persist_diag_increment(RTC_BKP_FAULT_RESET_COUNT_DR);
+  }
+  else
+  {
+    g_persist_poweron_count = persist_diag_increment(RTC_BKP_POWERON_COUNT_DR);
+  }
+
+  g_persist_poweron_count = persist_diag_read(RTC_BKP_POWERON_COUNT_DR);
+  g_persist_error_handler_count = persist_diag_read(RTC_BKP_ERROR_HANDLER_COUNT_DR);
+  g_persist_wdg_miss_count = persist_diag_read(RTC_BKP_WDG_MISS_COUNT_DR);
+  g_persist_fault_reset_count = persist_diag_read(RTC_BKP_FAULT_RESET_COUNT_DR);
+  g_persist_last_event_code = persist_diag_read(RTC_BKP_LAST_EVENT_CODE_DR);
+
+  /* Consume reason to avoid double accounting on the next clean boot. */
+  persist_diag_write(RTC_BKP_RESET_REASON_DR, 0U);
+}
+
+static void persist_diag_update_last_event(uint16_t code)
+{
+  g_persist_last_event_code = (uint32_t)code;
+  persist_diag_write(RTC_BKP_LAST_EVENT_CODE_DR, (uint32_t)code);
 }
 
 static bool task_heartbeat_missed(uint32_t now_ms, uint32_t last_kick_ms, uint32_t timeout_ms)
@@ -398,6 +496,7 @@ void publish_event(uint8_t severity, uint16_t code, uint16_t source, float value
   g_next_event_id++;
   g_status.last_error_code = code;
   g_status.events_generated_count++;
+  persist_diag_update_last_event(code);
 }
 
 /* USER CODE END 0 */
@@ -435,6 +534,7 @@ int main(void)
   MX_RTC_Init();
   MX_IWDG_Init();
   /* USER CODE BEGIN 2 */
+  persist_diag_bootstrap();
   sensors_init_defaults();
   config_load_or_default();
   GH_ModbusMap_Init();

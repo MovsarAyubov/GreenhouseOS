@@ -12,7 +12,9 @@
 #define GH_MB_DATA_REGS       (GH_MB_MAX_SLAVES * GH_MB_BLOCK_SIZE)
 #define GH_MB_CFG_BASE        GH_MB_DATA_REGS
 #define GH_MB_CFG_REGS        80U
-#define GH_MB_TOTAL_REGS      (GH_MB_DATA_REGS + GH_MB_CFG_REGS)
+#define GH_MB_DIAG_BASE       (GH_MB_CFG_BASE + GH_MB_CFG_REGS)
+#define GH_MB_DIAG_REGS       32U
+#define GH_MB_TOTAL_REGS      (GH_MB_DATA_REGS + GH_MB_CFG_REGS + GH_MB_DIAG_REGS)
 
 typedef struct
 {

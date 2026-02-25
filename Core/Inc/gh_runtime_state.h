@@ -189,6 +189,19 @@ extern uint32_t g_next_event_id;
 extern uint32_t g_config_seq;
 extern volatile uint8_t g_control_sync_pending;
 extern bool g_setpoints_apply_in_progress;
+extern volatile uint32_t g_persist_boot_count;
+extern volatile uint32_t g_persist_poweron_count;
+extern volatile uint32_t g_persist_error_handler_count;
+extern volatile uint32_t g_persist_wdg_miss_count;
+extern volatile uint32_t g_persist_fault_reset_count;
+extern volatile uint32_t g_persist_last_event_code;
+extern volatile uint32_t g_persist_last_reset_reason;
+extern volatile uint32_t g_eth_diag_phy_addr;
+extern volatile int32_t g_eth_diag_phy_link_state;
+extern volatile uint32_t g_eth_diag_phy_scan_ok;
+extern volatile uint32_t g_eth_diag_rx_sem_ok;
+extern volatile uint32_t g_eth_diag_tx_sem_ok;
+extern volatile uint32_t g_eth_diag_input_task_ok;
 
 bool modbus_read_holding_registers(uint8_t slave_id,
                                    uint16_t start_reg,

@@ -16,10 +16,27 @@
 #define GH_RTU_CTRL_SP_WATER_UPPER_REG 108U
 #define GH_RTU_CTRL_SP_WATER_UNDER_REG 109U
 #define GH_RTU_APPLY_TRIGGER_REG      122U
+#define GH_QUALITY_RECOVER_OK_CYCLES  2U
+#define GH_QUALITY_FAIL_STALE_CYCLES  2U
 
 static bool gh_slave_id_valid(uint8_t slave_id)
 {
   return (slave_id >= GH_RTU_SLAVE_FIRST) && (slave_id <= GH_RTU_SLAVE_LAST);
+}
+
+static uint8_t gh_quality_fail_offline_cycles(void)
+{
+  uint32_t cycles = (MODBUS_OFFLINE_REPROBE_MS + MODBUS_POLL_PERIOD_MS - 1U) / MODBUS_POLL_PERIOD_MS;
+
+  if (cycles < GH_QUALITY_FAIL_STALE_CYCLES)
+  {
+    cycles = GH_QUALITY_FAIL_STALE_CYCLES;
+  }
+  if (cycles > 255U)
+  {
+    cycles = 255U;
+  }
+  return (uint8_t)cycles;
 }
 
 static bool gh_slave_enabled(uint8_t slave_id)
@@ -87,6 +104,8 @@ void GH_ModbusMasterTask_Run(void *argument)
   uint16_t regs[GH_RTU_READ_REG_COUNT];
   uint16_t diag_regs[GH_RTU_DIAG_COUNT];
   uint16_t sens[GH_RTU_SENSORS_PER_SLAVE];
+  static uint8_t s_comm_fail_streak[MODBUS_MAX_SLAVES] = {0};
+  static uint8_t s_comm_ok_streak[MODBUS_MAX_SLAVES] = {0};
   uint16_t i;
   uint16_t s;
   uint16_t global_idx;
@@ -95,9 +114,15 @@ void GH_ModbusMasterTask_Run(void *argument)
   uint32_t now = 0U;
   bool ok;
   bool apply_ok;
+  bool set_quality = false;
+  uint8_t target_quality = SENSOR_QUALITY_STALE;
   uint8_t slave_id;
+  uint8_t streak_idx = 0U;
+  uint8_t fail_offline_cycles = 0U;
   gh_slave_apply_request_t req = {0};
   (void)argument;
+
+  fail_offline_cycles = gh_quality_fail_offline_cycles();
 
   for (;;)
   {
@@ -110,6 +135,9 @@ void GH_ModbusMasterTask_Run(void *argument)
       task_heartbeat_kick(TASK_BIT_MODBUS);
       slave_id = (uint8_t)s;
       now = HAL_GetTick();
+      streak_idx = (uint8_t)(slave_id - 1U);
+      set_quality = false;
+      target_quality = SENSOR_QUALITY_STALE;
 
       if (!gh_slave_enabled(slave_id))
       {
@@ -124,6 +152,23 @@ void GH_ModbusMasterTask_Run(void *argument)
                                         regs);
       if (ok)
       {
+        s_comm_fail_streak[streak_idx] = 0U;
+        if (s_comm_ok_streak[streak_idx] < 0xFFU)
+        {
+          s_comm_ok_streak[streak_idx]++;
+        }
+
+        if (s_comm_ok_streak[streak_idx] >= GH_QUALITY_RECOVER_OK_CYCLES)
+        {
+          set_quality = true;
+          target_quality = SENSOR_QUALITY_OK;
+        }
+        else
+        {
+          set_quality = true;
+          target_quality = SENSOR_QUALITY_STALE;
+        }
+
         for (i = 0U; i < GH_RTU_SENSORS_PER_SLAVE; i++)
         {
           sens[i] = regs[i];
@@ -131,7 +176,10 @@ void GH_ModbusMasterTask_Run(void *argument)
           if (global_idx < SENSOR_COUNT)
           {
             g_sensors[global_idx].value = ((float)(int16_t)sens[i]) / 10.0f;
-            g_sensors[global_idx].quality = SENSOR_QUALITY_OK;
+            if (set_quality)
+            {
+              g_sensors[global_idx].quality = target_quality;
+            }
             g_sensors[global_idx].timestamp_ms = now;
           }
         }
@@ -139,17 +187,37 @@ void GH_ModbusMasterTask_Run(void *argument)
       }
       else
       {
+        s_comm_ok_streak[streak_idx] = 0U;
+        if (s_comm_fail_streak[streak_idx] < 0xFFU)
+        {
+          s_comm_fail_streak[streak_idx]++;
+        }
+
+        if (s_comm_fail_streak[streak_idx] >= fail_offline_cycles)
+        {
+          set_quality = true;
+          target_quality = SENSOR_QUALITY_OFFLINE;
+        }
+        else if (s_comm_fail_streak[streak_idx] >= GH_QUALITY_FAIL_STALE_CYCLES)
+        {
+          set_quality = true;
+          target_quality = SENSOR_QUALITY_STALE;
+        }
+
         if (s <= (sizeof(g_status.modbus_timeouts) / sizeof(g_status.modbus_timeouts[0])))
         {
           g_status.modbus_timeouts[s - 1U]++;
         }
         GH_ModbusMap_ReportTimeout(slave_id, now);
-        for (i = 0U; i < GH_RTU_SENSORS_PER_SLAVE; i++)
+        if (set_quality)
         {
-          global_idx = (uint16_t)(((s - 1U) * GH_RTU_SENSORS_PER_SLAVE) + i);
-          if (global_idx < SENSOR_COUNT)
+          for (i = 0U; i < GH_RTU_SENSORS_PER_SLAVE; i++)
           {
-            g_sensors[global_idx].quality = SENSOR_QUALITY_STALE;
+            global_idx = (uint16_t)(((s - 1U) * GH_RTU_SENSORS_PER_SLAVE) + i);
+            if (global_idx < SENSOR_COUNT)
+            {
+              g_sensors[global_idx].quality = target_quality;
+            }
           }
         }
       }

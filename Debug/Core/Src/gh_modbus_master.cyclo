@@ -1,5 +1,6 @@
-../Core/Src/gh_modbus_master.c:20:13:gh_slave_id_valid	3
-../Core/Src/gh_modbus_master.c:25:13:gh_slave_enabled	2
-../Core/Src/gh_modbus_master.c:38:13:gh_modbus_read_holding_retry	4
-../Core/Src/gh_modbus_master.c:63:13:gh_modbus_write_single_retry	4
-../Core/Src/gh_modbus_master.c:85:6:GH_ModbusMasterTask_Run	24
+../Core/Src/gh_modbus_master.c:22:13:gh_slave_id_valid	3
+../Core/Src/gh_modbus_master.c:27:16:gh_quality_fail_offline_cycles	3
+../Core/Src/gh_modbus_master.c:42:13:gh_slave_enabled	2
+../Core/Src/gh_modbus_master.c:55:13:gh_modbus_read_holding_retry	4
+../Core/Src/gh_modbus_master.c:80:13:gh_modbus_write_single_retry	4
+../Core/Src/gh_modbus_master.c:102:6:GH_ModbusMasterTask_Run	31

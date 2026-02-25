@@ -44,6 +44,42 @@ enum
   CFG_PAYLOAD_WORDS = (CONFIG_PAYLOAD_SIZE / 2U)
 };
 
+enum
+{
+  DBG_OFF_BOOT_COUNT_HI = 0U,
+  DBG_OFF_BOOT_COUNT_LO = 1U,
+  DBG_OFF_POWERON_COUNT_HI = 2U,
+  DBG_OFF_POWERON_COUNT_LO = 3U,
+  DBG_OFF_ERR_HANDLER_COUNT_HI = 4U,
+  DBG_OFF_ERR_HANDLER_COUNT_LO = 5U,
+  DBG_OFF_WDG_MISS_COUNT_HI = 6U,
+  DBG_OFF_WDG_MISS_COUNT_LO = 7U,
+  DBG_OFF_FAULT_RESET_COUNT_HI = 8U,
+  DBG_OFF_FAULT_RESET_COUNT_LO = 9U,
+  DBG_OFF_LAST_EVENT_CODE_HI = 10U,
+  DBG_OFF_LAST_EVENT_CODE_LO = 11U,
+  DBG_OFF_LAST_RESET_REASON_HI = 12U,
+  DBG_OFF_LAST_RESET_REASON_LO = 13U,
+  DBG_OFF_LAST_ERROR_CODE_HI = 14U,
+  DBG_OFF_LAST_ERROR_CODE_LO = 15U,
+  DBG_OFF_MODBUS_TIMEOUT0_HI = 16U,
+  DBG_OFF_MODBUS_TIMEOUT0_LO = 17U,
+  DBG_OFF_MODBUS_TIMEOUT1_HI = 18U,
+  DBG_OFF_MODBUS_TIMEOUT1_LO = 19U,
+  DBG_OFF_PHY_ADDR_HI = 20U,
+  DBG_OFF_PHY_ADDR_LO = 21U,
+  DBG_OFF_PHY_SCAN_OK_HI = 22U,
+  DBG_OFF_PHY_SCAN_OK_LO = 23U,
+  DBG_OFF_PHY_LINK_STATE_HI = 24U,
+  DBG_OFF_PHY_LINK_STATE_LO = 25U,
+  DBG_OFF_RX_SEM_OK_HI = 26U,
+  DBG_OFF_RX_SEM_OK_LO = 27U,
+  DBG_OFF_TX_SEM_OK_HI = 28U,
+  DBG_OFF_TX_SEM_OK_LO = 29U,
+  DBG_OFF_INPUT_TASK_OK_HI = 30U,
+  DBG_OFF_INPUT_TASK_OK_LO = 31U
+};
+
 static uint16_t s_holding[GH_MB_TOTAL_REGS];
 static uint32_t s_last_ok_ms[GH_MB_MAX_SLAVES];
 static uint16_t s_last_submit_token = 0U;
@@ -141,16 +177,47 @@ static uint16_t cfg_index(uint16_t off)
   return (uint16_t)(GH_MB_CFG_BASE + off);
 }
 
+static uint16_t dbg_index(uint16_t off)
+{
+  return (uint16_t)(GH_MB_DIAG_BASE + off);
+}
+
 static void cfg_set_u32(uint16_t off_hi, uint16_t off_lo, uint32_t value)
 {
   s_holding[cfg_index(off_hi)] = (uint16_t)((value >> 16U) & 0xFFFFU);
   s_holding[cfg_index(off_lo)] = (uint16_t)(value & 0xFFFFU);
 }
 
+static void dbg_set_u32(uint16_t off_hi, uint16_t off_lo, uint32_t value)
+{
+  s_holding[dbg_index(off_hi)] = (uint16_t)((value >> 16U) & 0xFFFFU);
+  s_holding[dbg_index(off_lo)] = (uint16_t)(value & 0xFFFFU);
+}
+
 static uint32_t cfg_get_u32(uint16_t off_hi, uint16_t off_lo)
 {
   return ((uint32_t)s_holding[cfg_index(off_hi)] << 16U) |
          (uint32_t)s_holding[cfg_index(off_lo)];
+}
+
+static void map_refresh_runtime_diag_nolock(void)
+{
+  dbg_set_u32(DBG_OFF_BOOT_COUNT_HI, DBG_OFF_BOOT_COUNT_LO, g_persist_boot_count);
+  dbg_set_u32(DBG_OFF_POWERON_COUNT_HI, DBG_OFF_POWERON_COUNT_LO, g_persist_poweron_count);
+  dbg_set_u32(DBG_OFF_ERR_HANDLER_COUNT_HI, DBG_OFF_ERR_HANDLER_COUNT_LO, g_persist_error_handler_count);
+  dbg_set_u32(DBG_OFF_WDG_MISS_COUNT_HI, DBG_OFF_WDG_MISS_COUNT_LO, g_persist_wdg_miss_count);
+  dbg_set_u32(DBG_OFF_FAULT_RESET_COUNT_HI, DBG_OFF_FAULT_RESET_COUNT_LO, g_persist_fault_reset_count);
+  dbg_set_u32(DBG_OFF_LAST_EVENT_CODE_HI, DBG_OFF_LAST_EVENT_CODE_LO, g_persist_last_event_code);
+  dbg_set_u32(DBG_OFF_LAST_RESET_REASON_HI, DBG_OFF_LAST_RESET_REASON_LO, g_persist_last_reset_reason);
+  dbg_set_u32(DBG_OFF_LAST_ERROR_CODE_HI, DBG_OFF_LAST_ERROR_CODE_LO, g_status.last_error_code);
+  dbg_set_u32(DBG_OFF_MODBUS_TIMEOUT0_HI, DBG_OFF_MODBUS_TIMEOUT0_LO, g_status.modbus_timeouts[0]);
+  dbg_set_u32(DBG_OFF_MODBUS_TIMEOUT1_HI, DBG_OFF_MODBUS_TIMEOUT1_LO, g_status.modbus_timeouts[1]);
+  dbg_set_u32(DBG_OFF_PHY_ADDR_HI, DBG_OFF_PHY_ADDR_LO, g_eth_diag_phy_addr);
+  dbg_set_u32(DBG_OFF_PHY_SCAN_OK_HI, DBG_OFF_PHY_SCAN_OK_LO, g_eth_diag_phy_scan_ok);
+  dbg_set_u32(DBG_OFF_PHY_LINK_STATE_HI, DBG_OFF_PHY_LINK_STATE_LO, (uint32_t)g_eth_diag_phy_link_state);
+  dbg_set_u32(DBG_OFF_RX_SEM_OK_HI, DBG_OFF_RX_SEM_OK_LO, g_eth_diag_rx_sem_ok);
+  dbg_set_u32(DBG_OFF_TX_SEM_OK_HI, DBG_OFF_TX_SEM_OK_LO, g_eth_diag_tx_sem_ok);
+  dbg_set_u32(DBG_OFF_INPUT_TASK_OK_HI, DBG_OFF_INPUT_TASK_OK_LO, g_eth_diag_input_task_ok);
 }
 
 static void cfg_report_result_nolock(uint16_t token,
@@ -263,6 +330,7 @@ void GH_ModbusMap_Init(void)
   s_holding[cfg_index(CFG_OFF_RESULT_TOKEN)] = 0U;
   cfg_set_u32(CFG_OFF_ACTIVE_VER_HI, CFG_OFF_ACTIVE_VER_LO, g_active_config.version);
   s_holding[cfg_index(CFG_OFF_SUBMIT_TOKEN)] = 0U;
+  map_refresh_runtime_diag_nolock();
   map_unlock();
 }
 
@@ -313,6 +381,7 @@ bool GH_ModbusMap_ReadRange(uint16_t start_addr, uint16_t qty, uint16_t *out_reg
   {
     return false;
   }
+  map_refresh_runtime_diag_nolock();
   memcpy(out_regs, &s_holding[idx], (uint32_t)qty * sizeof(uint16_t));
   map_unlock();
   return true;
