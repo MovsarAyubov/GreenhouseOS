@@ -17,9 +17,9 @@
 ../Core/Src/gh_modbus_map.c:321:6:GH_ModbusMap_WriteSingle	3
 ../Core/Src/gh_modbus_map.c:338:6:GH_ModbusMap_WriteRange	4
 ../Core/Src/gh_modbus_map.c:357:6:GH_ModbusMap_UpdateTelemetry	5
-../Core/Src/gh_modbus_map.c:388:6:GH_ModbusMap_ReportTimeout	3
-../Core/Src/gh_modbus_map.c:406:6:GH_ModbusMap_UpdateDiag	3
-../Core/Src/gh_modbus_map.c:426:6:GH_ModbusMap_GetApplyRequest	5
-../Core/Src/gh_modbus_map.c:463:6:GH_ModbusMap_MarkApplyResult	4
-../Core/Src/gh_modbus_map.c:482:11:GH_ModbusMap_GetBackingStore	1
-../Core/Src/gh_modbus_map.c:487:10:GH_ModbusMap_GetBackingStoreSize	1
+../Core/Src/gh_modbus_map.c:388:6:GH_ModbusMap_ReportTimeout	6
+../Core/Src/gh_modbus_map.c:426:6:GH_ModbusMap_UpdateDiag	3
+../Core/Src/gh_modbus_map.c:446:6:GH_ModbusMap_GetApplyRequest	5
+../Core/Src/gh_modbus_map.c:483:6:GH_ModbusMap_MarkApplyResult	4
+../Core/Src/gh_modbus_map.c:502:11:GH_ModbusMap_GetBackingStore	1
+../Core/Src/gh_modbus_map.c:507:10:GH_ModbusMap_GetBackingStoreSize	1

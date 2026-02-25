@@ -388,7 +388,8 @@ void GH_ModbusMap_UpdateTelemetry(uint8_t slave_id,
 void GH_ModbusMap_ReportTimeout(uint8_t slave_id, uint32_t now_ms)
 {
   uint16_t base;
-  (void)now_ms;
+  uint32_t last_ok_ms;
+  uint32_t elapsed_ms;
 
   if (!slave_to_base(slave_id, &base))
   {
@@ -398,8 +399,27 @@ void GH_ModbusMap_ReportTimeout(uint8_t slave_id, uint32_t now_ms)
   {
     return;
   }
+
+  last_ok_ms = s_last_ok_ms[slave_id - 1U];
+  if (last_ok_ms == 0U)
+  {
+    elapsed_ms = 0xFFFFFFFFUL;
+  }
+  else
+  {
+    elapsed_ms = now_ms - last_ok_ms;
+  }
+
   s_holding[base + REG_OFF_ERR_TIMEOUT]++;
-  s_holding[base + REG_OFF_SLAVE_STATUS] = 0x0002U; /* online=0, stale=1 */
+  if ((last_ok_ms != 0U) && (elapsed_ms < MODBUS_OFFLINE_REPROBE_MS))
+  {
+    /* Hold online during short communication glitches right after a good cycle. */
+    s_holding[base + REG_OFF_SLAVE_STATUS] = 0x0001U; /* online=1, stale=0 */
+  }
+  else
+  {
+    s_holding[base + REG_OFF_SLAVE_STATUS] = 0x0002U; /* online=0, stale=1 */
+  }
   map_unlock();
 }
 
