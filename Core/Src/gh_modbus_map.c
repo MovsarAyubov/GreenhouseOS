@@ -1,28 +1,60 @@
 #include "gh_modbus_map.h"
+#include "gh_topology_runtime.h"
 
 #include <string.h>
 
 enum
 {
-  REG_OFF_SENS_0 = 0U,
-  REG_OFF_SENS_VALID_MASK = 9U,
-  REG_OFF_OUT_STATE_MASK = 10U,
-  REG_OFF_OUT_CMD_MASK = 11U,
-  REG_OFF_SLAVE_STATUS = 12U,
-  REG_OFF_LAST_OK_AGE_SEC = 13U,
-  REG_OFF_ERR_TIMEOUT = 14U,
-  REG_OFF_ERR_CRC = 15U,
-  REG_OFF_ERR_EXCEPTION = 16U,
-  REG_OFF_DATA_VERSION = 17U,
-  REG_OFF_MODE = 20U,
-  REG_OFF_SET_TEMP_X10 = 21U,
-  REG_OFF_SET_HUM_X10 = 22U,
-  REG_OFF_HYST_TEMP_X10 = 23U,
-  REG_OFF_HYST_HUM_X10 = 24U,
-  REG_OFF_MIN_ON_SEC = 25U,
-  REG_OFF_MIN_OFF_SEC = 26U,
-  REG_OFF_APPLY_TRIGGER = 60U,
-  REG_OFF_LAST_APPLIED_TRIGGER = 61U
+  PNT_OFF_VALUE_HI = 0U,
+  PNT_OFF_VALUE_LO = 1U,
+  PNT_OFF_QUALITY = 2U,
+  PNT_OFF_AGE_SEC = 3U,
+  PNT_OFF_MODULE_ID = 4U,
+  PNT_OFF_FLAGS = 5U
+};
+
+enum
+{
+  ST_OFF_STATUS = 0U,
+  ST_OFF_LAST_OK_AGE_SEC = 1U,
+  ST_OFF_ERR_TIMEOUT = 2U,
+  ST_OFF_ERR_CRC = 3U,
+  ST_OFF_ERR_EXCEPTION = 4U,
+  ST_OFF_DATA_VERSION = 5U,
+  ST_OFF_VALID_MASK = 6U,
+  ST_OFF_OUT_STATE_MASK = 7U
+};
+
+enum
+{
+  CMD_OFF_MODE = 0U,
+  CMD_OFF_SET_TEMP_X10 = 1U,
+  CMD_OFF_SET_HUM_X10 = 2U,
+  CMD_OFF_HYST_TEMP_X10 = 3U,
+  CMD_OFF_HYST_HUM_X10 = 4U,
+  CMD_OFF_MIN_ON_SEC = 5U,
+  CMD_OFF_MIN_OFF_SEC = 6U,
+  CMD_OFF_OUT_CMD_MASK = 7U,
+  CMD_OFF_APPLY_TRIGGER = 8U,
+  CMD_OFF_LAST_APPLIED_TRIGGER = 9U
+};
+
+enum
+{
+  DIR_OFF_MAP_VERSION = 0U,
+  DIR_OFF_MAP_FLAGS = 1U,
+  DIR_OFF_TOPO_GEN_HI = 2U,
+  DIR_OFF_TOPO_GEN_LO = 3U,
+  DIR_OFF_POINT_COUNT = 4U,
+  DIR_OFF_POINT_STRIDE = 5U,
+  DIR_OFF_POINTS_BASE = 6U,
+  DIR_OFF_SLAVE_STATUS_BASE = 7U,
+  DIR_OFF_CMD_BASE = 8U,
+  DIR_OFF_DATA_VER_HI = 9U,
+  DIR_OFF_DATA_VER_LO = 10U,
+  DIR_OFF_MAX_POINTS = 11U,
+  DIR_OFF_CMD_BLOCK_SIZE = 12U,
+  DIR_OFF_STATUS_BLOCK_SIZE = 13U
 };
 
 enum
@@ -106,8 +138,13 @@ enum
 
 static uint16_t s_holding[GH_MB_TOTAL_REGS];
 static uint32_t s_last_ok_ms[GH_MB_MAX_SLAVES];
+static uint16_t s_point_age_sec[GH_MB_POINT_MAX];
+static uint16_t s_point_module_id[GH_MB_POINT_MAX];
+static gh_topology_point_binding_t s_point_bindings_cache[GH_MB_POINT_MAX] __attribute__((section(".ccmram")));
 static uint16_t s_last_submit_token = 0U;
 static uint16_t s_last_topo_submit_token = 0U;
+static uint32_t s_point_module_generation = 0U;
+static uint32_t s_map_data_version = 0U;
 static osMutexId_t s_map_mutex = NULL;
 
 static bool map_ensure_mutex(void)
@@ -180,21 +217,40 @@ static bool addr_to_index(uint16_t addr, uint16_t qty, uint16_t *out_idx)
   return true;
 }
 
-static bool slave_to_base(uint8_t slave_id, uint16_t *out_base)
+static bool slave_status_base(uint8_t slave_id, uint16_t *out_base)
 {
-  uint16_t base;
   if ((slave_id == 0U) || (slave_id > GH_MB_MAX_SLAVES) || (out_base == NULL))
   {
     return false;
   }
-  base = (uint16_t)(((uint16_t)(slave_id - 1U)) * GH_MB_BLOCK_SIZE);
-  *out_base = base;
+  *out_base = (uint16_t)(GH_MB_SLAVE_STATUS_BASE +
+                         ((uint16_t)(slave_id - 1U) * GH_MB_SLAVE_STATUS_BLOCK_SIZE));
   return true;
 }
 
-static void bump_data_version(uint16_t base)
+static bool cmd_base(uint8_t slave_id, uint16_t *out_base)
 {
-  s_holding[base + REG_OFF_DATA_VERSION]++;
+  if ((slave_id == 0U) || (slave_id > GH_MB_MAX_SLAVES) || (out_base == NULL))
+  {
+    return false;
+  }
+  *out_base = (uint16_t)(GH_MB_CMD_BASE + ((uint16_t)(slave_id - 1U) * GH_MB_CMD_BLOCK_SIZE));
+  return true;
+}
+
+static bool point_base(uint16_t publish_index, uint16_t *out_base)
+{
+  if ((publish_index >= GH_MB_POINT_MAX) || (out_base == NULL))
+  {
+    return false;
+  }
+  *out_base = (uint16_t)(GH_MB_POINTS_BASE + (publish_index * GH_MB_POINT_STRIDE));
+  return true;
+}
+
+static void bump_slave_data_version_nolock(uint16_t status_base)
+{
+  s_holding[status_base + ST_OFF_DATA_VERSION]++;
 }
 
 static uint16_t cfg_index(uint16_t off)
@@ -210,6 +266,11 @@ static uint16_t dbg_index(uint16_t off)
 static uint16_t topo_index(uint16_t off)
 {
   return (uint16_t)(GH_MB_TOPO_BASE + off);
+}
+
+static uint16_t dir_index(uint16_t off)
+{
+  return (uint16_t)(GH_MB_DIR_BASE + off);
 }
 
 static void cfg_set_u32(uint16_t off_hi, uint16_t off_lo, uint32_t value)
@@ -230,6 +291,12 @@ static void topo_set_u32(uint16_t off_hi, uint16_t off_lo, uint32_t value)
   s_holding[topo_index(off_lo)] = (uint16_t)(value & 0xFFFFU);
 }
 
+static void dir_set_u32(uint16_t off_hi, uint16_t off_lo, uint32_t value)
+{
+  s_holding[dir_index(off_hi)] = (uint16_t)((value >> 16U) & 0xFFFFU);
+  s_holding[dir_index(off_lo)] = (uint16_t)(value & 0xFFFFU);
+}
+
 static uint32_t cfg_get_u32(uint16_t off_hi, uint16_t off_lo)
 {
   return ((uint32_t)s_holding[cfg_index(off_hi)] << 16U) |
@@ -240,6 +307,126 @@ static uint32_t topo_get_u32(uint16_t off_hi, uint16_t off_lo)
 {
   return ((uint32_t)s_holding[topo_index(off_hi)] << 16U) |
          (uint32_t)s_holding[topo_index(off_lo)];
+}
+
+static void map_refresh_point_modules_nolock(void)
+{
+  uint16_t count = 0U;
+  uint32_t generation = 0U;
+  uint16_t i;
+
+  if ((g_topology_v2_active == 0U) || (g_topology_v2_generation == 0U))
+  {
+    if (s_point_module_generation != 0U)
+    {
+      memset(s_point_module_id, 0, sizeof(s_point_module_id));
+      s_point_module_generation = 0U;
+    }
+    return;
+  }
+
+  if (s_point_module_generation == g_topology_v2_generation)
+  {
+    return;
+  }
+
+  memset(s_point_module_id, 0, sizeof(s_point_module_id));
+  if (!GH_TopologyRuntime_CopyPointBindings(s_point_bindings_cache,
+                                            GH_MB_POINT_MAX,
+                                            &count,
+                                            &generation))
+  {
+    s_point_module_generation = 0U;
+    return;
+  }
+  if (generation != g_topology_v2_generation)
+  {
+    s_point_module_generation = 0U;
+    return;
+  }
+
+  for (i = 0U; i < count; i++)
+  {
+    if (s_point_bindings_cache[i].publish_index < GH_MB_POINT_MAX)
+    {
+      s_point_module_id[s_point_bindings_cache[i].publish_index] = s_point_bindings_cache[i].module_id;
+    }
+  }
+
+  s_point_module_generation = generation;
+}
+
+static void map_refresh_points_nolock(void)
+{
+  uint16_t i;
+  uint16_t base;
+  uint32_t raw_value;
+  uint16_t point_count;
+
+  map_refresh_point_modules_nolock();
+
+  point_count = g_topology_v2_point_count;
+  if (point_count > GH_MB_POINT_MAX)
+  {
+    point_count = GH_MB_POINT_MAX;
+  }
+
+  for (i = 0U; i < GH_MB_POINT_MAX; i++)
+  {
+    if (!point_base(i, &base))
+    {
+      continue;
+    }
+
+    if ((i < point_count) && (s_point_module_id[i] != 0U))
+    {
+      memcpy(&raw_value, &g_sensors[i].value, sizeof(raw_value));
+      s_holding[base + PNT_OFF_VALUE_HI] = (uint16_t)((raw_value >> 16U) & 0xFFFFU);
+      s_holding[base + PNT_OFF_VALUE_LO] = (uint16_t)(raw_value & 0xFFFFU);
+      s_holding[base + PNT_OFF_QUALITY] = g_sensors[i].quality;
+      s_holding[base + PNT_OFF_AGE_SEC] = s_point_age_sec[i];
+      s_holding[base + PNT_OFF_MODULE_ID] = s_point_module_id[i];
+      s_holding[base + PNT_OFF_FLAGS] = 0x0001U;
+    }
+    else
+    {
+      s_holding[base + PNT_OFF_VALUE_HI] = 0U;
+      s_holding[base + PNT_OFF_VALUE_LO] = 0U;
+      s_holding[base + PNT_OFF_QUALITY] = SENSOR_QUALITY_OFFLINE;
+      s_holding[base + PNT_OFF_AGE_SEC] = 0xFFFFU;
+      s_holding[base + PNT_OFF_MODULE_ID] = 0U;
+      s_holding[base + PNT_OFF_FLAGS] = 0U;
+    }
+  }
+}
+
+static void map_refresh_directory_nolock(void)
+{
+  uint16_t point_count = g_topology_v2_point_count;
+  uint16_t flags = 0x0001U;
+
+  if (point_count > GH_MB_POINT_MAX)
+  {
+    point_count = GH_MB_POINT_MAX;
+  }
+  if (g_topology_v2_active != 0U)
+  {
+    flags |= 0x0002U;
+  }
+
+  s_holding[dir_index(DIR_OFF_MAP_VERSION)] = 2U;
+  s_holding[dir_index(DIR_OFF_MAP_FLAGS)] = flags;
+  s_holding[dir_index(DIR_OFF_TOPO_GEN_HI)] = (uint16_t)((g_topology_v2_generation >> 16U) & 0xFFFFU);
+  s_holding[dir_index(DIR_OFF_TOPO_GEN_LO)] = (uint16_t)(g_topology_v2_generation & 0xFFFFU);
+  s_holding[dir_index(DIR_OFF_POINT_COUNT)] = point_count;
+  s_holding[dir_index(DIR_OFF_POINT_STRIDE)] = GH_MB_POINT_STRIDE;
+  s_holding[dir_index(DIR_OFF_POINTS_BASE)] = GH_MB_POINTS_BASE;
+  s_holding[dir_index(DIR_OFF_SLAVE_STATUS_BASE)] = GH_MB_SLAVE_STATUS_BASE;
+  s_holding[dir_index(DIR_OFF_CMD_BASE)] = GH_MB_CMD_BASE;
+  dir_set_u32(DIR_OFF_DATA_VER_HI, DIR_OFF_DATA_VER_LO, s_map_data_version);
+  s_holding[dir_index(DIR_OFF_MAX_POINTS)] = GH_MB_POINT_MAX;
+  s_holding[dir_index(DIR_OFF_CMD_BLOCK_SIZE)] = GH_MB_CMD_BLOCK_SIZE;
+  s_holding[dir_index(DIR_OFF_STATUS_BLOCK_SIZE)] = GH_MB_SLAVE_STATUS_BLOCK_SIZE;
 }
 
 static void map_refresh_runtime_diag_nolock(void)
@@ -266,6 +453,9 @@ static void map_refresh_runtime_diag_nolock(void)
   s_holding[topo_index(TOPO_OFF_ACTIVE_VER_MINOR)] = g_topology_v2_ver_minor;
   topo_set_u32(TOPO_OFF_ACTIVE_GEN_HI, TOPO_OFF_ACTIVE_GEN_LO, g_topology_v2_generation);
   topo_set_u32(TOPO_OFF_ACTIVE_SIZE_HI, TOPO_OFF_ACTIVE_SIZE_LO, g_topology_v2_active_size);
+
+  map_refresh_directory_nolock();
+  map_refresh_points_nolock();
 }
 
 static void cfg_report_result_nolock(uint16_t token,
@@ -384,14 +574,20 @@ static bool topo_try_submit(uint16_t token)
 
   if ((osKernelGetState() != osKernelRunning) || (qTopologyStoreHandle == NULL))
   {
-    topo_report_result_nolock(token, CFG_RESULT_REJECT_QUEUE_FULL, g_topology_v2_generation, g_topology_v2_active_size);
+    topo_report_result_nolock(token,
+                              CFG_RESULT_REJECT_QUEUE_FULL,
+                              g_topology_v2_generation,
+                              g_topology_v2_active_size);
     publish_event(EVENT_SEV_WARN, EVENT_CODE_CFG_REJECTED, 0U, (float)CFG_RESULT_REJECT_QUEUE_FULL);
     return false;
   }
 
   if (osMessageQueuePut(qTopologyStoreHandle, &req, 0U, 0U) != osOK)
   {
-    topo_report_result_nolock(token, CFG_RESULT_REJECT_QUEUE_FULL, g_topology_v2_generation, g_topology_v2_active_size);
+    topo_report_result_nolock(token,
+                              CFG_RESULT_REJECT_QUEUE_FULL,
+                              g_topology_v2_generation,
+                              g_topology_v2_active_size);
     publish_event(EVENT_SEV_WARN, EVENT_CODE_CFG_REJECTED, 0U, (float)CFG_RESULT_REJECT_QUEUE_FULL);
     return false;
   }
@@ -442,7 +638,9 @@ static void topo_maybe_submit_after_write(uint16_t start_idx, uint16_t qty)
 void GH_ModbusMap_Init(void)
 {
   uint8_t s;
-  uint16_t base;
+  uint16_t status_base;
+  uint16_t cmd_base_addr;
+  uint16_t i;
 
   (void)map_ensure_mutex();
   if (!map_lock())
@@ -452,17 +650,30 @@ void GH_ModbusMap_Init(void)
 
   memset(s_holding, 0, sizeof(s_holding));
   memset(s_last_ok_ms, 0, sizeof(s_last_ok_ms));
+  memset(s_point_module_id, 0, sizeof(s_point_module_id));
   s_last_submit_token = 0U;
   s_last_topo_submit_token = 0U;
+  s_point_module_generation = 0U;
+  s_map_data_version = 0U;
+
+  for (i = 0U; i < GH_MB_POINT_MAX; i++)
+  {
+    s_point_age_sec[i] = 0xFFFFU;
+  }
 
   for (s = 1U; s <= GH_MB_MAX_SLAVES; s++)
   {
-    if (!slave_to_base(s, &base))
+    if (!slave_status_base(s, &status_base) || !cmd_base(s, &cmd_base_addr))
     {
       continue;
     }
-    s_holding[base + REG_OFF_MODE] = 0U;
-    s_holding[base + REG_OFF_SLAVE_STATUS] = 0x0002U; /* stale=1 at startup */
+    s_holding[status_base + ST_OFF_STATUS] = 0x0002U; /* online=0, stale=1 */
+    s_holding[status_base + ST_OFF_LAST_OK_AGE_SEC] = 0xFFFFU;
+    s_holding[status_base + ST_OFF_DATA_VERSION] = 0U;
+
+    s_holding[cmd_base_addr + CMD_OFF_MODE] = 0U;
+    s_holding[cmd_base_addr + CMD_OFF_APPLY_TRIGGER] = 0U;
+    s_holding[cmd_base_addr + CMD_OFF_LAST_APPLIED_TRIGGER] = 0U;
   }
 
   s_holding[cfg_index(CFG_OFF_RESULT_CODE)] = (uint16_t)CFG_RESULT_IDLE;
@@ -475,6 +686,7 @@ void GH_ModbusMap_Init(void)
   s_holding[topo_index(TOPO_OFF_SUBMIT_TOKEN)] = 0U;
   s_holding[topo_index(TOPO_OFF_REQ_CHUNK_WORDS)] = TOPOLOGY_UPLOAD_CHUNK_WORDS;
   s_holding[topo_index(TOPO_OFF_REQ_FLAGS)] = 0U;
+
   map_refresh_runtime_diag_nolock();
   map_unlock();
 }
@@ -482,8 +694,10 @@ void GH_ModbusMap_Init(void)
 void GH_ModbusMap_UpdateAges(uint32_t now_ms)
 {
   uint8_t s;
-  uint16_t base;
+  uint16_t status_base;
   uint32_t age_sec;
+  uint16_t i;
+  uint32_t ts_ms;
 
   if (!map_lock())
   {
@@ -492,14 +706,14 @@ void GH_ModbusMap_UpdateAges(uint32_t now_ms)
 
   for (s = 1U; s <= GH_MB_MAX_SLAVES; s++)
   {
-    if (!slave_to_base(s, &base))
+    if (!slave_status_base(s, &status_base))
     {
       continue;
     }
 
     if (s_last_ok_ms[s - 1U] == 0U)
     {
-      s_holding[base + REG_OFF_LAST_OK_AGE_SEC] = 0xFFFFU;
+      s_holding[status_base + ST_OFF_LAST_OK_AGE_SEC] = 0xFFFFU;
       continue;
     }
 
@@ -508,8 +722,27 @@ void GH_ModbusMap_UpdateAges(uint32_t now_ms)
     {
       age_sec = 0xFFFFU;
     }
-    s_holding[base + REG_OFF_LAST_OK_AGE_SEC] = (uint16_t)age_sec;
+    s_holding[status_base + ST_OFF_LAST_OK_AGE_SEC] = (uint16_t)age_sec;
   }
+
+  for (i = 0U; i < GH_MB_POINT_MAX; i++)
+  {
+    ts_ms = g_sensors[i].timestamp_ms;
+    if (ts_ms == 0U)
+    {
+      s_point_age_sec[i] = 0xFFFFU;
+      continue;
+    }
+
+    age_sec = (now_ms - ts_ms) / 1000U;
+    if (age_sec > 0xFFFFU)
+    {
+      age_sec = 0xFFFFU;
+    }
+    s_point_age_sec[i] = (uint16_t)age_sec;
+  }
+
+  s_map_data_version++;
   map_unlock();
 }
 
@@ -535,6 +768,7 @@ bool GH_ModbusMap_ReadRange(uint16_t start_addr, uint16_t qty, uint16_t *out_reg
 bool GH_ModbusMap_WriteSingle(uint16_t addr, uint16_t value)
 {
   uint16_t idx;
+
   if (!addr_to_index(addr, 1U, &idx))
   {
     return false;
@@ -576,10 +810,11 @@ void GH_ModbusMap_UpdateTelemetry(uint8_t slave_id,
                                   uint16_t out_state_mask,
                                   uint32_t now_ms)
 {
-  uint16_t base;
-  uint8_t i;
+  uint16_t status_base;
 
-  if ((sensors_9 == NULL) || !slave_to_base(slave_id, &base))
+  (void)sensors_9;
+
+  if (!slave_status_base(slave_id, &status_base))
   {
     return;
   }
@@ -588,26 +823,22 @@ void GH_ModbusMap_UpdateTelemetry(uint8_t slave_id,
     return;
   }
 
-  for (i = 0U; i < 9U; i++)
-  {
-    s_holding[base + REG_OFF_SENS_0 + i] = sensors_9[i];
-  }
-  s_holding[base + REG_OFF_SENS_VALID_MASK] = valid_mask;
-  s_holding[base + REG_OFF_OUT_STATE_MASK] = out_state_mask;
-  s_holding[base + REG_OFF_SLAVE_STATUS] = 0x0001U; /* online=1, stale=0 */
-  s_holding[base + REG_OFF_LAST_OK_AGE_SEC] = 0U;
+  s_holding[status_base + ST_OFF_STATUS] = 0x0001U; /* online=1, stale=0 */
+  s_holding[status_base + ST_OFF_LAST_OK_AGE_SEC] = 0U;
+  s_holding[status_base + ST_OFF_VALID_MASK] = valid_mask;
+  s_holding[status_base + ST_OFF_OUT_STATE_MASK] = out_state_mask;
   s_last_ok_ms[slave_id - 1U] = now_ms;
-  bump_data_version(base);
+  bump_slave_data_version_nolock(status_base);
   map_unlock();
 }
 
 void GH_ModbusMap_ReportTimeout(uint8_t slave_id, uint32_t now_ms)
 {
-  uint16_t base;
+  uint16_t status_base;
   uint32_t last_ok_ms;
   uint32_t elapsed_ms;
 
-  if (!slave_to_base(slave_id, &base))
+  if (!slave_status_base(slave_id, &status_base))
   {
     return;
   }
@@ -626,15 +857,14 @@ void GH_ModbusMap_ReportTimeout(uint8_t slave_id, uint32_t now_ms)
     elapsed_ms = now_ms - last_ok_ms;
   }
 
-  s_holding[base + REG_OFF_ERR_TIMEOUT]++;
+  s_holding[status_base + ST_OFF_ERR_TIMEOUT]++;
   if ((last_ok_ms != 0U) && (elapsed_ms < MODBUS_OFFLINE_REPROBE_MS))
   {
-    /* Hold online during short communication glitches right after a good cycle. */
-    s_holding[base + REG_OFF_SLAVE_STATUS] = 0x0001U; /* online=1, stale=0 */
+    s_holding[status_base + ST_OFF_STATUS] = 0x0001U; /* online=1, stale=0 */
   }
   else
   {
-    s_holding[base + REG_OFF_SLAVE_STATUS] = 0x0002U; /* online=0, stale=1 */
+    s_holding[status_base + ST_OFF_STATUS] = 0x0002U; /* online=0, stale=1 */
   }
   map_unlock();
 }
@@ -644,8 +874,8 @@ void GH_ModbusMap_UpdateDiag(uint8_t slave_id,
                              uint16_t err_crc,
                              uint16_t err_exception)
 {
-  uint16_t base;
-  if (!slave_to_base(slave_id, &base))
+  uint16_t status_base;
+  if (!slave_status_base(slave_id, &status_base))
   {
     return;
   }
@@ -653,9 +883,9 @@ void GH_ModbusMap_UpdateDiag(uint8_t slave_id,
   {
     return;
   }
-  s_holding[base + REG_OFF_ERR_TIMEOUT] = err_timeout;
-  s_holding[base + REG_OFF_ERR_CRC] = err_crc;
-  s_holding[base + REG_OFF_ERR_EXCEPTION] = err_exception;
+  s_holding[status_base + ST_OFF_ERR_TIMEOUT] = err_timeout;
+  s_holding[status_base + ST_OFF_ERR_CRC] = err_crc;
+  s_holding[status_base + ST_OFF_ERR_EXCEPTION] = err_exception;
   map_unlock();
 }
 
@@ -665,7 +895,7 @@ bool GH_ModbusMap_GetApplyRequest(uint8_t slave_id, gh_slave_apply_request_t *ou
   uint16_t trigger;
   uint16_t applied;
 
-  if ((out_req == NULL) || !slave_to_base(slave_id, &base))
+  if ((out_req == NULL) || !cmd_base(slave_id, &base))
   {
     return false;
   }
@@ -674,8 +904,8 @@ bool GH_ModbusMap_GetApplyRequest(uint8_t slave_id, gh_slave_apply_request_t *ou
     return false;
   }
 
-  trigger = s_holding[base + REG_OFF_APPLY_TRIGGER];
-  applied = s_holding[base + REG_OFF_LAST_APPLIED_TRIGGER];
+  trigger = s_holding[base + CMD_OFF_APPLY_TRIGGER];
+  applied = s_holding[base + CMD_OFF_LAST_APPLIED_TRIGGER];
   if (trigger == applied)
   {
     map_unlock();
@@ -683,14 +913,14 @@ bool GH_ModbusMap_GetApplyRequest(uint8_t slave_id, gh_slave_apply_request_t *ou
   }
 
   out_req->trigger = trigger;
-  out_req->setpoints[0] = s_holding[base + REG_OFF_MODE];
-  out_req->setpoints[1] = s_holding[base + REG_OFF_SET_TEMP_X10];
-  out_req->setpoints[2] = s_holding[base + REG_OFF_SET_HUM_X10];
-  out_req->setpoints[3] = s_holding[base + REG_OFF_HYST_TEMP_X10];
-  out_req->setpoints[4] = s_holding[base + REG_OFF_HYST_HUM_X10];
-  out_req->setpoints[5] = s_holding[base + REG_OFF_MIN_ON_SEC];
-  out_req->setpoints[6] = s_holding[base + REG_OFF_MIN_OFF_SEC];
-  out_req->out_cmd_mask = s_holding[base + REG_OFF_OUT_CMD_MASK];
+  out_req->setpoints[0] = s_holding[base + CMD_OFF_MODE];
+  out_req->setpoints[1] = s_holding[base + CMD_OFF_SET_TEMP_X10];
+  out_req->setpoints[2] = s_holding[base + CMD_OFF_SET_HUM_X10];
+  out_req->setpoints[3] = s_holding[base + CMD_OFF_HYST_TEMP_X10];
+  out_req->setpoints[4] = s_holding[base + CMD_OFF_HYST_HUM_X10];
+  out_req->setpoints[5] = s_holding[base + CMD_OFF_MIN_ON_SEC];
+  out_req->setpoints[6] = s_holding[base + CMD_OFF_MIN_OFF_SEC];
+  out_req->out_cmd_mask = s_holding[base + CMD_OFF_OUT_CMD_MASK];
 
   map_unlock();
   return true;
@@ -699,7 +929,8 @@ bool GH_ModbusMap_GetApplyRequest(uint8_t slave_id, gh_slave_apply_request_t *ou
 void GH_ModbusMap_MarkApplyResult(uint8_t slave_id, uint16_t trigger, bool applied)
 {
   uint16_t base;
-  if (!slave_to_base(slave_id, &base))
+  uint16_t status_base;
+  if (!cmd_base(slave_id, &base) || !slave_status_base(slave_id, &status_base))
   {
     return;
   }
@@ -709,8 +940,8 @@ void GH_ModbusMap_MarkApplyResult(uint8_t slave_id, uint16_t trigger, bool appli
   }
   if (applied)
   {
-    s_holding[base + REG_OFF_LAST_APPLIED_TRIGGER] = trigger;
-    bump_data_version(base);
+    s_holding[base + CMD_OFF_LAST_APPLIED_TRIGGER] = trigger;
+    bump_slave_data_version_nolock(status_base);
   }
   map_unlock();
 }

@@ -6,7 +6,7 @@ This document defines the exact client-side write sequence for uploading `topolo
 
 ## 1. Register window
 
-- Base: `GH_MB_TOPO_BASE = 1392` (SCADA `42392`).
+- Base: `GH_MB_TOPO_BASE = 1584` (SCADA `42584`).
 - Size: `GH_MB_TOPO_REGS = 144`.
 
 Offsets (`base + off`):

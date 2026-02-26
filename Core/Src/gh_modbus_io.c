@@ -220,10 +220,11 @@ static bool modbus_uart_rx_it(uint8_t *data, uint16_t len, uint32_t timeout_ms)
   return true;
 }
 
-bool modbus_read_holding_registers(uint8_t slave_id,
-                                   uint16_t start_reg,
-                                   uint16_t reg_count,
-                                   uint16_t *out_regs)
+static bool modbus_read_holding_registers_impl(uint8_t slave_id,
+                                               uint16_t start_reg,
+                                               uint16_t reg_count,
+                                               uint16_t *out_regs,
+                                               uint32_t timeout_ms)
 {
   uint8_t req[8];
   uint8_t resp[5U + (MODBUS_MAX_REGS_PER_REQ * 2U)];
@@ -263,7 +264,11 @@ bool modbus_read_holding_registers(uint8_t slave_id,
   }
 
   exp_len = (uint16_t)(5U + (reg_count * 2U));
-  if (!modbus_uart_rx_it(resp, exp_len, MODBUS_RTU_RESP_TIMEOUT_MS))
+  if (timeout_ms == 0U)
+  {
+    timeout_ms = MODBUS_RTU_RESP_TIMEOUT_MS;
+  }
+  if (!modbus_uart_rx_it(resp, exp_len, timeout_ms))
   {
     (void)osMutexRelease(s_modbus_io_mutex);
     return false;
@@ -293,7 +298,31 @@ bool modbus_read_holding_registers(uint8_t slave_id,
   return true;
 }
 
-bool modbus_write_single_holding_register(uint8_t slave_id, uint16_t reg, uint16_t value)
+bool modbus_read_holding_registers_timeout(uint8_t slave_id,
+                                           uint16_t start_reg,
+                                           uint16_t reg_count,
+                                           uint16_t *out_regs,
+                                           uint32_t timeout_ms)
+{
+  return modbus_read_holding_registers_impl(slave_id, start_reg, reg_count, out_regs, timeout_ms);
+}
+
+bool modbus_read_holding_registers(uint8_t slave_id,
+                                   uint16_t start_reg,
+                                   uint16_t reg_count,
+                                   uint16_t *out_regs)
+{
+  return modbus_read_holding_registers_impl(slave_id,
+                                            start_reg,
+                                            reg_count,
+                                            out_regs,
+                                            MODBUS_RTU_RESP_TIMEOUT_MS);
+}
+
+static bool modbus_write_single_holding_register_impl(uint8_t slave_id,
+                                                      uint16_t reg,
+                                                      uint16_t value,
+                                                      uint32_t timeout_ms)
 {
   uint8_t req[8];
   uint8_t resp[8];
@@ -326,7 +355,11 @@ bool modbus_write_single_holding_register(uint8_t slave_id, uint16_t reg, uint16
     return false;
   }
 
-  if (!modbus_uart_rx_it(resp, (uint16_t)sizeof(resp), MODBUS_RTU_RESP_TIMEOUT_MS))
+  if (timeout_ms == 0U)
+  {
+    timeout_ms = MODBUS_RTU_RESP_TIMEOUT_MS;
+  }
+  if (!modbus_uart_rx_it(resp, (uint16_t)sizeof(resp), timeout_ms))
   {
     (void)osMutexRelease(s_modbus_io_mutex);
     return false;
@@ -345,10 +378,24 @@ bool modbus_write_single_holding_register(uint8_t slave_id, uint16_t reg, uint16
   return true;
 }
 
-bool modbus_write_multiple_holding_registers(uint8_t slave_id,
-                                             uint16_t start_reg,
-                                             uint16_t reg_count,
-                                             const uint16_t *regs)
+bool modbus_write_single_holding_register_timeout(uint8_t slave_id,
+                                                  uint16_t reg,
+                                                  uint16_t value,
+                                                  uint32_t timeout_ms)
+{
+  return modbus_write_single_holding_register_impl(slave_id, reg, value, timeout_ms);
+}
+
+bool modbus_write_single_holding_register(uint8_t slave_id, uint16_t reg, uint16_t value)
+{
+  return modbus_write_single_holding_register_impl(slave_id, reg, value, MODBUS_RTU_RESP_TIMEOUT_MS);
+}
+
+static bool modbus_write_multiple_holding_registers_impl(uint8_t slave_id,
+                                                         uint16_t start_reg,
+                                                         uint16_t reg_count,
+                                                         const uint16_t *regs,
+                                                         uint32_t timeout_ms)
 {
   uint8_t req[7U + (MODBUS_MAX_REGS_PER_REQ * 2U) + 2U];
   uint8_t resp[8];
@@ -394,7 +441,11 @@ bool modbus_write_multiple_holding_registers(uint8_t slave_id,
     return false;
   }
 
-  if (!modbus_uart_rx_it(resp, (uint16_t)sizeof(resp), MODBUS_RTU_RESP_TIMEOUT_MS))
+  if (timeout_ms == 0U)
+  {
+    timeout_ms = MODBUS_RTU_RESP_TIMEOUT_MS;
+  }
+  if (!modbus_uart_rx_it(resp, (uint16_t)sizeof(resp), timeout_ms))
   {
     (void)osMutexRelease(s_modbus_io_mutex);
     return false;
@@ -412,6 +463,31 @@ bool modbus_write_multiple_holding_registers(uint8_t slave_id,
   }
   (void)osMutexRelease(s_modbus_io_mutex);
   return true;
+}
+
+bool modbus_write_multiple_holding_registers_timeout(uint8_t slave_id,
+                                                     uint16_t start_reg,
+                                                     uint16_t reg_count,
+                                                     const uint16_t *regs,
+                                                     uint32_t timeout_ms)
+{
+  return modbus_write_multiple_holding_registers_impl(slave_id,
+                                                      start_reg,
+                                                      reg_count,
+                                                      regs,
+                                                      timeout_ms);
+}
+
+bool modbus_write_multiple_holding_registers(uint8_t slave_id,
+                                             uint16_t start_reg,
+                                             uint16_t reg_count,
+                                             const uint16_t *regs)
+{
+  return modbus_write_multiple_holding_registers_impl(slave_id,
+                                                      start_reg,
+                                                      reg_count,
+                                                      regs,
+                                                      MODBUS_RTU_RESP_TIMEOUT_MS);
 }
 
 static uint16_t cfg_u16_clamped(float v, uint16_t min_v, uint16_t max_v)

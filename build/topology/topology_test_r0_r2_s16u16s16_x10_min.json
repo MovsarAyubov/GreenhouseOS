@@ -1,0 +1,89 @@
+{
+  "ver_minor": 0,
+  "generation": 5,
+  "topology_id": 5,
+  "created_unix_s": 1772064000,
+  "flags": 0,
+  "modules": [
+    {
+      "module_id": 101,
+      "module_type": 1,
+      "bus_type": 1,
+      "bus_index": 0,
+      "slave_id": 1,
+      "zone_id": 1,
+      "req_first": 0,
+      "req_count": 1,
+      "cmd_first": 0,
+      "cmd_count": 0,
+      "offline_reprobe_ms": 30000,
+      "heartbeat_timeout_ms": 5000,
+      "capability_mask": 1,
+      "user_param0": 0,
+      "user_param1": 0
+    }
+  ],
+  "requests": [
+    {
+      "req_id": 1010,
+      "module_id": 101,
+      "fc": 3,
+      "priority": 1,
+      "start_reg": 0,
+      "reg_count": 3,
+      "period_ms": 5000,
+      "timeout_ms": 200,
+      "retries": 1,
+      "backoff_ms": 0,
+      "point_first": 0,
+      "point_count": 3,
+      "flags": 0
+    }
+  ],
+  "points": [
+    {
+      "point_id": 1100,
+      "module_id": 101,
+      "req_id": 1010,
+      "reg_offset": 0,
+      "point_type": 2,
+      "scale_pow10": -1,
+      "bit_index": 0,
+      "quality_policy": 1,
+      "publish_index": 0,
+      "stale_timeout_s": 20,
+      "alarm_low": -32768,
+      "alarm_high": 32767
+    },
+    {
+      "point_id": 1101,
+      "module_id": 101,
+      "req_id": 1010,
+      "reg_offset": 1,
+      "point_type": 1,
+      "scale_pow10": -1,
+      "bit_index": 0,
+      "quality_policy": 1,
+      "publish_index": 1,
+      "stale_timeout_s": 20,
+      "alarm_low": 0,
+      "alarm_high": 1000
+    },
+    {
+      "point_id": 1102,
+      "module_id": 101,
+      "req_id": 1010,
+      "reg_offset": 2,
+      "point_type": 2,
+      "scale_pow10": -1,
+      "bit_index": 0,
+      "quality_policy": 1,
+      "publish_index": 2,
+      "stale_timeout_s": 20,
+      "alarm_low": -32768,
+      "alarm_high": 32767
+    }
+  ],
+  "commands": [],
+  "policies": []
+}

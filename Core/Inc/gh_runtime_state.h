@@ -244,11 +244,25 @@ bool modbus_read_holding_registers(uint8_t slave_id,
                                    uint16_t start_reg,
                                    uint16_t reg_count,
                                    uint16_t *out_regs);
+bool modbus_read_holding_registers_timeout(uint8_t slave_id,
+                                           uint16_t start_reg,
+                                           uint16_t reg_count,
+                                           uint16_t *out_regs,
+                                           uint32_t timeout_ms);
 bool modbus_write_single_holding_register(uint8_t slave_id, uint16_t reg, uint16_t value);
+bool modbus_write_single_holding_register_timeout(uint8_t slave_id,
+                                                  uint16_t reg,
+                                                  uint16_t value,
+                                                  uint32_t timeout_ms);
 bool modbus_write_multiple_holding_registers(uint8_t slave_id,
                                              uint16_t start_reg,
                                              uint16_t reg_count,
                                              const uint16_t *regs);
+bool modbus_write_multiple_holding_registers_timeout(uint8_t slave_id,
+                                                     uint16_t start_reg,
+                                                     uint16_t reg_count,
+                                                     const uint16_t *regs,
+                                                     uint32_t timeout_ms);
 bool apply_control_to_slave(uint8_t slave_id, const active_config_t *cfg);
 bool config_write_to_slot(uint32_t slot_addr, uint32_t sector, const active_config_t *cfg);
 

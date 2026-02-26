@@ -194,6 +194,7 @@ Validation:
 - `point_id` unique.
 - `publish_index` unique.
 - `reg_offset < reg_count` of referenced request.
+- current runtime publishes points into `g_sensors[publish_index]`, so `publish_index < SENSOR_COUNT` is required.
 
 ### 6.4 Command table
 
@@ -210,6 +211,10 @@ typedef struct __attribute__((packed)) {
   uint16_t flags;              // idempotent/verify-after-write/etc.
 } topo_cmd_v2_t;
 ```
+
+Current firmware constraints for RTU1 command execution:
+- `max_reg_count <= 8` (command ingress payload budget per slave).
+- `ack_point_id` (if non-zero) must reference existing `point_id` from the same module.
 
 ### 6.5 Fault policy table
 

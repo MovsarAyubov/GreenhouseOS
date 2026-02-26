@@ -83,7 +83,7 @@ Interpretation:
 ```powershell
 @'
 from tools.topology.topology_uploader import ModbusTcpClient, GH_MB_TOPO_BASE
-GH_MB_DIAG_BASE = 1360
+GH_MB_DIAG_BASE = 1552
 with ModbusTcpClient("192.168.50.20", 502, 1, 5.0) as c:
     rc = c.read_holding_registers(GH_MB_TOPO_BASE + 1, 1)[0]
     rt = c.read_holding_registers(GH_MB_TOPO_BASE + 2, 1)[0]

@@ -1,5 +1,6 @@
 #include "gh_config_storage.h"
 #include "gh_crc32.h"
+#include "gh_modbus_map.h"
 #include "gh_topology_v2.h"
 #include "test_common.h"
 
@@ -139,6 +140,56 @@ static bool topo_build_runtime_valid_payload(uint8_t *payload, uint32_t payload_
   return true;
 }
 
+static bool topo_build_runtime_valid_payload_with_command(uint8_t *payload,
+                                                          uint32_t payload_capacity,
+                                                          uint32_t *out_size)
+{
+  gh_topology_v2_header_t hdr = {0};
+  gh_topology_v2_module_t mod = {0};
+  gh_topology_v2_cmd_t cmd = {0};
+  uint32_t total_size;
+
+  if (!topo_build_runtime_valid_payload(payload, payload_capacity, out_size))
+  {
+    return false;
+  }
+
+  memcpy(&hdr, payload, sizeof(hdr));
+  if (hdr.module_count == 0U)
+  {
+    return false;
+  }
+
+  total_size = hdr.total_size + sizeof(cmd);
+  if (total_size > payload_capacity)
+  {
+    return false;
+  }
+
+  memcpy(&mod, &payload[hdr.off_modules], sizeof(mod));
+  mod.cmd_first = 0U;
+  mod.cmd_count = 1U;
+  memcpy(&payload[hdr.off_modules], &mod, sizeof(mod));
+
+  cmd.cmd_id = 2001U;
+  cmd.module_id = mod.module_id;
+  cmd.fc = 16U;
+  cmd.retries = 2U;
+  cmd.start_reg = 100U;
+  cmd.max_reg_count = 6U;
+  cmd.timeout_ms = 300U;
+  cmd.ack_point_id = 1001U;
+  cmd.flags = 0U;
+
+  hdr.cmd_count = 1U;
+  hdr.off_commands = hdr.total_size;
+  memcpy(&payload[hdr.off_commands], &cmd, sizeof(cmd));
+  memcpy(payload, &hdr, sizeof(hdr));
+  topo_finalize_crc(payload, total_size);
+  *out_size = total_size;
+  return true;
+}
+
 int test_config_storage_run(void)
 {
   config_update_req_t req = {0};
@@ -150,6 +201,7 @@ int test_config_storage_run(void)
   gh_topology_v2_header_t hdr = {0};
   gh_topology_v2_module_t mod_row = {0};
   gh_topology_v2_req_t req_row = {0};
+  gh_topology_v2_point_t point_row = {0};
 
   g_active_config.version = 10U;
   g_topology_v2_active = 0U;
@@ -228,12 +280,61 @@ int test_config_storage_run(void)
 
   UT_ASSERT_TRUE(topo_build_runtime_valid_payload(topo_blob, sizeof(topo_blob), &topo_blob_size));
   memcpy(&hdr, topo_blob, sizeof(hdr));
+  memcpy(&point_row, &topo_blob[hdr.off_points], sizeof(point_row));
+  point_row.publish_index = SENSOR_COUNT;
+  memcpy(&topo_blob[hdr.off_points], &point_row, sizeof(point_row));
+  topo_finalize_crc(topo_blob, topo_blob_size);
+  UT_ASSERT_TRUE(!GH_TopologyV2_ValidatePayload(topo_blob, topo_blob_size, &result));
+  UT_ASSERT_EQ_U32(CFG_RESULT_REJECT_TOPOLOGY_BUDGET, result);
+
+  UT_ASSERT_TRUE(topo_build_runtime_valid_payload(topo_blob, sizeof(topo_blob), &topo_blob_size));
+  memcpy(&hdr, topo_blob, sizeof(hdr));
+  memcpy(&point_row, &topo_blob[hdr.off_points], sizeof(point_row));
+  point_row.point_type = 5U;
+  point_row.reg_offset = 8U;
+  memcpy(&topo_blob[hdr.off_points], &point_row, sizeof(point_row));
+  topo_finalize_crc(topo_blob, topo_blob_size);
+  UT_ASSERT_TRUE(!GH_TopologyV2_ValidatePayload(topo_blob, topo_blob_size, &result));
+  UT_ASSERT_EQ_U32(CFG_RESULT_REJECT_TOPOLOGY_BOUNDS, result);
+
+  UT_ASSERT_TRUE(topo_build_runtime_valid_payload(topo_blob, sizeof(topo_blob), &topo_blob_size));
+  memcpy(&hdr, topo_blob, sizeof(hdr));
   memcpy(&req_row, &topo_blob[hdr.off_requests], sizeof(req_row));
   req_row.period_ms = 10U;
   memcpy(&topo_blob[hdr.off_requests], &req_row, sizeof(req_row));
   topo_finalize_crc(topo_blob, topo_blob_size);
   UT_ASSERT_TRUE(!GH_TopologyV2_ValidatePayload(topo_blob, topo_blob_size, &result));
   UT_ASSERT_EQ_U32(CFG_RESULT_REJECT_TOPOLOGY_BUDGET, result);
+
+  UT_ASSERT_TRUE(topo_build_runtime_valid_payload_with_command(topo_blob, sizeof(topo_blob), &topo_blob_size));
+  UT_ASSERT_TRUE(GH_TopologyV2_ValidatePayload(topo_blob, topo_blob_size, &result));
+  UT_ASSERT_EQ_U32(CFG_RESULT_IDLE, result);
+
+  UT_ASSERT_TRUE(topo_build_runtime_valid_payload_with_command(topo_blob, sizeof(topo_blob), &topo_blob_size));
+  memcpy(&hdr, topo_blob, sizeof(hdr));
+  UT_ASSERT_EQ_U32(1U, hdr.cmd_count);
+  UT_ASSERT_TRUE(hdr.off_commands != 0U);
+  {
+    gh_topology_v2_cmd_t cmd_row = {0};
+    memcpy(&cmd_row, &topo_blob[hdr.off_commands], sizeof(cmd_row));
+    cmd_row.max_reg_count = (uint16_t)(GH_MB_CMD_PAYLOAD_WORDS + 1U);
+    memcpy(&topo_blob[hdr.off_commands], &cmd_row, sizeof(cmd_row));
+  }
+  topo_finalize_crc(topo_blob, topo_blob_size);
+  UT_ASSERT_TRUE(!GH_TopologyV2_ValidatePayload(topo_blob, topo_blob_size, &result));
+  UT_ASSERT_EQ_U32(CFG_RESULT_REJECT_TOPOLOGY_BOUNDS, result);
+
+  UT_ASSERT_TRUE(topo_build_runtime_valid_payload_with_command(topo_blob, sizeof(topo_blob), &topo_blob_size));
+  memcpy(&hdr, topo_blob, sizeof(hdr));
+  {
+    gh_topology_v2_cmd_t cmd_row = {0};
+    memcpy(&cmd_row, &topo_blob[hdr.off_commands], sizeof(cmd_row));
+    cmd_row.ack_point_id = 65535U;
+    memcpy(&topo_blob[hdr.off_commands], &cmd_row, sizeof(cmd_row));
+  }
+  topo_finalize_crc(topo_blob, topo_blob_size);
+  UT_ASSERT_TRUE(!GH_TopologyV2_ValidatePayload(topo_blob, topo_blob_size, &result));
+  UT_ASSERT_EQ_U32(CFG_RESULT_REJECT_TOPOLOGY_SCHEMA, result);
 
   return 0;
 }

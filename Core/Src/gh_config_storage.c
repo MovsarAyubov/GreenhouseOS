@@ -51,11 +51,14 @@ static uint32_t s_topology_staging_generation = 0U;
 static uint32_t s_topology_staging_chunks_mask = 0U;
 
 #define GH_TOPOLOGY_RUNTIME_MAX_REQS        GH_TOPOLOGY_V2_MAX_REQ_PROFILES
+#define GH_TOPOLOGY_RUNTIME_MAX_POINTS      GH_TOPOLOGY_V2_MAX_POINTS
+#define GH_TOPOLOGY_RUNTIME_MAX_CMDS        GH_TOPOLOGY_V2_MAX_COMMANDS
 #define GH_TOPOLOGY_RUNTIME_BUS_RTU1        1U
 #define GH_TOPOLOGY_RUNTIME_FC_READ_HOLDING 3U
 #define GH_TOPOLOGY_RUNTIME_DIAG_BASE_REG   128U
 #define GH_TOPOLOGY_RUNTIME_DIAG_REG_COUNT  6U
 #define GH_TOPOLOGY_RUNTIME_SENSOR_WORDS    9U
+#define GH_TOPOLOGY_RUNTIME_CMD_WORDS       GH_MB_CMD_PAYLOAD_WORDS
 
 #define GH_TOPOLOGY_BUS_RTU1                1U
 #define GH_TOPOLOGY_BUS_RTU2                2U
@@ -76,8 +79,12 @@ static uint32_t s_topology_staging_chunks_mask = 0U;
 
 #define GH_TOPOLOGY_RTU_SLAVE_MAX           247U
 
-static gh_topology_poll_req_t s_poll_reqs[GH_TOPOLOGY_RUNTIME_MAX_REQS];
+static gh_topology_poll_req_t s_poll_reqs[GH_TOPOLOGY_RUNTIME_MAX_REQS] __attribute__((section(".ccmram")));
+static gh_topology_point_binding_t s_point_bindings[GH_TOPOLOGY_RUNTIME_MAX_POINTS] __attribute__((section(".ccmram")));
+static gh_topology_cmd_binding_t s_cmd_bindings[GH_TOPOLOGY_RUNTIME_MAX_CMDS] __attribute__((section(".ccmram")));
 static uint16_t s_poll_req_count = 0U;
+static uint16_t s_point_binding_count = 0U;
+static uint16_t s_cmd_binding_count = 0U;
 static uint32_t s_poll_generation = 0U;
 static uint32_t s_rtu1_slave_mask = 0U;
 static osMutexId_t s_runtime_mutex = NULL;
@@ -154,6 +161,23 @@ static uint8_t diag_offset_for_req(const gh_topology_v2_req_t *req)
   return (uint8_t)(GH_TOPOLOGY_RUNTIME_DIAG_BASE_REG - req->start_reg);
 }
 
+static uint8_t topo_point_word_width(uint8_t point_type)
+{
+  switch (point_type)
+  {
+    case GH_TOPOLOGY_POINT_TYPE_U16:
+    case GH_TOPOLOGY_POINT_TYPE_S16:
+    case GH_TOPOLOGY_POINT_TYPE_BIT:
+      return 1U;
+    case GH_TOPOLOGY_POINT_TYPE_U32:
+    case GH_TOPOLOGY_POINT_TYPE_S32:
+    case GH_TOPOLOGY_POINT_TYPE_FLOAT:
+      return 2U;
+    default:
+      return 0U;
+  }
+}
+
 void GH_TopologyRuntime_Clear(void)
 {
   if (!runtime_lock())
@@ -162,7 +186,11 @@ void GH_TopologyRuntime_Clear(void)
   }
 
   memset(s_poll_reqs, 0, sizeof(s_poll_reqs));
+  memset(s_point_bindings, 0, sizeof(s_point_bindings));
+  memset(s_cmd_bindings, 0, sizeof(s_cmd_bindings));
   s_poll_req_count = 0U;
+  s_point_binding_count = 0U;
+  s_cmd_binding_count = 0U;
   s_poll_generation = 0U;
   s_rtu1_slave_mask = 0U;
 
@@ -174,12 +202,22 @@ bool GH_TopologyRuntime_RebuildFromPayload(const uint8_t *payload, uint32_t payl
   gh_topology_v2_header_t hdr;
   gh_topology_v2_module_t mod;
   gh_topology_v2_req_t req;
+  gh_topology_v2_point_t point;
+  gh_topology_v2_cmd_t cmd;
   gh_topology_poll_req_t next_reqs[GH_TOPOLOGY_RUNTIME_MAX_REQS];
+  gh_topology_point_binding_t next_points[GH_TOPOLOGY_RUNTIME_MAX_POINTS];
+  gh_topology_cmd_binding_t next_cmds[GH_TOPOLOGY_RUNTIME_MAX_CMDS];
   uint16_t next_count = 0U;
+  uint16_t next_point_count = 0U;
+  uint16_t next_cmd_count = 0U;
   uint32_t next_mask = 0U;
   uint16_t mod_idx;
   uint16_t req_idx;
+  uint16_t point_idx;
+  uint16_t cmd_idx;
   uint32_t req_end;
+  uint32_t point_end;
+  uint32_t cmd_end;
   config_result_code_t validation_result = CFG_RESULT_IDLE;
 
   if ((payload == NULL) || !GH_TopologyV2_ValidatePayload(payload, payload_len, &validation_result))
@@ -190,6 +228,8 @@ bool GH_TopologyRuntime_RebuildFromPayload(const uint8_t *payload, uint32_t payl
 
   memcpy(&hdr, payload, sizeof(hdr));
   memset(next_reqs, 0, sizeof(next_reqs));
+  memset(next_points, 0, sizeof(next_points));
+  memset(next_cmds, 0, sizeof(next_cmds));
 
   for (mod_idx = 0U; mod_idx < hdr.module_count; mod_idx++)
   {
@@ -231,15 +271,97 @@ bool GH_TopologyRuntime_RebuildFromPayload(const uint8_t *payload, uint32_t payl
       }
 
       dst = &next_reqs[next_count];
+      dst->req_id = req.req_id;
+      dst->module_id = req.module_id;
       dst->slave_id = mod.slave_id;
       dst->start_reg = req.start_reg;
       dst->reg_count = req.reg_count;
       dst->period_ms = (req.period_ms == 0U) ? MODBUS_POLL_PERIOD_MS : req.period_ms;
+      dst->timeout_ms = (req.timeout_ms == 0U) ? MODBUS_RTU_RESP_TIMEOUT_MS : req.timeout_ms;
       dst->retries = (req.retries == 0U) ? MODBUS_RETRY_COUNT : req.retries;
       dst->backoff_ms = req.backoff_ms;
       dst->telemetry_word_count = telemetry_word_count_for_req(&req);
       dst->diag_offset = diag_offset_for_req(&req);
+      dst->point_first = next_point_count;
+      dst->point_count = 0U;
+
+      point_end = (uint32_t)req.point_first + (uint32_t)req.point_count;
+      if (point_end > hdr.point_count)
+      {
+        continue;
+      }
+
+      for (point_idx = req.point_first; point_idx < point_end; point_idx++)
+      {
+        const uint8_t *point_ptr = &payload[hdr.off_points + ((uint32_t)point_idx * sizeof(point))];
+        gh_topology_point_binding_t *point_dst;
+
+        if (next_point_count >= GH_TOPOLOGY_RUNTIME_MAX_POINTS)
+        {
+          break;
+        }
+
+        memcpy(&point, point_ptr, sizeof(point));
+        if ((point.module_id != mod.module_id) || (point.req_id != req.req_id))
+        {
+          continue;
+        }
+
+        point_dst = &next_points[next_point_count];
+        point_dst->slave_id = mod.slave_id;
+        point_dst->point_id = point.point_id;
+        point_dst->req_id = req.req_id;
+        point_dst->module_id = req.module_id;
+        point_dst->req_start_reg = req.start_reg;
+        point_dst->reg_offset = point.reg_offset;
+        point_dst->point_type = point.point_type;
+        point_dst->scale_pow10 = point.scale_pow10;
+        point_dst->bit_index = point.bit_index;
+        point_dst->quality_policy = point.quality_policy;
+        point_dst->publish_index = point.publish_index;
+        next_point_count++;
+        dst->point_count++;
+      }
+
       next_count++;
+    }
+
+    cmd_end = (uint32_t)mod.cmd_first + (uint32_t)mod.cmd_count;
+    if (cmd_end > hdr.cmd_count)
+    {
+      continue;
+    }
+
+    for (cmd_idx = mod.cmd_first; cmd_idx < cmd_end; cmd_idx++)
+    {
+      const uint8_t *cmd_ptr = &payload[hdr.off_commands + ((uint32_t)cmd_idx * sizeof(cmd))];
+      gh_topology_cmd_binding_t *cmd_dst;
+
+      if (next_cmd_count >= GH_TOPOLOGY_RUNTIME_MAX_CMDS)
+      {
+        break;
+      }
+
+      memcpy(&cmd, cmd_ptr, sizeof(cmd));
+      if ((cmd.module_id != mod.module_id) ||
+          ((cmd.fc != GH_TOPOLOGY_CMD_FC_WRITE_SINGLE) &&
+           (cmd.fc != GH_TOPOLOGY_CMD_FC_WRITE_MULTI)))
+      {
+        continue;
+      }
+
+      cmd_dst = &next_cmds[next_cmd_count];
+      cmd_dst->cmd_id = cmd.cmd_id;
+      cmd_dst->module_id = cmd.module_id;
+      cmd_dst->slave_id = mod.slave_id;
+      cmd_dst->fc = cmd.fc;
+      cmd_dst->start_reg = cmd.start_reg;
+      cmd_dst->reg_count = cmd.max_reg_count;
+      cmd_dst->timeout_ms = (cmd.timeout_ms == 0U) ? MODBUS_RTU_RESP_TIMEOUT_MS : cmd.timeout_ms;
+      cmd_dst->retries = (cmd.retries == 0U) ? MODBUS_RETRY_COUNT : cmd.retries;
+      cmd_dst->ack_point_id = cmd.ack_point_id;
+      cmd_dst->flags = cmd.flags;
+      next_cmd_count++;
     }
   }
 
@@ -249,7 +371,11 @@ bool GH_TopologyRuntime_RebuildFromPayload(const uint8_t *payload, uint32_t payl
   }
 
   memcpy(s_poll_reqs, next_reqs, sizeof(next_reqs));
+  memcpy(s_point_bindings, next_points, sizeof(next_points));
+  memcpy(s_cmd_bindings, next_cmds, sizeof(next_cmds));
   s_poll_req_count = next_count;
+  s_point_binding_count = next_point_count;
+  s_cmd_binding_count = next_cmd_count;
   s_poll_generation = hdr.generation;
   s_rtu1_slave_mask = next_mask;
 
@@ -295,6 +421,88 @@ bool GH_TopologyRuntime_CopyPollPlan(gh_topology_poll_req_t *out_reqs,
   if (out_rtu1_slave_mask != NULL)
   {
     *out_rtu1_slave_mask = s_rtu1_slave_mask;
+  }
+
+  runtime_unlock();
+  return true;
+}
+
+bool GH_TopologyRuntime_CopyPointBindings(gh_topology_point_binding_t *out_points,
+                                          uint16_t max_points,
+                                          uint16_t *out_count,
+                                          uint32_t *out_generation)
+{
+  if (out_count == NULL)
+  {
+    return false;
+  }
+  if ((out_points == NULL) && (max_points > 0U))
+  {
+    return false;
+  }
+
+  if (!runtime_lock())
+  {
+    return false;
+  }
+
+  if (s_point_binding_count > max_points)
+  {
+    runtime_unlock();
+    return false;
+  }
+
+  if (s_point_binding_count > 0U)
+  {
+    memcpy(out_points,
+           s_point_bindings,
+           (uint32_t)s_point_binding_count * sizeof(gh_topology_point_binding_t));
+  }
+  *out_count = s_point_binding_count;
+  if (out_generation != NULL)
+  {
+    *out_generation = s_poll_generation;
+  }
+
+  runtime_unlock();
+  return true;
+}
+
+bool GH_TopologyRuntime_CopyCommandBindings(gh_topology_cmd_binding_t *out_cmds,
+                                            uint16_t max_cmds,
+                                            uint16_t *out_count,
+                                            uint32_t *out_generation)
+{
+  if (out_count == NULL)
+  {
+    return false;
+  }
+  if ((out_cmds == NULL) && (max_cmds > 0U))
+  {
+    return false;
+  }
+
+  if (!runtime_lock())
+  {
+    return false;
+  }
+
+  if (s_cmd_binding_count > max_cmds)
+  {
+    runtime_unlock();
+    return false;
+  }
+
+  if (s_cmd_binding_count > 0U)
+  {
+    memcpy(out_cmds,
+           s_cmd_bindings,
+           (uint32_t)s_cmd_binding_count * sizeof(gh_topology_cmd_binding_t));
+  }
+  *out_count = s_cmd_binding_count;
+  if (out_generation != NULL)
+  {
+    *out_generation = s_poll_generation;
   }
 
   runtime_unlock();
@@ -500,6 +708,29 @@ static bool topo_find_req_by_id(const uint8_t *payload,
   return false;
 }
 
+static bool topo_find_point_by_id(const uint8_t *payload,
+                                  const gh_topology_v2_header_t *hdr,
+                                  uint16_t point_id,
+                                  gh_topology_v2_point_t *out_point)
+{
+  uint16_t i;
+  gh_topology_v2_point_t point;
+
+  for (i = 0U; i < hdr->point_count; i++)
+  {
+    topo_read_point_row(payload, hdr, i, &point);
+    if (point.point_id == point_id)
+    {
+      if (out_point != NULL)
+      {
+        *out_point = point;
+      }
+      return true;
+    }
+  }
+  return false;
+}
+
 static bool topo_reg_windows_overlap(uint16_t start_a,
                                      uint16_t count_a,
                                      uint16_t start_b,
@@ -640,6 +871,8 @@ static bool topo_validate_semantics(const uint8_t *payload,
 
   for (i = 0U; i < hdr->point_count; i++)
   {
+    uint8_t point_words;
+
     topo_read_point_row(payload, hdr, i, &point_i);
 
     if ((point_i.point_type < GH_TOPOLOGY_POINT_TYPE_U16) ||
@@ -651,6 +884,11 @@ static bool topo_validate_semantics(const uint8_t *payload,
     if ((point_i.point_type == GH_TOPOLOGY_POINT_TYPE_BIT) && (point_i.bit_index > 15U))
     {
       *out_result = CFG_RESULT_REJECT_TOPOLOGY_SCHEMA;
+      return false;
+    }
+    if (point_i.publish_index >= SENSOR_COUNT)
+    {
+      *out_result = CFG_RESULT_REJECT_TOPOLOGY_BUDGET;
       return false;
     }
     if (!topo_find_module_by_id(payload, hdr, point_i.module_id, NULL))
@@ -666,6 +904,13 @@ static bool topo_validate_semantics(const uint8_t *payload,
     if (!topo_index_in_span(i, owner_req.point_first, owner_req.point_count) ||
         (owner_req.module_id != point_i.module_id) ||
         (point_i.reg_offset >= owner_req.reg_count))
+    {
+      *out_result = CFG_RESULT_REJECT_TOPOLOGY_BOUNDS;
+      return false;
+    }
+    point_words = topo_point_word_width(point_i.point_type);
+    if ((point_words == 0U) ||
+        (((uint32_t)point_i.reg_offset + (uint32_t)point_words) > (uint32_t)owner_req.reg_count))
     {
       *out_result = CFG_RESULT_REJECT_TOPOLOGY_BOUNDS;
       return false;
@@ -718,6 +963,23 @@ static bool topo_validate_semantics(const uint8_t *payload,
       *out_result = CFG_RESULT_REJECT_TOPOLOGY_BOUNDS;
       return false;
     }
+    if ((owner_mod.bus_type == GH_TOPOLOGY_BUS_RTU1) &&
+        (cmd_i.max_reg_count > GH_TOPOLOGY_RUNTIME_CMD_WORDS))
+    {
+      *out_result = CFG_RESULT_REJECT_TOPOLOGY_BOUNDS;
+      return false;
+    }
+    if (cmd_i.ack_point_id != 0U)
+    {
+      gh_topology_v2_point_t ack_point;
+
+      if (!topo_find_point_by_id(payload, hdr, cmd_i.ack_point_id, &ack_point) ||
+          (ack_point.module_id != cmd_i.module_id))
+      {
+        *out_result = CFG_RESULT_REJECT_TOPOLOGY_SCHEMA;
+        return false;
+      }
+    }
 
     for (j = 0U; j < i; j++)
     {
@@ -761,6 +1023,7 @@ static bool topo_validate_poll_budget(const uint8_t *payload,
   gh_topology_v2_module_t mod;
   uint16_t retries;
   uint16_t period_ms;
+  uint16_t timeout_ms;
   uint32_t req_worst_ms;
   uint64_t util_permille = 0ULL;
 
@@ -781,12 +1044,13 @@ static bool topo_validate_poll_budget(const uint8_t *payload,
 
     retries = (req.retries == 0U) ? MODBUS_RETRY_COUNT : req.retries;
     period_ms = (req.period_ms == 0U) ? MODBUS_POLL_PERIOD_MS : req.period_ms;
+    timeout_ms = (req.timeout_ms == 0U) ? MODBUS_RTU_RESP_TIMEOUT_MS : req.timeout_ms;
     if (period_ms == 0U)
     {
       return false;
     }
 
-    req_worst_ms = ((uint32_t)retries * (MODBUS_UART_TX_TIMEOUT_MS + MODBUS_RTU_RESP_TIMEOUT_MS));
+    req_worst_ms = ((uint32_t)retries * ((uint32_t)MODBUS_UART_TX_TIMEOUT_MS + (uint32_t)timeout_ms));
     if (retries > 1U)
     {
       req_worst_ms += ((uint32_t)(retries - 1U) * (uint32_t)req.backoff_ms);

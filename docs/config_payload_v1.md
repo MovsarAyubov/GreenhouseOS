@@ -11,7 +11,7 @@
 - Version must be strictly greater than current active config version.
 
 ## Submit over Modbus TCP
-Use global config window at `GH_MB_CFG_BASE=1280` (`42280` with `4xxxx` offset):
+Use global config window at `GH_MB_CFG_BASE=1472` (`42472` with `4xxxx` offset):
 - write `REQ_VERSION` (`+10..+11`)
 - write `REQ_CRC32` (`+12..+13`)
 - write payload words to `+16..+79`

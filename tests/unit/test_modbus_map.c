@@ -31,6 +31,8 @@
 #define TOPO_OFF_REQ_GEN_LO 18U
 #define TOPO_OFF_CHUNK_BASE 20U
 
+#define CMD_OFF_MODE 0U
+
 int test_modbus_map_run(void)
 {
   uint16_t regs[4] = {0U};
@@ -73,8 +75,8 @@ int test_modbus_map_run(void)
   UT_ASSERT_EQ_U32((g_active_config.version >> 16U) & 0xFFFFU, regs[0]);
   UT_ASSERT_EQ_U32(g_active_config.version & 0xFFFFU, regs[1]);
 
-  UT_ASSERT_TRUE(GH_ModbusMap_WriteSingle(5U, 1234U));
-  UT_ASSERT_TRUE(GH_ModbusMap_ReadRange(5U, 1U, regs));
+  UT_ASSERT_TRUE(GH_ModbusMap_WriteSingle((uint16_t)(GH_MB_CMD_BASE + CMD_OFF_MODE), 1234U));
+  UT_ASSERT_TRUE(GH_ModbusMap_ReadRange((uint16_t)(GH_MB_CMD_BASE + CMD_OFF_MODE), 1U, regs));
   UT_ASSERT_EQ_U32(1234U, regs[0]);
 
   crc = gh_crc32_compute(payload, CONFIG_PAYLOAD_SIZE);
