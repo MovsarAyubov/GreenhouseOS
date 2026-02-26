@@ -43,7 +43,7 @@ Core/Src/gh_config_storage.o: ../Core/Src/gh_config_storage.c \
  ../Middlewares/Third_Party/FreeRTOS/Source/include/list.h \
  ../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2/cmsis_os2.h \
  ../Core/Inc/gh_runtime_state.h ../Core/Inc/gh_crc32.h \
- ../Core/Inc/gh_modbus_map.h
+ ../Core/Inc/gh_modbus_map.h ../Core/Inc/gh_topology_v2.h
 ../Core/Inc/gh_config_storage.h:
 ../Core/Inc/gh_runtime_state.h:
 ../Core/Inc/main.h:
@@ -92,3 +92,4 @@ Core/Src/gh_config_storage.o: ../Core/Src/gh_config_storage.c \
 ../Core/Inc/gh_runtime_state.h:
 ../Core/Inc/gh_crc32.h:
 ../Core/Inc/gh_modbus_map.h:
+../Core/Inc/gh_topology_v2.h:

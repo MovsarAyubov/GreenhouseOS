@@ -4,9 +4,13 @@
 
 uint32_t ut_queue_put_count = 0U;
 uint32_t ut_queue_get_count = 0U;
+uint32_t ut_queue_put_count_config = 0U;
+uint32_t ut_queue_put_count_topology = 0U;
 osStatus_t ut_queue_put_status = osOK;
 osStatus_t ut_queue_get_status = osError;
 config_update_req_t ut_last_queue_req = {0};
+topology_chunk_req_t ut_last_topology_queue_req = {0};
+osMessageQueueId_t ut_last_queue_id = NULL;
 
 static osKernelState_t s_kernel_state = osKernelRunning;
 
@@ -14,9 +18,13 @@ void UT_OsHooks_Reset(void)
 {
   ut_queue_put_count = 0U;
   ut_queue_get_count = 0U;
+  ut_queue_put_count_config = 0U;
+  ut_queue_put_count_topology = 0U;
   ut_queue_put_status = osOK;
   ut_queue_get_status = osError;
   memset(&ut_last_queue_req, 0, sizeof(ut_last_queue_req));
+  memset(&ut_last_topology_queue_req, 0, sizeof(ut_last_topology_queue_req));
+  ut_last_queue_id = NULL;
   s_kernel_state = osKernelRunning;
 }
 
@@ -86,6 +94,7 @@ osStatus_t osMessageQueuePut(osMessageQueueId_t mq_id,
   (void)timeout;
 
   ut_queue_put_count++;
+  ut_last_queue_id = mq_id;
   if (ut_queue_put_status != osOK)
   {
     return ut_queue_put_status;
@@ -93,7 +102,16 @@ osStatus_t osMessageQueuePut(osMessageQueueId_t mq_id,
 
   if (msg_ptr != NULL)
   {
-    memcpy(&ut_last_queue_req, msg_ptr, sizeof(ut_last_queue_req));
+    if (mq_id == qConfigStoreHandle)
+    {
+      ut_queue_put_count_config++;
+      memcpy(&ut_last_queue_req, msg_ptr, sizeof(ut_last_queue_req));
+    }
+    else if (mq_id == qTopologyStoreHandle)
+    {
+      ut_queue_put_count_topology++;
+      memcpy(&ut_last_topology_queue_req, msg_ptr, sizeof(ut_last_topology_queue_req));
+    }
   }
 
   return osOK;

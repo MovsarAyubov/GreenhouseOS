@@ -43,6 +43,15 @@
 #define CONFIG_FLASH_RETRY_DELAY_MS   20U
 #define CONFIG_APPLY_QUEUE_RETRIES    3U
 #define CONFIG_APPLY_QUEUE_DELAY_MS   20U
+#define TOPOLOGY_MAX_BLOB_SIZE        4096U
+#define TOPOLOGY_UPLOAD_CHUNK_WORDS   120U
+#define TOPOLOGY_UPLOAD_CHUNK_BYTES   (TOPOLOGY_UPLOAD_CHUNK_WORDS * 2U)
+#define TOPOLOGY_SLOT_OFFSET          0x00001000UL
+#define TOPOLOGY_SLOT_A_ADDR          (CONFIG_SLOT_A_ADDR + TOPOLOGY_SLOT_OFFSET)
+#define TOPOLOGY_SLOT_B_ADDR          (CONFIG_SLOT_B_ADDR + TOPOLOGY_SLOT_OFFSET)
+#define TOPOLOGY_VALID_MARKER         0x324F5054UL
+#define TOPOLOGY_UPLOAD_FLAG_COMMIT   0x0001U
+#define TOPOLOGY_UPLOAD_FLAG_RESET    0x0002U
 
 #define EVENT_CODE_LINK_DOWN          1000U
 #define EVENT_CODE_LINK_UP            1001U
@@ -110,6 +119,18 @@ typedef struct
   uint8_t payload[CONFIG_PAYLOAD_SIZE];
   uint32_t payload_crc;
 } config_update_req_t;
+
+typedef struct
+{
+  uint16_t request_token;
+  uint16_t chunk_index;
+  uint16_t chunk_words;
+  uint16_t flags;
+  uint32_t total_size;
+  uint32_t chunk_crc;
+  uint32_t generation;
+  uint16_t chunk_data[TOPOLOGY_UPLOAD_CHUNK_WORDS];
+} topology_chunk_req_t;
 
 typedef struct
 {
@@ -186,6 +207,7 @@ extern UART_HandleTypeDef huart2;
 
 extern osMessageQueueId_t qConfigApplyHandle;
 extern osMessageQueueId_t qConfigStoreHandle;
+extern osMessageQueueId_t qTopologyStoreHandle;
 
 extern sensor_state_t g_sensors[SENSOR_COUNT];
 extern status_payload_t g_status;
@@ -216,6 +238,7 @@ extern volatile uint16_t g_topology_v2_req_count;
 extern volatile uint16_t g_topology_v2_point_count;
 extern volatile uint16_t g_topology_v2_cmd_count;
 extern volatile uint16_t g_topology_v2_policy_count;
+extern volatile uint32_t g_topology_v2_active_size;
 
 bool modbus_read_holding_registers(uint8_t slave_id,
                                    uint16_t start_reg,

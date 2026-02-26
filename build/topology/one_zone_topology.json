@@ -1,0 +1,99 @@
+{
+  "ver_minor": 0,
+  "generation": 1,
+  "topology_id": 1,
+  "created_unix_s": 1772064000,
+  "flags": 0,
+  "modules": [
+    {
+      "module_id": 101,
+      "module_type": 1,
+      "bus_type": 1,
+      "bus_index": 0,
+      "slave_id": 1,
+      "zone_id": 1,
+      "req_first": 0,
+      "req_count": 1,
+      "cmd_first": 0,
+      "cmd_count": 0,
+      "offline_reprobe_ms": 30000,
+      "heartbeat_timeout_ms": 5000,
+      "capability_mask": 5,
+      "user_param0": 0,
+      "user_param1": 0
+    }
+  ],
+  "requests": [
+    {
+      "req_id": 1010,
+      "module_id": 101,
+      "fc": 3,
+      "priority": 1,
+      "start_reg": 0,
+      "reg_count": 6,
+      "period_ms": 5000,
+      "timeout_ms": 300,
+      "retries": 2,
+      "backoff_ms": 20,
+      "point_first": 0,
+      "point_count": 3,
+      "flags": 0
+    }
+  ],
+  "points": [
+    {
+      "point_id": 1100,
+      "module_id": 101,
+      "req_id": 1010,
+      "reg_offset": 0,
+      "point_type": 2,
+      "scale_pow10": -1,
+      "bit_index": 0,
+      "quality_policy": 1,
+      "publish_index": 0,
+      "stale_timeout_s": 20,
+      "alarm_low": 150,
+      "alarm_high": 350
+    },
+    {
+      "point_id": 1101,
+      "module_id": 101,
+      "req_id": 1010,
+      "reg_offset": 1,
+      "point_type": 1,
+      "scale_pow10": -1,
+      "bit_index": 0,
+      "quality_policy": 1,
+      "publish_index": 1,
+      "stale_timeout_s": 20,
+      "alarm_low": 300,
+      "alarm_high": 900
+    },
+    {
+      "point_id": 1102,
+      "module_id": 101,
+      "req_id": 1010,
+      "reg_offset": 2,
+      "point_type": 6,
+      "scale_pow10": 0,
+      "bit_index": 0,
+      "quality_policy": 1,
+      "publish_index": 2,
+      "stale_timeout_s": 20,
+      "alarm_low": 0,
+      "alarm_high": 1
+    }
+  ],
+  "commands": [],
+  "policies": [
+    {
+      "module_id": 101,
+      "on_timeout": 1,
+      "on_crc_error": 1,
+      "on_link_loss": 2,
+      "max_consecutive_fail": 3,
+      "recover_good_cycles": 2,
+      "safe_profile_id": 1
+    }
+  ]
+}

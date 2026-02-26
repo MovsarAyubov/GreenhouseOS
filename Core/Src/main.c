@@ -130,6 +130,7 @@ static const osThreadAttr_t healthWatchdogTask_attributes = {
 
 osMessageQueueId_t qConfigApplyHandle;
 osMessageQueueId_t qConfigStoreHandle;
+osMessageQueueId_t qTopologyStoreHandle;
 
 /* USER CODE END PV */
 
@@ -194,6 +195,7 @@ volatile uint16_t g_topology_v2_req_count = 0U;
 volatile uint16_t g_topology_v2_point_count = 0U;
 volatile uint16_t g_topology_v2_cmd_count = 0U;
 volatile uint16_t g_topology_v2_policy_count = 0U;
+volatile uint32_t g_topology_v2_active_size = 0U;
 
 bool g_setpoints_apply_in_progress = false;
 volatile uint8_t g_control_sync_pending = 0U;
@@ -549,6 +551,7 @@ int main(void)
   persist_diag_bootstrap();
   sensors_init_defaults();
   config_load_or_default();
+  GH_TopologyStorage_LoadActiveFromFlash();
   GH_ModbusMap_Init();
 
   /* USER CODE END 2 */
@@ -571,6 +574,7 @@ int main(void)
   /* USER CODE BEGIN RTOS_QUEUES */
   qConfigApplyHandle = osMessageQueueNew(4U, sizeof(config_apply_req_t), NULL);
   qConfigStoreHandle = osMessageQueueNew(4U, sizeof(config_update_req_t), NULL);
+  qTopologyStoreHandle = osMessageQueueNew(4U, sizeof(topology_chunk_req_t), NULL);
   /* USER CODE END RTOS_QUEUES */
 
   /* Create the thread(s) */

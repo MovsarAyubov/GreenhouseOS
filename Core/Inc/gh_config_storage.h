@@ -9,5 +9,6 @@ void GH_ConfigStorageTask_Run(void *argument);
 bool GH_ConfigStorage_PayloadValuesValid(const uint8_t *payload);
 bool GH_ConfigStorage_ValidateRequest(const config_update_req_t *req,
                                       config_result_code_t *out_result);
+void GH_TopologyStorage_LoadActiveFromFlash(void);
 
 #endif /* GH_CONFIG_STORAGE_H */

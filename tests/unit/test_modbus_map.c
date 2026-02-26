@@ -16,9 +16,25 @@
 #define CFG_OFF_REQ_CRC_LO 13U
 #define CFG_OFF_PAYLOAD_BASE 16U
 
+#define TOPO_OFF_SUBMIT_TOKEN 0U
+#define TOPO_OFF_RESULT_CODE 1U
+#define TOPO_OFF_RESULT_TOKEN 2U
+#define TOPO_OFF_ACTIVE_GEN_HI 6U
+#define TOPO_OFF_REQ_CHUNK_INDEX 10U
+#define TOPO_OFF_REQ_CHUNK_WORDS 11U
+#define TOPO_OFF_REQ_TOTAL_SIZE_HI 12U
+#define TOPO_OFF_REQ_TOTAL_SIZE_LO 13U
+#define TOPO_OFF_REQ_CHUNK_CRC_HI 14U
+#define TOPO_OFF_REQ_CHUNK_CRC_LO 15U
+#define TOPO_OFF_REQ_FLAGS 16U
+#define TOPO_OFF_REQ_GEN_HI 17U
+#define TOPO_OFF_REQ_GEN_LO 18U
+#define TOPO_OFF_CHUNK_BASE 20U
+
 int test_modbus_map_run(void)
 {
   uint16_t regs[4] = {0U};
+  uint16_t regs_u32[2] = {0U};
   uint16_t payload_words[CONFIG_PAYLOAD_SIZE / 2U] = {0U};
   uint8_t payload[CONFIG_PAYLOAD_SIZE] = {0U};
   uint32_t crc;
@@ -28,11 +44,24 @@ int test_modbus_map_run(void)
   uint16_t crc_hi;
   uint16_t crc_lo;
   uint16_t token = 7U;
+  uint16_t topo_words[4] = {0x1122U, 0x3344U, 0x5566U, 0x7788U};
+  uint8_t topo_bytes[8] = {0U};
+  uint32_t topo_crc;
+  uint32_t topo_total_size = 512U;
+  uint32_t topo_generation = 9U;
+  uint16_t topo_crc_hi;
+  uint16_t topo_crc_lo;
+  uint16_t topo_gen_hi;
+  uint16_t topo_gen_lo;
+  uint16_t topo_size_hi;
+  uint16_t topo_size_lo;
+  uint16_t topo_token = 22U;
 
   UT_OsHooks_Reset();
   memset(&g_status, 0, sizeof(g_status));
   g_active_config.version = 11U;
   qConfigStoreHandle = (osMessageQueueId_t)0x11;
+  qTopologyStoreHandle = (osMessageQueueId_t)0x22;
   g_setpoints_apply_in_progress = false;
 
   GH_ModbusMap_Init();
@@ -61,8 +90,10 @@ int test_modbus_map_run(void)
                                          payload_words));
 
   UT_ASSERT_EQ_U32(0U, ut_queue_put_count);
+  UT_ASSERT_EQ_U32(0U, ut_queue_put_count_config);
   UT_ASSERT_TRUE(GH_ModbusMap_WriteSingle((uint16_t)(GH_MB_CFG_BASE + CFG_OFF_SUBMIT_TOKEN), token));
   UT_ASSERT_EQ_U32(1U, ut_queue_put_count);
+  UT_ASSERT_EQ_U32(1U, ut_queue_put_count_config);
   UT_ASSERT_EQ_U32(token, ut_last_queue_req.request_token);
   UT_ASSERT_EQ_U32(req_version, ut_last_queue_req.version);
   UT_ASSERT_EQ_U32(crc, ut_last_queue_req.payload_crc);
@@ -72,6 +103,61 @@ int test_modbus_map_run(void)
   UT_ASSERT_EQ_U32(CFG_RESULT_QUEUED, regs[0]);
   UT_ASSERT_TRUE(GH_ModbusMap_ReadRange((uint16_t)(GH_MB_CFG_BASE + CFG_OFF_RESULT_TOKEN), 1U, regs));
   UT_ASSERT_EQ_U32(token, regs[0]);
+
+  topo_bytes[0] = 0x11U;
+  topo_bytes[1] = 0x22U;
+  topo_bytes[2] = 0x33U;
+  topo_bytes[3] = 0x44U;
+  topo_bytes[4] = 0x55U;
+  topo_bytes[5] = 0x66U;
+  topo_bytes[6] = 0x77U;
+  topo_bytes[7] = 0x88U;
+  topo_crc = gh_crc32_compute(topo_bytes, sizeof(topo_bytes));
+  topo_crc_hi = (uint16_t)((topo_crc >> 16U) & 0xFFFFU);
+  topo_crc_lo = (uint16_t)(topo_crc & 0xFFFFU);
+  topo_gen_hi = (uint16_t)((topo_generation >> 16U) & 0xFFFFU);
+  topo_gen_lo = (uint16_t)(topo_generation & 0xFFFFU);
+  topo_size_hi = (uint16_t)((topo_total_size >> 16U) & 0xFFFFU);
+  topo_size_lo = (uint16_t)(topo_total_size & 0xFFFFU);
+
+  UT_ASSERT_TRUE(GH_ModbusMap_WriteSingle((uint16_t)(GH_MB_TOPO_BASE + TOPO_OFF_REQ_CHUNK_INDEX), 0U));
+  UT_ASSERT_TRUE(GH_ModbusMap_WriteSingle((uint16_t)(GH_MB_TOPO_BASE + TOPO_OFF_REQ_CHUNK_WORDS), 4U));
+  UT_ASSERT_TRUE(GH_ModbusMap_WriteSingle((uint16_t)(GH_MB_TOPO_BASE + TOPO_OFF_REQ_TOTAL_SIZE_HI), topo_size_hi));
+  UT_ASSERT_TRUE(GH_ModbusMap_WriteSingle((uint16_t)(GH_MB_TOPO_BASE + TOPO_OFF_REQ_TOTAL_SIZE_LO), topo_size_lo));
+  UT_ASSERT_TRUE(GH_ModbusMap_WriteSingle((uint16_t)(GH_MB_TOPO_BASE + TOPO_OFF_REQ_CHUNK_CRC_HI), topo_crc_hi));
+  UT_ASSERT_TRUE(GH_ModbusMap_WriteSingle((uint16_t)(GH_MB_TOPO_BASE + TOPO_OFF_REQ_CHUNK_CRC_LO), topo_crc_lo));
+  UT_ASSERT_TRUE(GH_ModbusMap_WriteSingle((uint16_t)(GH_MB_TOPO_BASE + TOPO_OFF_REQ_FLAGS), 0U));
+  UT_ASSERT_TRUE(GH_ModbusMap_WriteSingle((uint16_t)(GH_MB_TOPO_BASE + TOPO_OFF_REQ_GEN_HI), topo_gen_hi));
+  UT_ASSERT_TRUE(GH_ModbusMap_WriteSingle((uint16_t)(GH_MB_TOPO_BASE + TOPO_OFF_REQ_GEN_LO), topo_gen_lo));
+  UT_ASSERT_TRUE(GH_ModbusMap_WriteRange((uint16_t)(GH_MB_TOPO_BASE + TOPO_OFF_CHUNK_BASE), 4U, topo_words));
+
+  UT_ASSERT_EQ_U32(0U, ut_queue_put_count_topology);
+  UT_ASSERT_TRUE(GH_ModbusMap_WriteSingle((uint16_t)(GH_MB_TOPO_BASE + TOPO_OFF_SUBMIT_TOKEN), topo_token));
+  UT_ASSERT_EQ_U32(1U, ut_queue_put_count_topology);
+  UT_ASSERT_EQ_U32(topo_token, ut_last_topology_queue_req.request_token);
+  UT_ASSERT_EQ_U32(0U, ut_last_topology_queue_req.chunk_index);
+  UT_ASSERT_EQ_U32(4U, ut_last_topology_queue_req.chunk_words);
+  UT_ASSERT_EQ_U32(topo_total_size, ut_last_topology_queue_req.total_size);
+  UT_ASSERT_EQ_U32(topo_crc, ut_last_topology_queue_req.chunk_crc);
+  UT_ASSERT_EQ_U32(topo_generation, ut_last_topology_queue_req.generation);
+  UT_ASSERT_EQ_U32(topo_words[0], ut_last_topology_queue_req.chunk_data[0]);
+  UT_ASSERT_EQ_U32(topo_words[3], ut_last_topology_queue_req.chunk_data[3]);
+
+  UT_ASSERT_TRUE(GH_ModbusMap_ReadRange((uint16_t)(GH_MB_TOPO_BASE + TOPO_OFF_RESULT_CODE), 1U, regs));
+  UT_ASSERT_EQ_U32(CFG_RESULT_QUEUED, regs[0]);
+  UT_ASSERT_TRUE(GH_ModbusMap_ReadRange((uint16_t)(GH_MB_TOPO_BASE + TOPO_OFF_RESULT_TOKEN), 1U, regs));
+  UT_ASSERT_EQ_U32(topo_token, regs[0]);
+
+  UT_ASSERT_TRUE(GH_ModbusMap_WriteSingle((uint16_t)(GH_MB_TOPO_BASE + TOPO_OFF_REQ_CHUNK_WORDS),
+                                          (uint16_t)(TOPOLOGY_UPLOAD_CHUNK_WORDS + 1U)));
+  UT_ASSERT_TRUE(GH_ModbusMap_WriteSingle((uint16_t)(GH_MB_TOPO_BASE + TOPO_OFF_SUBMIT_TOKEN), (uint16_t)(topo_token + 1U)));
+  UT_ASSERT_EQ_U32(1U, ut_queue_put_count_topology);
+  UT_ASSERT_TRUE(GH_ModbusMap_ReadRange((uint16_t)(GH_MB_TOPO_BASE + TOPO_OFF_RESULT_CODE), 1U, regs));
+  UT_ASSERT_EQ_U32(CFG_RESULT_REJECT_TOPOLOGY_BOUNDS, regs[0]);
+  UT_ASSERT_TRUE(GH_ModbusMap_ReadRange((uint16_t)(GH_MB_TOPO_BASE + TOPO_OFF_RESULT_TOKEN), 1U, regs));
+  UT_ASSERT_EQ_U32((uint16_t)(topo_token + 1U), regs[0]);
+  UT_ASSERT_TRUE(GH_ModbusMap_ReadRange((uint16_t)(GH_MB_TOPO_BASE + TOPO_OFF_ACTIVE_GEN_HI), 2U, regs_u32));
+  UT_ASSERT_EQ_U32(g_topology_v2_generation, (((uint32_t)regs_u32[0] << 16U) | regs_u32[1]));
 
   return 0;
 }

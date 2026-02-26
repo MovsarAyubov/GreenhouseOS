@@ -122,6 +122,7 @@ bool GH_TopologyV2_IsPayload(const uint8_t *payload, uint32_t payload_len);
 bool GH_TopologyV2_ValidatePayload(const uint8_t *payload,
                                    uint32_t payload_len,
                                    config_result_code_t *out_result);
+void GH_TopologyV2_SyncRuntimeFromPayload(const uint8_t *payload, uint32_t payload_len);
 void GH_TopologyV2_SyncRuntimeFromConfig(const active_config_t *cfg);
 
 #endif /* GH_TOPOLOGY_V2_H */

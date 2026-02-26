@@ -70,12 +70,15 @@ int test_config_storage_run(void)
   topo_build_min_valid_payload(req.payload);
   req.version = 12U;
   req.payload_crc = gh_crc32_compute(req.payload, CONFIG_PAYLOAD_SIZE);
-  UT_ASSERT_TRUE(GH_ConfigStorage_ValidateRequest(&req, &result));
+  UT_ASSERT_TRUE(!GH_ConfigStorage_ValidateRequest(&req, &result));
+  UT_ASSERT_EQ_U32(CFG_RESULT_REJECT_TOPOLOGY_SCHEMA, result);
+
+  UT_ASSERT_TRUE(GH_TopologyV2_ValidatePayload(req.payload, CONFIG_PAYLOAD_SIZE, &result));
   UT_ASSERT_EQ_U32(CFG_RESULT_IDLE, result);
 
   memset(&cfg, 0, sizeof(cfg));
   memcpy(cfg.payload, req.payload, CONFIG_PAYLOAD_SIZE);
-  GH_TopologyV2_SyncRuntimeFromConfig(&cfg);
+  GH_TopologyV2_SyncRuntimeFromPayload(cfg.payload, CONFIG_PAYLOAD_SIZE);
   UT_ASSERT_EQ_U32(1U, g_topology_v2_active);
   UT_ASSERT_EQ_U32(5U, g_topology_v2_generation);
   UT_ASSERT_EQ_U32(0U, g_topology_v2_module_count);
@@ -83,8 +86,7 @@ int test_config_storage_run(void)
   memcpy(&hdr, req.payload, sizeof(hdr));
   hdr.header_crc32 ^= 0x1U;
   memcpy(req.payload, &hdr, sizeof(hdr));
-  req.payload_crc = gh_crc32_compute(req.payload, CONFIG_PAYLOAD_SIZE);
-  UT_ASSERT_TRUE(!GH_ConfigStorage_ValidateRequest(&req, &result));
+  UT_ASSERT_TRUE(!GH_TopologyV2_ValidatePayload(req.payload, CONFIG_PAYLOAD_SIZE, &result));
   UT_ASSERT_EQ_U32(CFG_RESULT_REJECT_TOPOLOGY_CRC, result);
 
   topo_build_min_valid_payload(req.payload);
@@ -93,8 +95,7 @@ int test_config_storage_run(void)
   hdr.header_crc32 = 0U;
   hdr.header_crc32 = gh_crc32_compute((const uint8_t *)&hdr, sizeof(hdr));
   memcpy(req.payload, &hdr, sizeof(hdr));
-  req.payload_crc = gh_crc32_compute(req.payload, CONFIG_PAYLOAD_SIZE);
-  UT_ASSERT_TRUE(!GH_ConfigStorage_ValidateRequest(&req, &result));
+  UT_ASSERT_TRUE(!GH_TopologyV2_ValidatePayload(req.payload, CONFIG_PAYLOAD_SIZE, &result));
   UT_ASSERT_EQ_U32(CFG_RESULT_REJECT_TOPOLOGY_BUDGET, result);
 
   return 0;

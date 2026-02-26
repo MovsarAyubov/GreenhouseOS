@@ -131,6 +131,9 @@ typedef struct __attribute__((packed)) {
 } topo_module_v2_t;
 ```
 
+Authoring contract for module fields:
+- `docs/topology_module_contract_v1.md`
+
 Validation:
 
 - `module_id` unique.
@@ -232,16 +235,28 @@ typedef struct __attribute__((packed)) {
 
 ## 8. Transport and storage
 
-Current `CONFIG_PAYLOAD_SIZE=128` is not enough for topology v2.
+`CONFIG_PAYLOAD_SIZE=128` is not enough for topology v2 and remains only for legacy config payload.
 
-Required changes:
+Implemented baseline:
 
-- introduce chunked upload:
-  - write chunk payload (e.g. 240 bytes)
-  - chunk index + total size + rolling CRC
-  - explicit `COMMIT` command
-- store topology blob in dedicated A/B sectors (separate from legacy tiny config)
-- verify full blob before activation
+- chunked upload via dedicated Modbus topology window (`GH_MB_TOPO_BASE`, `GH_MB_TOPO_REGS`)
+- per-chunk metadata:
+  - `chunk_index`
+  - `chunk_words`
+  - `total_size`
+  - `chunk_crc32`
+  - `generation`
+  - `flags` (`RESET_STAGING`, `COMMIT`)
+- explicit submit trigger by changing non-zero `SUBMIT_TOKEN`
+- dedicated topology A/B persistence in flash (kept together with legacy slot writes)
+- full payload validation before activation:
+  - schema/version
+  - bounds
+  - section overlap
+  - CRCs
+  - budget checks
+
+Client integration sequence is specified in `docs/topology_upload_protocol.md`.
 
 ## 9. Industrial reliability requirements
 
@@ -279,4 +294,3 @@ Upgrade MCU (e.g. STM32H7 class) is justified if planned scope includes:
 - multiple heavy protocols concurrently,
 - TLS/PKI, OTA with compression, local historian,
 - strict low-latency control under high network load.
-

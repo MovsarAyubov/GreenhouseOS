@@ -14,7 +14,9 @@
 #define GH_MB_CFG_REGS        80U
 #define GH_MB_DIAG_BASE       (GH_MB_CFG_BASE + GH_MB_CFG_REGS)
 #define GH_MB_DIAG_REGS       32U
-#define GH_MB_TOTAL_REGS      (GH_MB_DATA_REGS + GH_MB_CFG_REGS + GH_MB_DIAG_REGS)
+#define GH_MB_TOPO_BASE       (GH_MB_DIAG_BASE + GH_MB_DIAG_REGS)
+#define GH_MB_TOPO_REGS       144U
+#define GH_MB_TOTAL_REGS      (GH_MB_DATA_REGS + GH_MB_CFG_REGS + GH_MB_DIAG_REGS + GH_MB_TOPO_REGS)
 
 typedef struct
 {
@@ -46,6 +48,10 @@ void GH_ModbusMap_MarkApplyResult(uint8_t slave_id, uint16_t trigger, bool appli
 void GH_ModbusMap_ReportConfigResult(uint16_t token,
                                      config_result_code_t result,
                                      uint32_t active_version);
+void GH_ModbusMap_ReportTopologyResult(uint16_t token,
+                                       config_result_code_t result,
+                                       uint32_t generation,
+                                       uint32_t active_size);
 
 /* Legacy bootstrap pointer for third-party Modbus stack. Avoid direct writes. */
 uint16_t *GH_ModbusMap_GetBackingStore(void);

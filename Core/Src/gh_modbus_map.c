@@ -80,9 +80,34 @@ enum
   DBG_OFF_INPUT_TASK_OK_LO = 31U
 };
 
+enum
+{
+  TOPO_OFF_SUBMIT_TOKEN = 0U,
+  TOPO_OFF_RESULT_CODE = 1U,
+  TOPO_OFF_RESULT_TOKEN = 2U,
+  TOPO_OFF_ACTIVE_FLAGS = 3U,
+  TOPO_OFF_ACTIVE_VER_MAJOR = 4U,
+  TOPO_OFF_ACTIVE_VER_MINOR = 5U,
+  TOPO_OFF_ACTIVE_GEN_HI = 6U,
+  TOPO_OFF_ACTIVE_GEN_LO = 7U,
+  TOPO_OFF_ACTIVE_SIZE_HI = 8U,
+  TOPO_OFF_ACTIVE_SIZE_LO = 9U,
+  TOPO_OFF_REQ_CHUNK_INDEX = 10U,
+  TOPO_OFF_REQ_CHUNK_WORDS = 11U,
+  TOPO_OFF_REQ_TOTAL_SIZE_HI = 12U,
+  TOPO_OFF_REQ_TOTAL_SIZE_LO = 13U,
+  TOPO_OFF_REQ_CHUNK_CRC_HI = 14U,
+  TOPO_OFF_REQ_CHUNK_CRC_LO = 15U,
+  TOPO_OFF_REQ_FLAGS = 16U,
+  TOPO_OFF_REQ_GEN_HI = 17U,
+  TOPO_OFF_REQ_GEN_LO = 18U,
+  TOPO_OFF_CHUNK_BASE = 20U
+};
+
 static uint16_t s_holding[GH_MB_TOTAL_REGS];
 static uint32_t s_last_ok_ms[GH_MB_MAX_SLAVES];
 static uint16_t s_last_submit_token = 0U;
+static uint16_t s_last_topo_submit_token = 0U;
 static osMutexId_t s_map_mutex = NULL;
 
 static bool map_ensure_mutex(void)
@@ -182,6 +207,11 @@ static uint16_t dbg_index(uint16_t off)
   return (uint16_t)(GH_MB_DIAG_BASE + off);
 }
 
+static uint16_t topo_index(uint16_t off)
+{
+  return (uint16_t)(GH_MB_TOPO_BASE + off);
+}
+
 static void cfg_set_u32(uint16_t off_hi, uint16_t off_lo, uint32_t value)
 {
   s_holding[cfg_index(off_hi)] = (uint16_t)((value >> 16U) & 0xFFFFU);
@@ -194,10 +224,22 @@ static void dbg_set_u32(uint16_t off_hi, uint16_t off_lo, uint32_t value)
   s_holding[dbg_index(off_lo)] = (uint16_t)(value & 0xFFFFU);
 }
 
+static void topo_set_u32(uint16_t off_hi, uint16_t off_lo, uint32_t value)
+{
+  s_holding[topo_index(off_hi)] = (uint16_t)((value >> 16U) & 0xFFFFU);
+  s_holding[topo_index(off_lo)] = (uint16_t)(value & 0xFFFFU);
+}
+
 static uint32_t cfg_get_u32(uint16_t off_hi, uint16_t off_lo)
 {
   return ((uint32_t)s_holding[cfg_index(off_hi)] << 16U) |
          (uint32_t)s_holding[cfg_index(off_lo)];
+}
+
+static uint32_t topo_get_u32(uint16_t off_hi, uint16_t off_lo)
+{
+  return ((uint32_t)s_holding[topo_index(off_hi)] << 16U) |
+         (uint32_t)s_holding[topo_index(off_lo)];
 }
 
 static void map_refresh_runtime_diag_nolock(void)
@@ -218,6 +260,12 @@ static void map_refresh_runtime_diag_nolock(void)
   dbg_set_u32(DBG_OFF_RX_SEM_OK_HI, DBG_OFF_RX_SEM_OK_LO, g_eth_diag_rx_sem_ok);
   dbg_set_u32(DBG_OFF_TX_SEM_OK_HI, DBG_OFF_TX_SEM_OK_LO, g_eth_diag_tx_sem_ok);
   dbg_set_u32(DBG_OFF_INPUT_TASK_OK_HI, DBG_OFF_INPUT_TASK_OK_LO, g_eth_diag_input_task_ok);
+
+  s_holding[topo_index(TOPO_OFF_ACTIVE_FLAGS)] = (g_topology_v2_active != 0U) ? 1U : 0U;
+  s_holding[topo_index(TOPO_OFF_ACTIVE_VER_MAJOR)] = g_topology_v2_ver_major;
+  s_holding[topo_index(TOPO_OFF_ACTIVE_VER_MINOR)] = g_topology_v2_ver_minor;
+  topo_set_u32(TOPO_OFF_ACTIVE_GEN_HI, TOPO_OFF_ACTIVE_GEN_LO, g_topology_v2_generation);
+  topo_set_u32(TOPO_OFF_ACTIVE_SIZE_HI, TOPO_OFF_ACTIVE_SIZE_LO, g_topology_v2_active_size);
 }
 
 static void cfg_report_result_nolock(uint16_t token,
@@ -229,6 +277,17 @@ static void cfg_report_result_nolock(uint16_t token,
   cfg_set_u32(CFG_OFF_ACTIVE_VER_HI, CFG_OFF_ACTIVE_VER_LO, active_version);
 }
 
+static void topo_report_result_nolock(uint16_t token,
+                                      config_result_code_t result,
+                                      uint32_t generation,
+                                      uint32_t active_size)
+{
+  s_holding[topo_index(TOPO_OFF_RESULT_CODE)] = (uint16_t)result;
+  s_holding[topo_index(TOPO_OFF_RESULT_TOKEN)] = token;
+  topo_set_u32(TOPO_OFF_ACTIVE_GEN_HI, TOPO_OFF_ACTIVE_GEN_LO, generation);
+  topo_set_u32(TOPO_OFF_ACTIVE_SIZE_HI, TOPO_OFF_ACTIVE_SIZE_LO, active_size);
+}
+
 void GH_ModbusMap_ReportConfigResult(uint16_t token,
                                      config_result_code_t result,
                                      uint32_t active_version)
@@ -238,6 +297,19 @@ void GH_ModbusMap_ReportConfigResult(uint16_t token,
     return;
   }
   cfg_report_result_nolock(token, result, active_version);
+  map_unlock();
+}
+
+void GH_ModbusMap_ReportTopologyResult(uint16_t token,
+                                       config_result_code_t result,
+                                       uint32_t generation,
+                                       uint32_t active_size)
+{
+  if (!map_lock())
+  {
+    return;
+  }
+  topo_report_result_nolock(token, result, generation, active_size);
   map_unlock();
 }
 
@@ -282,6 +354,53 @@ static bool cfg_try_submit(uint16_t token)
   return true;
 }
 
+static bool topo_try_submit(uint16_t token)
+{
+  topology_chunk_req_t req = {0};
+  uint16_t i;
+
+  req.request_token = token;
+  req.chunk_index = s_holding[topo_index(TOPO_OFF_REQ_CHUNK_INDEX)];
+  req.chunk_words = s_holding[topo_index(TOPO_OFF_REQ_CHUNK_WORDS)];
+  req.flags = s_holding[topo_index(TOPO_OFF_REQ_FLAGS)];
+  req.total_size = topo_get_u32(TOPO_OFF_REQ_TOTAL_SIZE_HI, TOPO_OFF_REQ_TOTAL_SIZE_LO);
+  req.chunk_crc = topo_get_u32(TOPO_OFF_REQ_CHUNK_CRC_HI, TOPO_OFF_REQ_CHUNK_CRC_LO);
+  req.generation = topo_get_u32(TOPO_OFF_REQ_GEN_HI, TOPO_OFF_REQ_GEN_LO);
+
+  if (req.chunk_words > TOPOLOGY_UPLOAD_CHUNK_WORDS)
+  {
+    topo_report_result_nolock(token,
+                              CFG_RESULT_REJECT_TOPOLOGY_BOUNDS,
+                              g_topology_v2_generation,
+                              g_topology_v2_active_size);
+    publish_event(EVENT_SEV_WARN, EVENT_CODE_CFG_REJECTED, 0U, (float)CFG_RESULT_REJECT_TOPOLOGY_BOUNDS);
+    return false;
+  }
+
+  for (i = 0U; i < req.chunk_words; i++)
+  {
+    req.chunk_data[i] = s_holding[topo_index((uint16_t)(TOPO_OFF_CHUNK_BASE + i))];
+  }
+
+  if ((osKernelGetState() != osKernelRunning) || (qTopologyStoreHandle == NULL))
+  {
+    topo_report_result_nolock(token, CFG_RESULT_REJECT_QUEUE_FULL, g_topology_v2_generation, g_topology_v2_active_size);
+    publish_event(EVENT_SEV_WARN, EVENT_CODE_CFG_REJECTED, 0U, (float)CFG_RESULT_REJECT_QUEUE_FULL);
+    return false;
+  }
+
+  if (osMessageQueuePut(qTopologyStoreHandle, &req, 0U, 0U) != osOK)
+  {
+    topo_report_result_nolock(token, CFG_RESULT_REJECT_QUEUE_FULL, g_topology_v2_generation, g_topology_v2_active_size);
+    publish_event(EVENT_SEV_WARN, EVENT_CODE_CFG_REJECTED, 0U, (float)CFG_RESULT_REJECT_QUEUE_FULL);
+    return false;
+  }
+
+  topo_report_result_nolock(token, CFG_RESULT_QUEUED, g_topology_v2_generation, g_topology_v2_active_size);
+  s_last_topo_submit_token = token;
+  return true;
+}
+
 static void cfg_maybe_submit_after_write(uint16_t start_idx, uint16_t qty)
 {
   uint16_t submit_idx = cfg_index(CFG_OFF_SUBMIT_TOKEN);
@@ -301,6 +420,25 @@ static void cfg_maybe_submit_after_write(uint16_t start_idx, uint16_t qty)
   (void)cfg_try_submit(token);
 }
 
+static void topo_maybe_submit_after_write(uint16_t start_idx, uint16_t qty)
+{
+  uint16_t submit_idx = topo_index(TOPO_OFF_SUBMIT_TOKEN);
+  uint16_t token;
+
+  if ((start_idx > submit_idx) || ((start_idx + qty) <= submit_idx))
+  {
+    return;
+  }
+
+  token = s_holding[submit_idx];
+  if ((token == 0U) || (token == s_last_topo_submit_token))
+  {
+    return;
+  }
+
+  (void)topo_try_submit(token);
+}
+
 void GH_ModbusMap_Init(void)
 {
   uint8_t s;
@@ -315,6 +453,7 @@ void GH_ModbusMap_Init(void)
   memset(s_holding, 0, sizeof(s_holding));
   memset(s_last_ok_ms, 0, sizeof(s_last_ok_ms));
   s_last_submit_token = 0U;
+  s_last_topo_submit_token = 0U;
 
   for (s = 1U; s <= GH_MB_MAX_SLAVES; s++)
   {
@@ -330,6 +469,12 @@ void GH_ModbusMap_Init(void)
   s_holding[cfg_index(CFG_OFF_RESULT_TOKEN)] = 0U;
   cfg_set_u32(CFG_OFF_ACTIVE_VER_HI, CFG_OFF_ACTIVE_VER_LO, g_active_config.version);
   s_holding[cfg_index(CFG_OFF_SUBMIT_TOKEN)] = 0U;
+
+  s_holding[topo_index(TOPO_OFF_RESULT_CODE)] = (uint16_t)CFG_RESULT_IDLE;
+  s_holding[topo_index(TOPO_OFF_RESULT_TOKEN)] = 0U;
+  s_holding[topo_index(TOPO_OFF_SUBMIT_TOKEN)] = 0U;
+  s_holding[topo_index(TOPO_OFF_REQ_CHUNK_WORDS)] = TOPOLOGY_UPLOAD_CHUNK_WORDS;
+  s_holding[topo_index(TOPO_OFF_REQ_FLAGS)] = 0U;
   map_refresh_runtime_diag_nolock();
   map_unlock();
 }
@@ -400,6 +545,7 @@ bool GH_ModbusMap_WriteSingle(uint16_t addr, uint16_t value)
   }
   s_holding[idx] = value;
   cfg_maybe_submit_after_write(idx, 1U);
+  topo_maybe_submit_after_write(idx, 1U);
   map_unlock();
   return true;
 }
@@ -419,6 +565,7 @@ bool GH_ModbusMap_WriteRange(uint16_t start_addr, uint16_t qty, const uint16_t *
   }
   memcpy(&s_holding[idx], values, (uint32_t)qty * sizeof(uint16_t));
   cfg_maybe_submit_after_write(idx, qty);
+  topo_maybe_submit_after_write(idx, qty);
   map_unlock();
   return true;
 }

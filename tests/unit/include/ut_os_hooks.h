@@ -7,9 +7,13 @@
 
 extern uint32_t ut_queue_put_count;
 extern uint32_t ut_queue_get_count;
+extern uint32_t ut_queue_put_count_config;
+extern uint32_t ut_queue_put_count_topology;
 extern osStatus_t ut_queue_put_status;
 extern osStatus_t ut_queue_get_status;
 extern config_update_req_t ut_last_queue_req;
+extern topology_chunk_req_t ut_last_topology_queue_req;
+extern osMessageQueueId_t ut_last_queue_id;
 
 void UT_OsHooks_Reset(void);
 

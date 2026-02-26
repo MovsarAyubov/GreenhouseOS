@@ -4,6 +4,7 @@ UART_HandleTypeDef huart2 = {0};
 
 osMessageQueueId_t qConfigApplyHandle = (osMessageQueueId_t)0x2;
 osMessageQueueId_t qConfigStoreHandle = (osMessageQueueId_t)0x3;
+osMessageQueueId_t qTopologyStoreHandle = (osMessageQueueId_t)0x4;
 
 sensor_state_t g_sensors[SENSOR_COUNT] = {0};
 status_payload_t g_status = {0};
@@ -21,6 +22,7 @@ volatile uint16_t g_topology_v2_req_count = 0U;
 volatile uint16_t g_topology_v2_point_count = 0U;
 volatile uint16_t g_topology_v2_cmd_count = 0U;
 volatile uint16_t g_topology_v2_policy_count = 0U;
+volatile uint32_t g_topology_v2_active_size = 0U;
 volatile uint32_t g_persist_boot_count = 0U;
 volatile uint32_t g_persist_poweron_count = 0U;
 volatile uint32_t g_persist_error_handler_count = 0U;
