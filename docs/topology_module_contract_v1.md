@@ -16,9 +16,9 @@ This document defines strict authoring rules for these fields in `topology_confi
 - `user_param1`
 
 Note:
-- Current firmware fully validates/stores topology and exposes active metadata.
-- Detailed runtime behavior based on all module table fields is part of the next data-driven runtime stage.
-- This contract is needed now to keep topology files consistent across projects.
+- Current firmware validates/stores topology, enforces semantic references/budgets, and exposes active metadata.
+- Runtime is already data-driven for RTU1 polling (`requests[]`, FC3) with fallback to legacy mode when no active poll plan exists.
+- Full behavior for all module fields (`commands[]`, `policies[]`, multi-bus routing) is still staged for next runtime increments.
 
 ## 1. Module Type Enum
 
@@ -48,6 +48,10 @@ Rules:
 - `1` = `BUS_RTU1`
 - `2` = `BUS_RTU2`
 - `3` = `BUS_TCP`
+
+Temporary runtime note:
+- current firmware validator accepts only `bus_type=1` and `bus_type=3`;
+- `bus_type=2` is temporarily rejected as schema-invalid until RTU2 routing is implemented.
 
 `bus_index`:
 - For RTU: physical line index, typically `0` (line A) or `1` (line B).

@@ -107,6 +107,10 @@ typedef enum {
 } point_type_t;
 ```
 
+Temporary implementation note:
+- `BUS_RTU2 (2)` is reserved in schema but currently rejected by both firmware validator and host `topology_packer`.
+- Accepted bus types in current release: `BUS_RTU1 (1)` and `BUS_TCP (3)`.
+
 ## 6. Tables
 
 ### 6.1 Module table
@@ -139,6 +143,7 @@ Validation:
 - `module_id` unique.
 - `(bus_type,bus_index,slave_id)` unique for RTU.
 - `req_first+req_count` and `cmd_first+cmd_count` in bounds.
+- current runtime allows only `bus_type=1` and `bus_type=3`; `bus_type=2` is rejected until RTU2 routing is implemented.
 
 ### 6.2 Request profile table
 

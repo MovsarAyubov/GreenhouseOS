@@ -171,6 +171,12 @@ class TopologyPackerTests(unittest.TestCase):
         with self.assertRaises(packer.TopologyPackError):
             packer.build_topology_blob(cfg)
 
+    def test_reject_bus_type_2_temporarily_unsupported(self) -> None:
+        cfg = _minimal_valid_config()
+        cfg["modules"][0]["bus_type"] = 2
+        with self.assertRaises(packer.TopologyPackError):
+            packer.build_topology_blob(cfg)
+
     def test_reject_modules_over_budget(self) -> None:
         cfg = _minimal_valid_config()
         cfg["modules"] = []

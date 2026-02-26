@@ -4,6 +4,7 @@
 #include "gh_crc32.h"
 #include "gh_modbus_map.h"
 #include "gh_topology_v2.h"
+#include "gh_topology_runtime.h"
 
 #include <math.h>
 #include <stddef.h>
@@ -49,8 +50,260 @@ static uint32_t s_topology_staging_size = 0U;
 static uint32_t s_topology_staging_generation = 0U;
 static uint32_t s_topology_staging_chunks_mask = 0U;
 
+#define GH_TOPOLOGY_RUNTIME_MAX_REQS        GH_TOPOLOGY_V2_MAX_REQ_PROFILES
+#define GH_TOPOLOGY_RUNTIME_BUS_RTU1        1U
+#define GH_TOPOLOGY_RUNTIME_FC_READ_HOLDING 3U
+#define GH_TOPOLOGY_RUNTIME_DIAG_BASE_REG   128U
+#define GH_TOPOLOGY_RUNTIME_DIAG_REG_COUNT  6U
+#define GH_TOPOLOGY_RUNTIME_SENSOR_WORDS    9U
+
+#define GH_TOPOLOGY_BUS_RTU1                1U
+#define GH_TOPOLOGY_BUS_RTU2                2U
+#define GH_TOPOLOGY_BUS_TCP                 3U
+
+#define GH_TOPOLOGY_REQ_FC_READ_HOLDING     3U
+#define GH_TOPOLOGY_REQ_FC_READ_INPUT       4U
+
+#define GH_TOPOLOGY_CMD_FC_WRITE_SINGLE     6U
+#define GH_TOPOLOGY_CMD_FC_WRITE_MULTI      16U
+
+#define GH_TOPOLOGY_POINT_TYPE_U16          1U
+#define GH_TOPOLOGY_POINT_TYPE_S16          2U
+#define GH_TOPOLOGY_POINT_TYPE_U32          3U
+#define GH_TOPOLOGY_POINT_TYPE_S32          4U
+#define GH_TOPOLOGY_POINT_TYPE_FLOAT        5U
+#define GH_TOPOLOGY_POINT_TYPE_BIT          6U
+
+#define GH_TOPOLOGY_RTU_SLAVE_MAX           247U
+
+static gh_topology_poll_req_t s_poll_reqs[GH_TOPOLOGY_RUNTIME_MAX_REQS];
+static uint16_t s_poll_req_count = 0U;
+static uint32_t s_poll_generation = 0U;
+static uint32_t s_rtu1_slave_mask = 0U;
+static osMutexId_t s_runtime_mutex = NULL;
+
+static bool runtime_ensure_mutex(void)
+{
+  if (s_runtime_mutex != NULL)
+  {
+    return true;
+  }
+
+  if (osKernelGetState() != osKernelRunning)
+  {
+    return true;
+  }
+
+  s_runtime_mutex = osMutexNew(NULL);
+  return (s_runtime_mutex != NULL);
+}
+
+static bool runtime_lock(void)
+{
+  if (!runtime_ensure_mutex())
+  {
+    return false;
+  }
+
+  if (s_runtime_mutex == NULL)
+  {
+    return true;
+  }
+
+  return (osMutexAcquire(s_runtime_mutex, osWaitForever) == osOK);
+}
+
+static void runtime_unlock(void)
+{
+  if (s_runtime_mutex != NULL)
+  {
+    (void)osMutexRelease(s_runtime_mutex);
+  }
+}
+
+static uint8_t telemetry_word_count_for_req(const gh_topology_v2_req_t *req)
+{
+  if ((req == NULL) || (req->start_reg != 0U))
+  {
+    return 0U;
+  }
+  if (req->reg_count >= GH_TOPOLOGY_RUNTIME_SENSOR_WORDS)
+  {
+    return GH_TOPOLOGY_RUNTIME_SENSOR_WORDS;
+  }
+  return (uint8_t)req->reg_count;
+}
+
+static uint8_t diag_offset_for_req(const gh_topology_v2_req_t *req)
+{
+  uint32_t req_end;
+  uint32_t diag_end;
+
+  if (req == NULL)
+  {
+    return GH_TOPOLOGY_DIAG_OFFSET_NONE;
+  }
+
+  req_end = (uint32_t)req->start_reg + (uint32_t)req->reg_count;
+  diag_end = GH_TOPOLOGY_RUNTIME_DIAG_BASE_REG + GH_TOPOLOGY_RUNTIME_DIAG_REG_COUNT;
+  if (((uint32_t)req->start_reg > GH_TOPOLOGY_RUNTIME_DIAG_BASE_REG) || (req_end < diag_end))
+  {
+    return GH_TOPOLOGY_DIAG_OFFSET_NONE;
+  }
+
+  return (uint8_t)(GH_TOPOLOGY_RUNTIME_DIAG_BASE_REG - req->start_reg);
+}
+
+void GH_TopologyRuntime_Clear(void)
+{
+  if (!runtime_lock())
+  {
+    return;
+  }
+
+  memset(s_poll_reqs, 0, sizeof(s_poll_reqs));
+  s_poll_req_count = 0U;
+  s_poll_generation = 0U;
+  s_rtu1_slave_mask = 0U;
+
+  runtime_unlock();
+}
+
+bool GH_TopologyRuntime_RebuildFromPayload(const uint8_t *payload, uint32_t payload_len)
+{
+  gh_topology_v2_header_t hdr;
+  gh_topology_v2_module_t mod;
+  gh_topology_v2_req_t req;
+  gh_topology_poll_req_t next_reqs[GH_TOPOLOGY_RUNTIME_MAX_REQS];
+  uint16_t next_count = 0U;
+  uint32_t next_mask = 0U;
+  uint16_t mod_idx;
+  uint16_t req_idx;
+  uint32_t req_end;
+  config_result_code_t validation_result = CFG_RESULT_IDLE;
+
+  if ((payload == NULL) || !GH_TopologyV2_ValidatePayload(payload, payload_len, &validation_result))
+  {
+    GH_TopologyRuntime_Clear();
+    return false;
+  }
+
+  memcpy(&hdr, payload, sizeof(hdr));
+  memset(next_reqs, 0, sizeof(next_reqs));
+
+  for (mod_idx = 0U; mod_idx < hdr.module_count; mod_idx++)
+  {
+    const uint8_t *mod_ptr = &payload[hdr.off_modules + ((uint32_t)mod_idx * sizeof(mod))];
+
+    memcpy(&mod, mod_ptr, sizeof(mod));
+    if ((mod.bus_type != GH_TOPOLOGY_RUNTIME_BUS_RTU1) ||
+        (mod.slave_id == 0U) ||
+        (mod.slave_id > MODBUS_MAX_SLAVES))
+    {
+      continue;
+    }
+
+    req_end = (uint32_t)mod.req_first + (uint32_t)mod.req_count;
+    if (req_end > hdr.req_count)
+    {
+      continue;
+    }
+
+    next_mask |= (1UL << (uint32_t)(mod.slave_id - 1U));
+
+    for (req_idx = mod.req_first; req_idx < req_end; req_idx++)
+    {
+      const uint8_t *req_ptr = &payload[hdr.off_requests + ((uint32_t)req_idx * sizeof(req))];
+      gh_topology_poll_req_t *dst;
+
+      memcpy(&req, req_ptr, sizeof(req));
+      if ((req.module_id != mod.module_id) ||
+          (req.fc != GH_TOPOLOGY_RUNTIME_FC_READ_HOLDING) ||
+          (req.reg_count == 0U) ||
+          (req.reg_count > MODBUS_MAX_REGS_PER_REQ))
+      {
+        continue;
+      }
+
+      if (next_count >= GH_TOPOLOGY_RUNTIME_MAX_REQS)
+      {
+        break;
+      }
+
+      dst = &next_reqs[next_count];
+      dst->slave_id = mod.slave_id;
+      dst->start_reg = req.start_reg;
+      dst->reg_count = req.reg_count;
+      dst->period_ms = (req.period_ms == 0U) ? MODBUS_POLL_PERIOD_MS : req.period_ms;
+      dst->retries = (req.retries == 0U) ? MODBUS_RETRY_COUNT : req.retries;
+      dst->backoff_ms = req.backoff_ms;
+      dst->telemetry_word_count = telemetry_word_count_for_req(&req);
+      dst->diag_offset = diag_offset_for_req(&req);
+      next_count++;
+    }
+  }
+
+  if (!runtime_lock())
+  {
+    return false;
+  }
+
+  memcpy(s_poll_reqs, next_reqs, sizeof(next_reqs));
+  s_poll_req_count = next_count;
+  s_poll_generation = hdr.generation;
+  s_rtu1_slave_mask = next_mask;
+
+  runtime_unlock();
+  return true;
+}
+
+bool GH_TopologyRuntime_CopyPollPlan(gh_topology_poll_req_t *out_reqs,
+                                     uint16_t max_reqs,
+                                     uint16_t *out_count,
+                                     uint32_t *out_generation,
+                                     uint32_t *out_rtu1_slave_mask)
+{
+  if (out_count == NULL)
+  {
+    return false;
+  }
+  if ((out_reqs == NULL) && (max_reqs > 0U))
+  {
+    return false;
+  }
+
+  if (!runtime_lock())
+  {
+    return false;
+  }
+
+  if (s_poll_req_count > max_reqs)
+  {
+    runtime_unlock();
+    return false;
+  }
+
+  if (s_poll_req_count > 0U)
+  {
+    memcpy(out_reqs, s_poll_reqs, (uint32_t)s_poll_req_count * sizeof(gh_topology_poll_req_t));
+  }
+  *out_count = s_poll_req_count;
+  if (out_generation != NULL)
+  {
+    *out_generation = s_poll_generation;
+  }
+  if (out_rtu1_slave_mask != NULL)
+  {
+    *out_rtu1_slave_mask = s_rtu1_slave_mask;
+  }
+
+  runtime_unlock();
+  return true;
+}
+
 static void topo_runtime_clear(void)
 {
+  GH_TopologyRuntime_Clear();
   g_topology_v2_active = 0U;
   g_topology_v2_ver_major = 0U;
   g_topology_v2_ver_minor = 0U;
@@ -128,6 +381,426 @@ static bool topo_ranges_overlap(const topo_range_t *a, const topo_range_t *b)
     return false;
   }
   return !((a->end <= b->start) || (b->end <= a->start));
+}
+
+static bool topo_is_rtu_bus(uint8_t bus_type)
+{
+  return (bus_type == GH_TOPOLOGY_BUS_RTU1);
+}
+
+static bool topo_u16_span_fits(uint16_t first, uint16_t count, uint16_t limit)
+{
+  return (((uint32_t)first + (uint32_t)count) <= (uint32_t)limit);
+}
+
+static bool topo_index_in_span(uint16_t index, uint16_t first, uint16_t count)
+{
+  uint32_t end = (uint32_t)first + (uint32_t)count;
+  return ((uint32_t)index >= (uint32_t)first) && ((uint32_t)index < end);
+}
+
+static void topo_read_module_row(const uint8_t *payload,
+                                 const gh_topology_v2_header_t *hdr,
+                                 uint16_t index,
+                                 gh_topology_v2_module_t *out)
+{
+  memcpy(out,
+         &payload[hdr->off_modules + ((uint32_t)index * sizeof(gh_topology_v2_module_t))],
+         sizeof(gh_topology_v2_module_t));
+}
+
+static void topo_read_req_row(const uint8_t *payload,
+                              const gh_topology_v2_header_t *hdr,
+                              uint16_t index,
+                              gh_topology_v2_req_t *out)
+{
+  memcpy(out,
+         &payload[hdr->off_requests + ((uint32_t)index * sizeof(gh_topology_v2_req_t))],
+         sizeof(gh_topology_v2_req_t));
+}
+
+static void topo_read_point_row(const uint8_t *payload,
+                                const gh_topology_v2_header_t *hdr,
+                                uint16_t index,
+                                gh_topology_v2_point_t *out)
+{
+  memcpy(out,
+         &payload[hdr->off_points + ((uint32_t)index * sizeof(gh_topology_v2_point_t))],
+         sizeof(gh_topology_v2_point_t));
+}
+
+static void topo_read_cmd_row(const uint8_t *payload,
+                              const gh_topology_v2_header_t *hdr,
+                              uint16_t index,
+                              gh_topology_v2_cmd_t *out)
+{
+  memcpy(out,
+         &payload[hdr->off_commands + ((uint32_t)index * sizeof(gh_topology_v2_cmd_t))],
+         sizeof(gh_topology_v2_cmd_t));
+}
+
+static void topo_read_policy_row(const uint8_t *payload,
+                                 const gh_topology_v2_header_t *hdr,
+                                 uint16_t index,
+                                 gh_topology_v2_policy_t *out)
+{
+  memcpy(out,
+         &payload[hdr->off_policies + ((uint32_t)index * sizeof(gh_topology_v2_policy_t))],
+         sizeof(gh_topology_v2_policy_t));
+}
+
+static bool topo_find_module_by_id(const uint8_t *payload,
+                                   const gh_topology_v2_header_t *hdr,
+                                   uint16_t module_id,
+                                   gh_topology_v2_module_t *out_module)
+{
+  uint16_t i;
+  gh_topology_v2_module_t mod;
+
+  for (i = 0U; i < hdr->module_count; i++)
+  {
+    topo_read_module_row(payload, hdr, i, &mod);
+    if (mod.module_id == module_id)
+    {
+      if (out_module != NULL)
+      {
+        *out_module = mod;
+      }
+      return true;
+    }
+  }
+  return false;
+}
+
+static bool topo_find_req_by_id(const uint8_t *payload,
+                                const gh_topology_v2_header_t *hdr,
+                                uint16_t req_id,
+                                gh_topology_v2_req_t *out_req,
+                                uint16_t *out_req_index)
+{
+  uint16_t i;
+  gh_topology_v2_req_t req;
+
+  for (i = 0U; i < hdr->req_count; i++)
+  {
+    topo_read_req_row(payload, hdr, i, &req);
+    if (req.req_id == req_id)
+    {
+      if (out_req != NULL)
+      {
+        *out_req = req;
+      }
+      if (out_req_index != NULL)
+      {
+        *out_req_index = i;
+      }
+      return true;
+    }
+  }
+  return false;
+}
+
+static bool topo_reg_windows_overlap(uint16_t start_a,
+                                     uint16_t count_a,
+                                     uint16_t start_b,
+                                     uint16_t count_b)
+{
+  uint32_t end_a = (uint32_t)start_a + (uint32_t)count_a;
+  uint32_t end_b = (uint32_t)start_b + (uint32_t)count_b;
+
+  return !((end_a <= (uint32_t)start_b) || (end_b <= (uint32_t)start_a));
+}
+
+static bool topo_validate_semantics(const uint8_t *payload,
+                                    const gh_topology_v2_header_t *hdr,
+                                    config_result_code_t *out_result)
+{
+  uint16_t i;
+  uint16_t j;
+  gh_topology_v2_module_t mod_i;
+  gh_topology_v2_module_t mod_j;
+  gh_topology_v2_req_t req_i;
+  gh_topology_v2_req_t req_j;
+  gh_topology_v2_point_t point_i;
+  gh_topology_v2_point_t point_j;
+  gh_topology_v2_cmd_t cmd_i;
+  gh_topology_v2_cmd_t cmd_j;
+  gh_topology_v2_policy_t pol_i;
+  gh_topology_v2_policy_t pol_j;
+  gh_topology_v2_module_t owner_mod;
+  gh_topology_v2_req_t owner_req;
+  uint16_t owner_req_idx;
+
+  for (i = 0U; i < hdr->module_count; i++)
+  {
+    topo_read_module_row(payload, hdr, i, &mod_i);
+
+    if ((mod_i.bus_type != GH_TOPOLOGY_BUS_RTU1) &&
+        (mod_i.bus_type != GH_TOPOLOGY_BUS_TCP))
+    {
+      *out_result = CFG_RESULT_REJECT_TOPOLOGY_SCHEMA;
+      return false;
+    }
+    if (topo_is_rtu_bus(mod_i.bus_type))
+    {
+      if ((mod_i.slave_id == 0U) || (mod_i.slave_id > GH_TOPOLOGY_RTU_SLAVE_MAX))
+      {
+        *out_result = CFG_RESULT_REJECT_TOPOLOGY_SCHEMA;
+        return false;
+      }
+    }
+    else if ((mod_i.bus_type == GH_TOPOLOGY_BUS_TCP) && (mod_i.slave_id != 0U))
+    {
+      *out_result = CFG_RESULT_REJECT_TOPOLOGY_SCHEMA;
+      return false;
+    }
+
+    if (!topo_u16_span_fits(mod_i.req_first, mod_i.req_count, hdr->req_count) ||
+        !topo_u16_span_fits(mod_i.cmd_first, mod_i.cmd_count, hdr->cmd_count))
+    {
+      *out_result = CFG_RESULT_REJECT_TOPOLOGY_BOUNDS;
+      return false;
+    }
+
+    for (j = 0U; j < i; j++)
+    {
+      topo_read_module_row(payload, hdr, j, &mod_j);
+      if (mod_i.module_id == mod_j.module_id)
+      {
+        *out_result = CFG_RESULT_REJECT_TOPOLOGY_COLLISION;
+        return false;
+      }
+      if (topo_is_rtu_bus(mod_i.bus_type) &&
+          topo_is_rtu_bus(mod_j.bus_type) &&
+          (mod_i.bus_type == mod_j.bus_type) &&
+          (mod_i.bus_index == mod_j.bus_index) &&
+          (mod_i.slave_id == mod_j.slave_id))
+      {
+        *out_result = CFG_RESULT_REJECT_TOPOLOGY_COLLISION;
+        return false;
+      }
+    }
+  }
+
+  for (i = 0U; i < hdr->req_count; i++)
+  {
+    topo_read_req_row(payload, hdr, i, &req_i);
+
+    if ((req_i.fc != GH_TOPOLOGY_REQ_FC_READ_HOLDING) &&
+        (req_i.fc != GH_TOPOLOGY_REQ_FC_READ_INPUT))
+    {
+      *out_result = CFG_RESULT_REJECT_TOPOLOGY_SCHEMA;
+      return false;
+    }
+    if ((req_i.reg_count == 0U) || (req_i.reg_count > MODBUS_MAX_REGS_PER_REQ))
+    {
+      *out_result = CFG_RESULT_REJECT_TOPOLOGY_SCHEMA;
+      return false;
+    }
+    if (!topo_u16_span_fits(req_i.point_first, req_i.point_count, hdr->point_count))
+    {
+      *out_result = CFG_RESULT_REJECT_TOPOLOGY_BOUNDS;
+      return false;
+    }
+    if (!topo_find_module_by_id(payload, hdr, req_i.module_id, &owner_mod))
+    {
+      *out_result = CFG_RESULT_REJECT_TOPOLOGY_SCHEMA;
+      return false;
+    }
+    if (!topo_index_in_span(i, owner_mod.req_first, owner_mod.req_count))
+    {
+      *out_result = CFG_RESULT_REJECT_TOPOLOGY_BOUNDS;
+      return false;
+    }
+    if ((owner_mod.bus_type == GH_TOPOLOGY_BUS_RTU1) &&
+        (owner_mod.slave_id >= 1U) &&
+        (owner_mod.slave_id <= MODBUS_MAX_SLAVES) &&
+        (req_i.fc != GH_TOPOLOGY_REQ_FC_READ_HOLDING))
+    {
+      *out_result = CFG_RESULT_REJECT_TOPOLOGY_SCHEMA;
+      return false;
+    }
+
+    for (j = 0U; j < i; j++)
+    {
+      topo_read_req_row(payload, hdr, j, &req_j);
+      if (req_i.req_id == req_j.req_id)
+      {
+        *out_result = CFG_RESULT_REJECT_TOPOLOGY_COLLISION;
+        return false;
+      }
+      if ((req_i.module_id == req_j.module_id) &&
+          topo_reg_windows_overlap(req_i.start_reg, req_i.reg_count, req_j.start_reg, req_j.reg_count))
+      {
+        *out_result = CFG_RESULT_REJECT_TOPOLOGY_COLLISION;
+        return false;
+      }
+    }
+  }
+
+  for (i = 0U; i < hdr->point_count; i++)
+  {
+    topo_read_point_row(payload, hdr, i, &point_i);
+
+    if ((point_i.point_type < GH_TOPOLOGY_POINT_TYPE_U16) ||
+        (point_i.point_type > GH_TOPOLOGY_POINT_TYPE_BIT))
+    {
+      *out_result = CFG_RESULT_REJECT_TOPOLOGY_SCHEMA;
+      return false;
+    }
+    if ((point_i.point_type == GH_TOPOLOGY_POINT_TYPE_BIT) && (point_i.bit_index > 15U))
+    {
+      *out_result = CFG_RESULT_REJECT_TOPOLOGY_SCHEMA;
+      return false;
+    }
+    if (!topo_find_module_by_id(payload, hdr, point_i.module_id, NULL))
+    {
+      *out_result = CFG_RESULT_REJECT_TOPOLOGY_SCHEMA;
+      return false;
+    }
+    if (!topo_find_req_by_id(payload, hdr, point_i.req_id, &owner_req, &owner_req_idx))
+    {
+      *out_result = CFG_RESULT_REJECT_TOPOLOGY_SCHEMA;
+      return false;
+    }
+    if (!topo_index_in_span(i, owner_req.point_first, owner_req.point_count) ||
+        (owner_req.module_id != point_i.module_id) ||
+        (point_i.reg_offset >= owner_req.reg_count))
+    {
+      *out_result = CFG_RESULT_REJECT_TOPOLOGY_BOUNDS;
+      return false;
+    }
+    if (!topo_find_module_by_id(payload, hdr, owner_req.module_id, &owner_mod) ||
+        !topo_index_in_span(owner_req_idx, owner_mod.req_first, owner_mod.req_count))
+    {
+      *out_result = CFG_RESULT_REJECT_TOPOLOGY_BOUNDS;
+      return false;
+    }
+
+    for (j = 0U; j < i; j++)
+    {
+      topo_read_point_row(payload, hdr, j, &point_j);
+      if ((point_i.point_id == point_j.point_id) || (point_i.publish_index == point_j.publish_index))
+      {
+        *out_result = CFG_RESULT_REJECT_TOPOLOGY_COLLISION;
+        return false;
+      }
+    }
+  }
+
+  for (i = 0U; i < hdr->cmd_count; i++)
+  {
+    topo_read_cmd_row(payload, hdr, i, &cmd_i);
+
+    if ((cmd_i.fc != GH_TOPOLOGY_CMD_FC_WRITE_SINGLE) &&
+        (cmd_i.fc != GH_TOPOLOGY_CMD_FC_WRITE_MULTI))
+    {
+      *out_result = CFG_RESULT_REJECT_TOPOLOGY_SCHEMA;
+      return false;
+    }
+    if ((cmd_i.max_reg_count == 0U) || (cmd_i.max_reg_count > MODBUS_MAX_REGS_PER_REQ))
+    {
+      *out_result = CFG_RESULT_REJECT_TOPOLOGY_SCHEMA;
+      return false;
+    }
+    if ((cmd_i.fc == GH_TOPOLOGY_CMD_FC_WRITE_SINGLE) && (cmd_i.max_reg_count != 1U))
+    {
+      *out_result = CFG_RESULT_REJECT_TOPOLOGY_SCHEMA;
+      return false;
+    }
+    if (!topo_find_module_by_id(payload, hdr, cmd_i.module_id, &owner_mod))
+    {
+      *out_result = CFG_RESULT_REJECT_TOPOLOGY_SCHEMA;
+      return false;
+    }
+    if (!topo_index_in_span(i, owner_mod.cmd_first, owner_mod.cmd_count))
+    {
+      *out_result = CFG_RESULT_REJECT_TOPOLOGY_BOUNDS;
+      return false;
+    }
+
+    for (j = 0U; j < i; j++)
+    {
+      topo_read_cmd_row(payload, hdr, j, &cmd_j);
+      if (cmd_i.cmd_id == cmd_j.cmd_id)
+      {
+        *out_result = CFG_RESULT_REJECT_TOPOLOGY_COLLISION;
+        return false;
+      }
+    }
+  }
+
+  for (i = 0U; i < hdr->policy_count; i++)
+  {
+    topo_read_policy_row(payload, hdr, i, &pol_i);
+    if (!topo_find_module_by_id(payload, hdr, pol_i.module_id, NULL))
+    {
+      *out_result = CFG_RESULT_REJECT_TOPOLOGY_SCHEMA;
+      return false;
+    }
+
+    for (j = 0U; j < i; j++)
+    {
+      topo_read_policy_row(payload, hdr, j, &pol_j);
+      if (pol_i.module_id == pol_j.module_id)
+      {
+        *out_result = CFG_RESULT_REJECT_TOPOLOGY_COLLISION;
+        return false;
+      }
+    }
+  }
+
+  return true;
+}
+
+static bool topo_validate_poll_budget(const uint8_t *payload,
+                                      const gh_topology_v2_header_t *hdr)
+{
+  uint16_t i;
+  gh_topology_v2_req_t req;
+  gh_topology_v2_module_t mod;
+  uint16_t retries;
+  uint16_t period_ms;
+  uint32_t req_worst_ms;
+  uint64_t util_permille = 0ULL;
+
+  for (i = 0U; i < hdr->req_count; i++)
+  {
+    topo_read_req_row(payload, hdr, i, &req);
+    if (!topo_find_module_by_id(payload, hdr, req.module_id, &mod))
+    {
+      return false;
+    }
+    if ((mod.bus_type != GH_TOPOLOGY_BUS_RTU1) ||
+        (mod.slave_id == 0U) ||
+        (mod.slave_id > MODBUS_MAX_SLAVES) ||
+        (req.fc != GH_TOPOLOGY_REQ_FC_READ_HOLDING))
+    {
+      continue;
+    }
+
+    retries = (req.retries == 0U) ? MODBUS_RETRY_COUNT : req.retries;
+    period_ms = (req.period_ms == 0U) ? MODBUS_POLL_PERIOD_MS : req.period_ms;
+    if (period_ms == 0U)
+    {
+      return false;
+    }
+
+    req_worst_ms = ((uint32_t)retries * (MODBUS_UART_TX_TIMEOUT_MS + MODBUS_RTU_RESP_TIMEOUT_MS));
+    if (retries > 1U)
+    {
+      req_worst_ms += ((uint32_t)(retries - 1U) * (uint32_t)req.backoff_ms);
+    }
+    req_worst_ms += MODBUS_INTER_SLAVE_DELAY_MS;
+    util_permille += (((uint64_t)req_worst_ms * 1000ULL) + ((uint64_t)period_ms - 1ULL)) / (uint64_t)period_ms;
+
+    if (util_permille > 1000ULL)
+    {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 bool GH_TopologyV2_IsPayload(const uint8_t *payload, uint32_t payload_len)
@@ -243,6 +916,16 @@ bool GH_TopologyV2_ValidatePayload(const uint8_t *payload,
     }
   }
 
+  if (!topo_validate_semantics(payload, &hdr, out_result))
+  {
+    return false;
+  }
+  if (!topo_validate_poll_budget(payload, &hdr))
+  {
+    *out_result = CFG_RESULT_REJECT_TOPOLOGY_BUDGET;
+    return false;
+  }
+
   *out_result = CFG_RESULT_IDLE;
   return true;
 }
@@ -260,6 +943,7 @@ void GH_TopologyV2_SyncRuntimeFromPayload(const uint8_t *payload, uint32_t paylo
   }
 
   memcpy(&hdr, payload, sizeof(hdr));
+  (void)GH_TopologyRuntime_RebuildFromPayload(payload, payload_len);
   g_topology_v2_active = 1U;
   g_topology_v2_ver_major = hdr.ver_major;
   g_topology_v2_ver_minor = hdr.ver_minor;

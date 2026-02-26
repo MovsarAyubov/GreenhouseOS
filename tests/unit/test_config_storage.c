@@ -36,13 +36,120 @@ static void topo_build_min_valid_payload(uint8_t *payload)
   memcpy(payload, &hdr, sizeof(hdr));
 }
 
+static void topo_finalize_crc(uint8_t *payload, uint32_t total_size)
+{
+  gh_topology_v2_header_t hdr = {0};
+
+  memcpy(&hdr, payload, sizeof(hdr));
+  hdr.total_size = total_size;
+  hdr.body_crc32 = gh_crc32_compute(&payload[sizeof(hdr)], total_size - sizeof(hdr));
+  hdr.header_crc32 = 0U;
+  hdr.header_crc32 = gh_crc32_compute((const uint8_t *)&hdr, sizeof(hdr));
+  memcpy(payload, &hdr, sizeof(hdr));
+}
+
+static bool topo_build_runtime_valid_payload(uint8_t *payload, uint32_t payload_capacity, uint32_t *out_size)
+{
+  gh_topology_v2_header_t hdr = {0};
+  gh_topology_v2_module_t mod = {0};
+  gh_topology_v2_req_t req = {0};
+  gh_topology_v2_point_t point = {0};
+  uint32_t total_size;
+
+  if ((payload == NULL) || (out_size == NULL))
+  {
+    return false;
+  }
+
+  total_size = sizeof(hdr) + sizeof(mod) + sizeof(req) + sizeof(point);
+  if (payload_capacity < total_size)
+  {
+    return false;
+  }
+
+  memset(payload, 0, payload_capacity);
+
+  mod.module_id = 101U;
+  mod.module_type = 1U;
+  mod.bus_type = 1U;
+  mod.bus_index = 0U;
+  mod.slave_id = 1U;
+  mod.zone_id = 1U;
+  mod.req_first = 0U;
+  mod.req_count = 1U;
+  mod.cmd_first = 0U;
+  mod.cmd_count = 0U;
+  mod.offline_reprobe_ms = 30000U;
+  mod.heartbeat_timeout_ms = 2000U;
+
+  req.req_id = 11U;
+  req.module_id = mod.module_id;
+  req.fc = 3U;
+  req.priority = 0U;
+  req.start_reg = 0U;
+  req.reg_count = 9U;
+  req.period_ms = 5000U;
+  req.timeout_ms = 300U;
+  req.retries = 2U;
+  req.backoff_ms = 20U;
+  req.point_first = 0U;
+  req.point_count = 1U;
+  req.flags = 0U;
+
+  point.point_id = 1001U;
+  point.module_id = mod.module_id;
+  point.req_id = req.req_id;
+  point.reg_offset = 0U;
+  point.point_type = 1U;
+  point.scale_pow10 = -1;
+  point.bit_index = 0U;
+  point.quality_policy = 0U;
+  point.publish_index = 1U;
+  point.stale_timeout_s = 30U;
+  point.alarm_low = 0;
+  point.alarm_high = 1000;
+
+  hdr.magic = GH_TOPOLOGY_V2_MAGIC;
+  hdr.ver_major = GH_TOPOLOGY_V2_VERSION_MAJOR;
+  hdr.ver_minor = 0U;
+  hdr.total_size = total_size;
+  hdr.generation = 7U;
+  hdr.topology_id = 123U;
+  hdr.created_unix_s = 1700000000U;
+  hdr.flags = 0U;
+  hdr.module_count = 1U;
+  hdr.req_count = 1U;
+  hdr.point_count = 1U;
+  hdr.cmd_count = 0U;
+  hdr.policy_count = 0U;
+  hdr.off_modules = sizeof(hdr);
+  hdr.off_requests = hdr.off_modules + sizeof(mod);
+  hdr.off_points = hdr.off_requests + sizeof(req);
+  hdr.off_commands = 0U;
+  hdr.off_policies = 0U;
+  hdr.body_crc32 = 0U;
+  hdr.header_crc32 = 0U;
+
+  memcpy(payload, &hdr, sizeof(hdr));
+  memcpy(&payload[hdr.off_modules], &mod, sizeof(mod));
+  memcpy(&payload[hdr.off_requests], &req, sizeof(req));
+  memcpy(&payload[hdr.off_points], &point, sizeof(point));
+  topo_finalize_crc(payload, total_size);
+  *out_size = total_size;
+  return true;
+}
+
 int test_config_storage_run(void)
 {
   config_update_req_t req = {0};
   config_result_code_t result = CFG_RESULT_IDLE;
   active_config_t cfg = {0};
+  uint8_t topo_blob[256] = {0};
+  uint32_t topo_blob_size = 0U;
   float bad_value = 2000.0f;
   gh_topology_v2_header_t hdr = {0};
+  gh_topology_v2_module_t mod_row = {0};
+  gh_topology_v2_req_t req_row = {0};
 
   g_active_config.version = 10U;
   g_topology_v2_active = 0U;
@@ -96,6 +203,36 @@ int test_config_storage_run(void)
   hdr.header_crc32 = gh_crc32_compute((const uint8_t *)&hdr, sizeof(hdr));
   memcpy(req.payload, &hdr, sizeof(hdr));
   UT_ASSERT_TRUE(!GH_TopologyV2_ValidatePayload(req.payload, CONFIG_PAYLOAD_SIZE, &result));
+  UT_ASSERT_EQ_U32(CFG_RESULT_REJECT_TOPOLOGY_BUDGET, result);
+
+  UT_ASSERT_TRUE(topo_build_runtime_valid_payload(topo_blob, sizeof(topo_blob), &topo_blob_size));
+  UT_ASSERT_TRUE(GH_TopologyV2_ValidatePayload(topo_blob, topo_blob_size, &result));
+  UT_ASSERT_EQ_U32(CFG_RESULT_IDLE, result);
+
+  memcpy(&hdr, topo_blob, sizeof(hdr));
+  memcpy(&req_row, &topo_blob[hdr.off_requests], sizeof(req_row));
+  req_row.module_id = 999U;
+  memcpy(&topo_blob[hdr.off_requests], &req_row, sizeof(req_row));
+  topo_finalize_crc(topo_blob, topo_blob_size);
+  UT_ASSERT_TRUE(!GH_TopologyV2_ValidatePayload(topo_blob, topo_blob_size, &result));
+  UT_ASSERT_EQ_U32(CFG_RESULT_REJECT_TOPOLOGY_SCHEMA, result);
+
+  UT_ASSERT_TRUE(topo_build_runtime_valid_payload(topo_blob, sizeof(topo_blob), &topo_blob_size));
+  memcpy(&hdr, topo_blob, sizeof(hdr));
+  memcpy(&mod_row, &topo_blob[hdr.off_modules], sizeof(mod_row));
+  mod_row.bus_type = 2U;
+  memcpy(&topo_blob[hdr.off_modules], &mod_row, sizeof(mod_row));
+  topo_finalize_crc(topo_blob, topo_blob_size);
+  UT_ASSERT_TRUE(!GH_TopologyV2_ValidatePayload(topo_blob, topo_blob_size, &result));
+  UT_ASSERT_EQ_U32(CFG_RESULT_REJECT_TOPOLOGY_SCHEMA, result);
+
+  UT_ASSERT_TRUE(topo_build_runtime_valid_payload(topo_blob, sizeof(topo_blob), &topo_blob_size));
+  memcpy(&hdr, topo_blob, sizeof(hdr));
+  memcpy(&req_row, &topo_blob[hdr.off_requests], sizeof(req_row));
+  req_row.period_ms = 10U;
+  memcpy(&topo_blob[hdr.off_requests], &req_row, sizeof(req_row));
+  topo_finalize_crc(topo_blob, topo_blob_size);
+  UT_ASSERT_TRUE(!GH_TopologyV2_ValidatePayload(topo_blob, topo_blob_size, &result));
   UT_ASSERT_EQ_U32(CFG_RESULT_REJECT_TOPOLOGY_BUDGET, result);
 
   return 0;

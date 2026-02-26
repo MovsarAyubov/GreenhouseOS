@@ -20,6 +20,10 @@ GH_TOPOLOGY_V2_MAX_POINTS = 640
 GH_TOPOLOGY_V2_MAX_COMMANDS = 192
 GH_TOPOLOGY_V2_MAX_POLICIES = 64
 
+BUS_RTU1 = 1
+BUS_RTU2 = 2
+BUS_TCP = 3
+
 TOPOLOGY_MAX_BLOB_SIZE = 4096
 TOPOLOGY_UPLOAD_CHUNK_WORDS = 120
 TOPOLOGY_UPLOAD_CHUNK_BYTES = TOPOLOGY_UPLOAD_CHUNK_WORDS * 2
@@ -251,6 +255,17 @@ def _ensure_references(modules: List[Dict[str, Any]],
             raise TopologyPackError(f"policies[{idx}].module_id={module_id}: module not found")
 
 
+def _ensure_supported_bus_types(modules: List[Dict[str, Any]]) -> None:
+    for idx, item in enumerate(modules):
+        bus_type = _parse_int(item["bus_type"], f"modules[{idx}].bus_type")
+        if bus_type == BUS_RTU2:
+            raise TopologyPackError(
+                f"modules[{idx}].bus_type=2: temporarily unsupported by firmware (RTU2 routing not implemented)"
+            )
+        if bus_type not in (BUS_RTU1, BUS_TCP):
+            raise TopologyPackError(f"modules[{idx}].bus_type={bus_type}: unsupported bus_type")
+
+
 def build_topology_blob(config: Dict[str, Any]) -> bytes:
     modules = _expect_list(config, "modules")
     requests = _expect_list(config, "requests")
@@ -273,6 +288,7 @@ def build_topology_blob(config: Dict[str, Any]) -> bytes:
     _ensure_unique(requests, "req_id", "requests")
     _ensure_unique(points, "point_id", "points")
     _ensure_unique(commands, "cmd_id", "commands")
+    _ensure_supported_bus_types(modules)
     _ensure_references(modules, requests, points, commands, policies)
 
     modules_blob = _pack_modules(modules)
