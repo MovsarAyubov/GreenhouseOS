@@ -202,6 +202,8 @@ int test_config_storage_run(void)
   gh_topology_v2_module_t mod_row = {0};
   gh_topology_v2_req_t req_row = {0};
   gh_topology_v2_point_t point_row = {0};
+  gh_topology_v2_policy_t pol_row = {0};
+  uint32_t new_total_size = 0U;
 
   g_active_config.version = 10U;
   g_topology_v2_active = 0U;
@@ -334,6 +336,25 @@ int test_config_storage_run(void)
   }
   topo_finalize_crc(topo_blob, topo_blob_size);
   UT_ASSERT_TRUE(!GH_TopologyV2_ValidatePayload(topo_blob, topo_blob_size, &result));
+  UT_ASSERT_EQ_U32(CFG_RESULT_REJECT_TOPOLOGY_SCHEMA, result);
+
+  UT_ASSERT_TRUE(topo_build_runtime_valid_payload(topo_blob, sizeof(topo_blob), &topo_blob_size));
+  memcpy(&hdr, topo_blob, sizeof(hdr));
+  new_total_size = hdr.total_size + sizeof(pol_row);
+  UT_ASSERT_TRUE(new_total_size <= sizeof(topo_blob));
+  pol_row.module_id = 101U;
+  pol_row.on_timeout = 3U;
+  pol_row.on_crc_error = 1U;
+  pol_row.on_link_loss = 2U;
+  pol_row.max_consecutive_fail = 3U;
+  pol_row.recover_good_cycles = 2U;
+  pol_row.safe_profile_id = 0U;
+  hdr.policy_count = 1U;
+  hdr.off_policies = hdr.total_size;
+  memcpy(&topo_blob[hdr.off_policies], &pol_row, sizeof(pol_row));
+  memcpy(topo_blob, &hdr, sizeof(hdr));
+  topo_finalize_crc(topo_blob, new_total_size);
+  UT_ASSERT_TRUE(!GH_TopologyV2_ValidatePayload(topo_blob, new_total_size, &result));
   UT_ASSERT_EQ_U32(CFG_RESULT_REJECT_TOPOLOGY_SCHEMA, result);
 
   return 0;

@@ -36,6 +36,17 @@ static void modbus_count_rx_error(void)
 static osMutexId_t s_modbus_io_mutex = NULL;
 static osEventFlagsId_t s_modbus_io_events = NULL;
 static bool s_modbus_io_ready = false;
+static volatile modbus_io_error_t s_last_io_error = MODBUS_IO_ERR_NONE;
+
+static void modbus_set_last_error(modbus_io_error_t err)
+{
+  s_last_io_error = err;
+}
+
+modbus_io_error_t modbus_get_last_error(void)
+{
+  return s_last_io_error;
+}
 
 bool GH_ModbusIo_OnUartTxCplt(UART_HandleTypeDef *huart)
 {
@@ -151,6 +162,7 @@ static bool modbus_uart_tx_it(const uint8_t *data, uint16_t len)
   {
     rs485_set_tx(false);
     modbus_count_tx_error();
+    modbus_set_last_error(MODBUS_IO_ERR_UART);
     return false;
   }
 
@@ -163,6 +175,7 @@ static bool modbus_uart_tx_it(const uint8_t *data, uint16_t len)
     (void)HAL_UART_AbortTransmit(&huart2);
     rs485_set_tx(false);
     modbus_count_tx_error();
+    modbus_set_last_error(MODBUS_IO_ERR_TIMEOUT);
     return false;
   }
   if ((flags & GH_MODBUS_IO_EVT_ERROR) != 0U)
@@ -170,6 +183,7 @@ static bool modbus_uart_tx_it(const uint8_t *data, uint16_t len)
     (void)HAL_UART_AbortTransmit(&huart2);
     rs485_set_tx(false);
     modbus_count_tx_error();
+    modbus_set_last_error(MODBUS_IO_ERR_UART);
     return false;
   }
 
@@ -181,6 +195,7 @@ static bool modbus_uart_tx_it(const uint8_t *data, uint16_t len)
       (void)HAL_UART_AbortTransmit(&huart2);
       rs485_set_tx(false);
       modbus_count_tx_error();
+      modbus_set_last_error(MODBUS_IO_ERR_TIMEOUT);
       return false;
     }
   }
@@ -197,6 +212,7 @@ static bool modbus_uart_rx_it(uint8_t *data, uint16_t len, uint32_t timeout_ms)
   if (HAL_UART_Receive_IT(&huart2, data, len) != HAL_OK)
   {
     modbus_count_rx_error();
+    modbus_set_last_error(MODBUS_IO_ERR_UART);
     return false;
   }
 
@@ -208,12 +224,14 @@ static bool modbus_uart_rx_it(uint8_t *data, uint16_t len, uint32_t timeout_ms)
   {
     (void)HAL_UART_AbortReceive(&huart2);
     modbus_count_rx_error();
+    modbus_set_last_error(MODBUS_IO_ERR_TIMEOUT);
     return false;
   }
   if ((flags & GH_MODBUS_IO_EVT_ERROR) != 0U)
   {
     (void)HAL_UART_AbortReceive(&huart2);
     modbus_count_rx_error();
+    modbus_set_last_error(MODBUS_IO_ERR_UART);
     return false;
   }
 
@@ -233,16 +251,20 @@ static bool modbus_read_holding_registers_impl(uint8_t slave_id,
   uint16_t exp_len;
   uint16_t i;
 
+  modbus_set_last_error(MODBUS_IO_ERR_NONE);
   if ((reg_count == 0U) || (reg_count > MODBUS_MAX_REGS_PER_REQ))
   {
+    modbus_set_last_error(MODBUS_IO_ERR_FRAME);
     return false;
   }
   if (!modbus_io_ensure_ready())
   {
+    modbus_set_last_error(MODBUS_IO_ERR_UART);
     return false;
   }
   if (osMutexAcquire(s_modbus_io_mutex, osWaitForever) != osOK)
   {
+    modbus_set_last_error(MODBUS_IO_ERR_UART);
     return false;
   }
 
@@ -277,6 +299,7 @@ static bool modbus_read_holding_registers_impl(uint8_t slave_id,
   if ((resp[0] != slave_id) || (resp[1] != MODBUS_FUNC_READ_HOLDING) || (resp[2] != (uint8_t)(reg_count * 2U)))
   {
     modbus_count_rx_error();
+    modbus_set_last_error(MODBUS_IO_ERR_FRAME);
     (void)osMutexRelease(s_modbus_io_mutex);
     return false;
   }
@@ -285,6 +308,7 @@ static bool modbus_read_holding_registers_impl(uint8_t slave_id,
   if (modbus_crc16(resp, (uint16_t)(exp_len - 2U)) != resp_crc)
   {
     modbus_count_rx_error();
+    modbus_set_last_error(MODBUS_IO_ERR_CRC);
     (void)osMutexRelease(s_modbus_io_mutex);
     return false;
   }
@@ -294,6 +318,7 @@ static bool modbus_read_holding_registers_impl(uint8_t slave_id,
     out_regs[i] = (uint16_t)(((uint16_t)resp[3U + (2U * i)] << 8U) |
                               (uint16_t)resp[3U + (2U * i) + 1U]);
   }
+  modbus_set_last_error(MODBUS_IO_ERR_NONE);
   (void)osMutexRelease(s_modbus_io_mutex);
   return true;
 }
@@ -329,6 +354,7 @@ static bool modbus_write_single_holding_register_impl(uint8_t slave_id,
   uint16_t crc;
   uint16_t resp_crc;
 
+  modbus_set_last_error(MODBUS_IO_ERR_NONE);
   req[0] = slave_id;
   req[1] = MODBUS_FUNC_WRITE_SINGLE;
   req[2] = (uint8_t)(reg >> 8U);
@@ -341,10 +367,12 @@ static bool modbus_write_single_holding_register_impl(uint8_t slave_id,
 
   if (!modbus_io_ensure_ready())
   {
+    modbus_set_last_error(MODBUS_IO_ERR_UART);
     return false;
   }
   if (osMutexAcquire(s_modbus_io_mutex, osWaitForever) != osOK)
   {
+    modbus_set_last_error(MODBUS_IO_ERR_UART);
     return false;
   }
 
@@ -367,13 +395,21 @@ static bool modbus_write_single_holding_register_impl(uint8_t slave_id,
 
   resp_crc = (uint16_t)resp[6] | ((uint16_t)resp[7] << 8U);
   if ((resp[0] != slave_id) || (resp[1] != MODBUS_FUNC_WRITE_SINGLE) || (resp[2] != req[2]) || (resp[3] != req[3]) ||
-      (resp[4] != req[4]) || (resp[5] != req[5]) ||
-      (modbus_crc16(resp, 6U) != resp_crc))
+      (resp[4] != req[4]) || (resp[5] != req[5]))
   {
     modbus_count_rx_error();
+    modbus_set_last_error(MODBUS_IO_ERR_FRAME);
     (void)osMutexRelease(s_modbus_io_mutex);
     return false;
   }
+  if (modbus_crc16(resp, 6U) != resp_crc)
+  {
+    modbus_count_rx_error();
+    modbus_set_last_error(MODBUS_IO_ERR_CRC);
+    (void)osMutexRelease(s_modbus_io_mutex);
+    return false;
+  }
+  modbus_set_last_error(MODBUS_IO_ERR_NONE);
   (void)osMutexRelease(s_modbus_io_mutex);
   return true;
 }
@@ -404,16 +440,20 @@ static bool modbus_write_multiple_holding_registers_impl(uint8_t slave_id,
   uint16_t i;
   uint16_t req_len;
 
+  modbus_set_last_error(MODBUS_IO_ERR_NONE);
   if ((reg_count == 0U) || (reg_count > MODBUS_MAX_REGS_PER_REQ))
   {
+    modbus_set_last_error(MODBUS_IO_ERR_FRAME);
     return false;
   }
   if (!modbus_io_ensure_ready())
   {
+    modbus_set_last_error(MODBUS_IO_ERR_UART);
     return false;
   }
   if (osMutexAcquire(s_modbus_io_mutex, osWaitForever) != osOK)
   {
+    modbus_set_last_error(MODBUS_IO_ERR_UART);
     return false;
   }
 
@@ -454,13 +494,21 @@ static bool modbus_write_multiple_holding_registers_impl(uint8_t slave_id,
   resp_crc = (uint16_t)resp[6] | ((uint16_t)resp[7] << 8U);
   if ((resp[0] != slave_id) || (resp[1] != MODBUS_FUNC_WRITE_MULTIPLE) ||
       (resp[2] != req[2]) || (resp[3] != req[3]) ||
-      (resp[4] != req[4]) || (resp[5] != req[5]) ||
-      (modbus_crc16(resp, 6U) != resp_crc))
+      (resp[4] != req[4]) || (resp[5] != req[5]))
   {
     modbus_count_rx_error();
+    modbus_set_last_error(MODBUS_IO_ERR_FRAME);
     (void)osMutexRelease(s_modbus_io_mutex);
     return false;
   }
+  if (modbus_crc16(resp, 6U) != resp_crc)
+  {
+    modbus_count_rx_error();
+    modbus_set_last_error(MODBUS_IO_ERR_CRC);
+    (void)osMutexRelease(s_modbus_io_mutex);
+    return false;
+  }
+  modbus_set_last_error(MODBUS_IO_ERR_NONE);
   (void)osMutexRelease(s_modbus_io_mutex);
   return true;
 }

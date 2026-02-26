@@ -121,6 +121,11 @@ bool modbus_write_multiple_holding_registers_timeout(uint8_t slave_id,
   return modbus_write_multiple_holding_registers(slave_id, start_reg, reg_count, regs);
 }
 
+modbus_io_error_t modbus_get_last_error(void)
+{
+  return MODBUS_IO_ERR_NONE;
+}
+
 bool apply_control_to_slave(uint8_t slave_id, const active_config_t *cfg)
 {
   (void)slave_id;

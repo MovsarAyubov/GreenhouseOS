@@ -232,6 +232,17 @@ typedef struct __attribute__((packed)) {
 } topo_fault_policy_v2_t;
 ```
 
+Current action enum used by firmware:
+- `0`: `keep_last`
+- `1`: `safe_default` (marks points as `FAULT`)
+- `2`: `force_offline` (marks points as `OFFLINE`)
+
+Current runtime behavior:
+- `on_timeout` and `on_crc_error` are selected from RTU read error classification.
+- `on_link_loss` is selected when `comm_fail_streak >= max_consecutive_fail` (or default offline threshold if `0`).
+- `recover_good_cycles` overrides recovery hysteresis for returning to `QUALITY_OK`.
+- `safe_profile_id` is accepted/validated and preserved, but not yet bound to automatic writeback profile execution.
+
 ## 7. Runtime contracts
 
 - Poll engine works only from request profiles.

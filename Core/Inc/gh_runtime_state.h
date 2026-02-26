@@ -88,6 +88,15 @@ typedef enum
 
 typedef enum
 {
+  MODBUS_IO_ERR_NONE = 0U,
+  MODBUS_IO_ERR_TIMEOUT = 1U,
+  MODBUS_IO_ERR_CRC = 2U,
+  MODBUS_IO_ERR_FRAME = 3U,
+  MODBUS_IO_ERR_UART = 4U
+} modbus_io_error_t;
+
+typedef enum
+{
   CFG_RESULT_IDLE = 0U,
   CFG_RESULT_QUEUED = 1U,
   CFG_RESULT_APPLIED = 2U,
@@ -263,6 +272,7 @@ bool modbus_write_multiple_holding_registers_timeout(uint8_t slave_id,
                                                      uint16_t reg_count,
                                                      const uint16_t *regs,
                                                      uint32_t timeout_ms);
+modbus_io_error_t modbus_get_last_error(void);
 bool apply_control_to_slave(uint8_t slave_id, const active_config_t *cfg);
 bool config_write_to_slot(uint32_t slot_addr, uint32_t sector, const active_config_t *cfg);
 

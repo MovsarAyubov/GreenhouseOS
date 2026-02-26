@@ -32,10 +32,16 @@
 #define GH_POINT_TYPE_BIT             6U
 #define GH_CMD_FC_WRITE_SINGLE        6U
 #define GH_CMD_FC_WRITE_MULTI         16U
+#define GH_POLICY_REASON_NONE         0U
+#define GH_POLICY_REASON_TIMEOUT      1U
+#define GH_POLICY_REASON_CRC          2U
+#define GH_POLICY_REASON_LINK_LOSS    3U
+#define GH_POLICY_REASON_RECOVERED    4U
 
 static gh_topology_poll_req_t s_topology_plan_cache[GH_TOPOLOGY_V2_MAX_REQ_PROFILES] __attribute__((section(".ccmram")));
 static gh_topology_point_binding_t s_topology_point_cache[GH_TOPOLOGY_V2_MAX_POINTS] __attribute__((section(".ccmram")));
 static gh_topology_cmd_binding_t s_topology_cmd_cache[GH_TOPOLOGY_V2_MAX_COMMANDS] __attribute__((section(".ccmram")));
+static gh_topology_policy_binding_t s_topology_policy_cache[GH_TOPOLOGY_V2_MAX_POLICIES] __attribute__((section(".ccmram")));
 
 static uint8_t gh_slave_to_index(uint8_t slave_id)
 {
@@ -81,10 +87,12 @@ static bool gh_modbus_read_holding_retry(uint8_t slave_id,
                                          uint16_t *out_regs,
                                          uint32_t timeout_ms,
                                          uint8_t retries,
-                                         uint8_t backoff_ms)
+                                         uint8_t backoff_ms,
+                                         modbus_io_error_t *out_last_err)
 {
   uint8_t attempt;
   uint8_t retry_count;
+  modbus_io_error_t last_err = MODBUS_IO_ERR_NONE;
 
   retry_count = (retries == 0U) ? MODBUS_RETRY_COUNT : retries;
   if (timeout_ms == 0U)
@@ -102,8 +110,13 @@ static bool gh_modbus_read_holding_retry(uint8_t slave_id,
                                               timeout_ms))
     {
       task_heartbeat_kick(TASK_BIT_MODBUS);
+      if (out_last_err != NULL)
+      {
+        *out_last_err = MODBUS_IO_ERR_NONE;
+      }
       return true;
     }
+    last_err = modbus_get_last_error();
     task_heartbeat_kick(TASK_BIT_MODBUS);
     if ((attempt + 1U) < retry_count)
     {
@@ -111,6 +124,10 @@ static bool gh_modbus_read_holding_retry(uint8_t slave_id,
     }
   }
 
+  if (out_last_err != NULL)
+  {
+    *out_last_err = last_err;
+  }
   return false;
 }
 
@@ -235,6 +252,139 @@ static void gh_set_points_quality_for_slave(uint8_t slave_id,
       g_sensors[publish_idx].quality = quality;
     }
   }
+}
+
+static void gh_set_quality_for_slave(uint8_t slave_id,
+                                     uint8_t quality,
+                                     const gh_topology_point_binding_t *points,
+                                     uint16_t point_count)
+{
+  if ((points != NULL) && (point_count > 0U))
+  {
+    gh_set_points_quality_for_slave(slave_id, quality, points, point_count);
+  }
+  else
+  {
+    gh_set_slave_quality(slave_id, quality);
+  }
+}
+
+static const gh_topology_policy_binding_t *gh_find_policy_for_slave(const gh_topology_policy_binding_t *policies,
+                                                                    uint16_t policy_count,
+                                                                    uint8_t slave_id)
+{
+  uint16_t i;
+
+  if ((policies == NULL) || (policy_count == 0U))
+  {
+    return NULL;
+  }
+
+  for (i = 0U; i < policy_count; i++)
+  {
+    if (policies[i].slave_id == slave_id)
+    {
+      return &policies[i];
+    }
+  }
+
+  return NULL;
+}
+
+static uint8_t gh_policy_map_error_reason(modbus_io_error_t err)
+{
+  if (err == MODBUS_IO_ERR_CRC)
+  {
+    return GH_POLICY_REASON_CRC;
+  }
+  return GH_POLICY_REASON_TIMEOUT;
+}
+
+static uint16_t gh_policy_recover_cycles(const gh_topology_policy_binding_t *policy)
+{
+  if ((policy == NULL) || (policy->recover_good_cycles == 0U))
+  {
+    return GH_QUALITY_RECOVER_OK_CYCLES;
+  }
+  return policy->recover_good_cycles;
+}
+
+static uint16_t gh_policy_link_loss_threshold(const gh_topology_policy_binding_t *policy, uint8_t default_fail_cycles)
+{
+  if ((policy == NULL) || (policy->max_consecutive_fail == 0U))
+  {
+    return default_fail_cycles;
+  }
+  return policy->max_consecutive_fail;
+}
+
+static uint8_t gh_policy_action_for_reason(const gh_topology_policy_binding_t *policy, uint8_t reason)
+{
+  if (policy == NULL)
+  {
+    return GH_TOPOLOGY_POLICY_ACTION_KEEP_LAST;
+  }
+
+  if (reason == GH_POLICY_REASON_LINK_LOSS)
+  {
+    return policy->on_link_loss;
+  }
+  if (reason == GH_POLICY_REASON_CRC)
+  {
+    return policy->on_crc_error;
+  }
+  return policy->on_timeout;
+}
+
+static uint8_t gh_policy_apply_action(uint8_t slave_id,
+                                      uint8_t action,
+                                      const gh_topology_point_binding_t *points,
+                                      uint16_t point_count)
+{
+  switch (action)
+  {
+    case GH_TOPOLOGY_POLICY_ACTION_KEEP_LAST:
+      return SENSOR_QUALITY_STALE;
+    case GH_TOPOLOGY_POLICY_ACTION_SAFE_DEFAULT:
+      gh_set_quality_for_slave(slave_id, SENSOR_QUALITY_FAULT, points, point_count);
+      return SENSOR_QUALITY_FAULT;
+    case GH_TOPOLOGY_POLICY_ACTION_FORCE_OFFLINE:
+      gh_set_quality_for_slave(slave_id, SENSOR_QUALITY_OFFLINE, points, point_count);
+      return SENSOR_QUALITY_OFFLINE;
+    default:
+      gh_set_quality_for_slave(slave_id, SENSOR_QUALITY_STALE, points, point_count);
+      return SENSOR_QUALITY_STALE;
+  }
+}
+
+static void gh_policy_log_transition(uint8_t slave_id,
+                                     uint8_t reason,
+                                     uint8_t action,
+                                     uint16_t fail_streak,
+                                     uint8_t *last_reason,
+                                     uint8_t *last_action)
+{
+  uint8_t idx;
+  float event_value;
+  uint8_t severity;
+
+  if ((last_reason == NULL) || (last_action == NULL) || !gh_slave_id_valid(slave_id))
+  {
+    return;
+  }
+
+  idx = gh_slave_to_index(slave_id);
+  if ((last_reason[idx] == reason) && (last_action[idx] == action))
+  {
+    return;
+  }
+
+  last_reason[idx] = reason;
+  last_action[idx] = action;
+  event_value = (float)(((uint32_t)reason * 1000U) + ((uint32_t)action * 100U) + (uint32_t)fail_streak);
+  severity = (reason == GH_POLICY_REASON_LINK_LOSS) ? EVENT_SEV_ALARM : EVENT_SEV_WARN;
+  publish_event(severity, EVENT_CODE_CTRL_SYNC_FAIL, slave_id, event_value);
+  g_status.last_error_code = EVENT_CODE_CTRL_SYNC_FAIL;
 }
 
 static bool gh_decode_point_value(const uint16_t *regs,
@@ -434,7 +584,8 @@ static bool gh_command_ack_probe(uint8_t slave_id,
                                       ack_regs,
                                       cmd->timeout_ms,
                                       cmd->retries,
-                                      MODBUS_RETRY_BACKOFF_MS);
+                                      MODBUS_RETRY_BACKOFF_MS,
+                                      NULL);
 }
 
 static bool gh_apply_request_legacy_execute(uint8_t slave_id, const gh_slave_apply_request_t *req)
@@ -619,20 +770,27 @@ static bool gh_run_topology_cycle(uint8_t *comm_fail_streak,
 {
   bool slave_attempted[MODBUS_MAX_SLAVES] = {false};
   bool slave_success[MODBUS_MAX_SLAVES] = {false};
+  uint8_t slave_fail_reason[MODBUS_MAX_SLAVES] = {GH_POLICY_REASON_NONE};
   uint16_t regs[MODBUS_MAX_REGS_PER_REQ];
   uint16_t sens[GH_RTU_SENSORS_PER_SLAVE];
   static uint16_t s_last_sens[MODBUS_MAX_SLAVES][GH_RTU_SENSORS_PER_SLAVE] = {{0U}};
   static uint32_t s_next_due_ms[GH_TOPOLOGY_V2_MAX_REQ_PROFILES] = {0U};
   static uint32_t s_last_plan_generation = 0U;
   static uint16_t s_last_plan_count = 0U;
+  static uint8_t s_last_policy_reason[MODBUS_MAX_SLAVES] = {GH_POLICY_REASON_NONE};
+  static uint8_t s_last_policy_action[MODBUS_MAX_SLAVES] = {GH_TOPOLOGY_POLICY_ACTION_KEEP_LAST};
   uint16_t plan_count = 0U;
   uint16_t point_count = 0U;
   uint16_t cmd_count = 0U;
+  uint16_t policy_count = 0U;
   uint32_t plan_generation = 0U;
   uint32_t point_generation = 0U;
   uint32_t cmd_generation = 0U;
+  uint32_t policy_generation = 0U;
   uint32_t plan_slave_mask = 0U;
   uint16_t i;
+  uint16_t recover_cycles;
+  uint16_t link_loss_threshold;
   uint16_t w;
   uint16_t valid_mask = 0U;
   uint32_t now_ms = HAL_GetTick();
@@ -640,6 +798,10 @@ static bool gh_run_topology_cycle(uint8_t *comm_fail_streak,
   uint8_t slave_idx;
   bool ok;
   uint8_t quality;
+  uint8_t reason;
+  uint8_t action;
+  const gh_topology_policy_binding_t *policy;
+  modbus_io_error_t read_err = MODBUS_IO_ERR_NONE;
 
   if (!GH_TopologyRuntime_CopyPollPlan(s_topology_plan_cache,
                                        GH_TOPOLOGY_V2_MAX_REQ_PROFILES,
@@ -663,7 +825,16 @@ static bool gh_run_topology_cycle(uint8_t *comm_fail_streak,
   {
     return false;
   }
-  if ((point_generation != plan_generation) || (cmd_generation != plan_generation))
+  if (!GH_TopologyRuntime_CopyPolicyBindings(s_topology_policy_cache,
+                                             GH_TOPOLOGY_V2_MAX_POLICIES,
+                                             &policy_count,
+                                             &policy_generation))
+  {
+    return false;
+  }
+  if ((point_generation != plan_generation) ||
+      (cmd_generation != plan_generation) ||
+      (policy_generation != plan_generation))
   {
     if (!GH_TopologyRuntime_CopyPollPlan(s_topology_plan_cache,
                                          GH_TOPOLOGY_V2_MAX_REQ_PROFILES,
@@ -687,9 +858,17 @@ static bool gh_run_topology_cycle(uint8_t *comm_fail_streak,
     {
       return false;
     }
+    if (!GH_TopologyRuntime_CopyPolicyBindings(s_topology_policy_cache,
+                                               GH_TOPOLOGY_V2_MAX_POLICIES,
+                                               &policy_count,
+                                               &policy_generation))
+    {
+      return false;
+    }
     if ((plan_count == 0U) ||
         (point_generation != plan_generation) ||
-        (cmd_generation != plan_generation))
+        (cmd_generation != plan_generation) ||
+        (policy_generation != plan_generation))
     {
       return false;
     }
@@ -703,6 +882,8 @@ static bool gh_run_topology_cycle(uint8_t *comm_fail_streak,
   if ((plan_generation != s_last_plan_generation) || (plan_count != s_last_plan_count))
   {
     memset(s_next_due_ms, 0, sizeof(s_next_due_ms));
+    memset(s_last_policy_reason, GH_POLICY_REASON_NONE, sizeof(s_last_policy_reason));
+    memset(s_last_policy_action, GH_TOPOLOGY_POLICY_ACTION_KEEP_LAST, sizeof(s_last_policy_action));
     s_last_plan_generation = plan_generation;
     s_last_plan_count = plan_count;
   }
@@ -731,11 +912,16 @@ static bool gh_run_topology_cycle(uint8_t *comm_fail_streak,
                                       regs,
                                       s_topology_plan_cache[i].timeout_ms,
                                       s_topology_plan_cache[i].retries,
-                                      s_topology_plan_cache[i].backoff_ms);
+                                      s_topology_plan_cache[i].backoff_ms,
+                                      &read_err);
     s_next_due_ms[i] = now_ms + s_topology_plan_cache[i].period_ms;
 
     if (!ok)
     {
+      if (slave_fail_reason[slave_idx] == GH_POLICY_REASON_NONE)
+      {
+        slave_fail_reason[slave_idx] = gh_policy_map_error_reason(read_err);
+      }
       osDelay(MODBUS_INTER_SLAVE_DELAY_MS);
       continue;
     }
@@ -793,51 +979,66 @@ static bool gh_run_topology_cycle(uint8_t *comm_fail_streak,
 
     if (slave_success[slave_idx])
     {
+      policy = gh_find_policy_for_slave(s_topology_policy_cache, policy_count, slave_id);
       comm_fail_streak[slave_idx] = 0U;
       if (comm_ok_streak[slave_idx] < 0xFFU)
       {
         comm_ok_streak[slave_idx]++;
       }
-      quality = (comm_ok_streak[slave_idx] >= GH_QUALITY_RECOVER_OK_CYCLES) ?
+      recover_cycles = gh_policy_recover_cycles(policy);
+      quality = (comm_ok_streak[slave_idx] >= recover_cycles) ?
                   SENSOR_QUALITY_OK :
                   SENSOR_QUALITY_STALE;
-      if (point_count > 0U)
+      gh_set_quality_for_slave(slave_id, quality, s_topology_point_cache, point_count);
+      if (policy != NULL)
       {
-        gh_set_points_quality_for_slave(slave_id, quality, s_topology_point_cache, point_count);
-      }
-      else
-      {
-        gh_set_slave_quality(slave_id, quality);
+        s_last_policy_reason[slave_idx] = GH_POLICY_REASON_NONE;
+        s_last_policy_action[slave_idx] = GH_TOPOLOGY_POLICY_ACTION_KEEP_LAST;
       }
     }
     else
     {
+      policy = gh_find_policy_for_slave(s_topology_policy_cache, policy_count, slave_id);
       comm_ok_streak[slave_idx] = 0U;
       if (comm_fail_streak[slave_idx] < 0xFFU)
       {
         comm_fail_streak[slave_idx]++;
       }
 
-      if (comm_fail_streak[slave_idx] >= fail_offline_cycles)
+      reason = slave_fail_reason[slave_idx];
+      if (reason == GH_POLICY_REASON_NONE)
       {
-        if (point_count > 0U)
-        {
-          gh_set_points_quality_for_slave(slave_id, SENSOR_QUALITY_OFFLINE, s_topology_point_cache, point_count);
-        }
-        else
-        {
-          gh_set_slave_quality(slave_id, SENSOR_QUALITY_OFFLINE);
-        }
+        reason = GH_POLICY_REASON_TIMEOUT;
       }
-      else if (comm_fail_streak[slave_idx] >= GH_QUALITY_FAIL_STALE_CYCLES)
+
+      if (policy != NULL)
       {
-        if (point_count > 0U)
+        link_loss_threshold = gh_policy_link_loss_threshold(policy, fail_offline_cycles);
+        if (comm_fail_streak[slave_idx] >= link_loss_threshold)
         {
-          gh_set_points_quality_for_slave(slave_id, SENSOR_QUALITY_STALE, s_topology_point_cache, point_count);
+          reason = GH_POLICY_REASON_LINK_LOSS;
         }
-        else
+        action = gh_policy_action_for_reason(policy, reason);
+        if (action != GH_TOPOLOGY_POLICY_ACTION_KEEP_LAST)
         {
-          gh_set_slave_quality(slave_id, SENSOR_QUALITY_STALE);
+          (void)gh_policy_apply_action(slave_id, action, s_topology_point_cache, point_count);
+        }
+        gh_policy_log_transition(slave_id,
+                                 reason,
+                                 action,
+                                 comm_fail_streak[slave_idx],
+                                 s_last_policy_reason,
+                                 s_last_policy_action);
+      }
+      else
+      {
+        if (comm_fail_streak[slave_idx] >= fail_offline_cycles)
+        {
+          gh_set_quality_for_slave(slave_id, SENSOR_QUALITY_OFFLINE, s_topology_point_cache, point_count);
+        }
+        else if (comm_fail_streak[slave_idx] >= GH_QUALITY_FAIL_STALE_CYCLES)
+        {
+          gh_set_quality_for_slave(slave_id, SENSOR_QUALITY_STALE, s_topology_point_cache, point_count);
         }
       }
 
@@ -896,7 +1097,8 @@ static void gh_run_legacy_cycle(uint8_t *comm_fail_streak,
                                       regs,
                                       MODBUS_RTU_RESP_TIMEOUT_MS,
                                       MODBUS_RETRY_COUNT,
-                                      MODBUS_RETRY_BACKOFF_MS);
+                                      MODBUS_RETRY_BACKOFF_MS,
+                                      NULL);
     if (ok)
     {
       comm_fail_streak[streak_idx] = 0U;
@@ -976,7 +1178,8 @@ static void gh_run_legacy_cycle(uint8_t *comm_fail_streak,
                                      diag_regs,
                                      MODBUS_RTU_RESP_TIMEOUT_MS,
                                      MODBUS_RETRY_COUNT,
-                                     MODBUS_RETRY_BACKOFF_MS))
+                                     MODBUS_RETRY_BACKOFF_MS,
+                                     NULL))
     {
       GH_ModbusMap_UpdateDiag(slave_id, diag_regs[0], diag_regs[1], diag_regs[2]);
       g_status.control_mode = (uint8_t)(diag_regs[0] & 0x00FFU);

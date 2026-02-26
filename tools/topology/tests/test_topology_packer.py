@@ -177,6 +177,12 @@ class TopologyPackerTests(unittest.TestCase):
         with self.assertRaises(packer.TopologyPackError):
             packer.build_topology_blob(cfg)
 
+    def test_reject_unsupported_policy_action(self) -> None:
+        cfg = _minimal_valid_config()
+        cfg["policies"][0]["on_timeout"] = 3
+        with self.assertRaises(packer.TopologyPackError):
+            packer.build_topology_blob(cfg)
+
     def test_reject_modules_over_budget(self) -> None:
         cfg = _minimal_valid_config()
         cfg["modules"] = []

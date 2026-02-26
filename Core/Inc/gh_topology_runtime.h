@@ -7,6 +7,9 @@
 #include <stdint.h>
 
 #define GH_TOPOLOGY_DIAG_OFFSET_NONE 0xFFU
+#define GH_TOPOLOGY_POLICY_ACTION_KEEP_LAST    0U
+#define GH_TOPOLOGY_POLICY_ACTION_SAFE_DEFAULT 1U
+#define GH_TOPOLOGY_POLICY_ACTION_FORCE_OFFLINE 2U
 
 typedef struct
 {
@@ -54,6 +57,18 @@ typedef struct
   uint16_t flags;
 } gh_topology_cmd_binding_t;
 
+typedef struct
+{
+  uint16_t module_id;
+  uint8_t slave_id;
+  uint8_t on_timeout;
+  uint8_t on_crc_error;
+  uint8_t on_link_loss;
+  uint16_t max_consecutive_fail;
+  uint16_t recover_good_cycles;
+  uint16_t safe_profile_id;
+} gh_topology_policy_binding_t;
+
 void GH_TopologyRuntime_Clear(void);
 bool GH_TopologyRuntime_RebuildFromPayload(const uint8_t *payload, uint32_t payload_len);
 bool GH_TopologyRuntime_CopyPollPlan(gh_topology_poll_req_t *out_reqs,
@@ -69,5 +84,9 @@ bool GH_TopologyRuntime_CopyCommandBindings(gh_topology_cmd_binding_t *out_cmds,
                                             uint16_t max_cmds,
                                             uint16_t *out_count,
                                             uint32_t *out_generation);
+bool GH_TopologyRuntime_CopyPolicyBindings(gh_topology_policy_binding_t *out_policies,
+                                           uint16_t max_policies,
+                                           uint16_t *out_count,
+                                           uint32_t *out_generation);
 
 #endif /* GH_TOPOLOGY_RUNTIME_H */

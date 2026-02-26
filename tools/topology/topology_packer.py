@@ -23,6 +23,7 @@ GH_TOPOLOGY_V2_MAX_POLICIES = 64
 BUS_RTU1 = 1
 BUS_RTU2 = 2
 BUS_TCP = 3
+POLICY_ACTION_MAX = 2
 
 TOPOLOGY_MAX_BLOB_SIZE = 4096
 TOPOLOGY_UPLOAD_CHUNK_WORDS = 120
@@ -266,6 +267,25 @@ def _ensure_supported_bus_types(modules: List[Dict[str, Any]]) -> None:
             raise TopologyPackError(f"modules[{idx}].bus_type={bus_type}: unsupported bus_type")
 
 
+def _ensure_supported_policy_actions(policies: List[Dict[str, Any]]) -> None:
+    for idx, item in enumerate(policies):
+        on_timeout = _parse_int(item["on_timeout"], f"policies[{idx}].on_timeout")
+        on_crc_error = _parse_int(item["on_crc_error"], f"policies[{idx}].on_crc_error")
+        on_link_loss = _parse_int(item["on_link_loss"], f"policies[{idx}].on_link_loss")
+        if on_timeout < 0 or on_timeout > POLICY_ACTION_MAX:
+            raise TopologyPackError(
+                f"policies[{idx}].on_timeout={on_timeout}: unsupported action (allowed 0..{POLICY_ACTION_MAX})"
+            )
+        if on_crc_error < 0 or on_crc_error > POLICY_ACTION_MAX:
+            raise TopologyPackError(
+                f"policies[{idx}].on_crc_error={on_crc_error}: unsupported action (allowed 0..{POLICY_ACTION_MAX})"
+            )
+        if on_link_loss < 0 or on_link_loss > POLICY_ACTION_MAX:
+            raise TopologyPackError(
+                f"policies[{idx}].on_link_loss={on_link_loss}: unsupported action (allowed 0..{POLICY_ACTION_MAX})"
+            )
+
+
 def build_topology_blob(config: Dict[str, Any]) -> bytes:
     modules = _expect_list(config, "modules")
     requests = _expect_list(config, "requests")
@@ -289,6 +309,7 @@ def build_topology_blob(config: Dict[str, Any]) -> bytes:
     _ensure_unique(points, "point_id", "points")
     _ensure_unique(commands, "cmd_id", "commands")
     _ensure_supported_bus_types(modules)
+    _ensure_supported_policy_actions(policies)
     _ensure_references(modules, requests, points, commands, policies)
 
     modules_blob = _pack_modules(modules)
