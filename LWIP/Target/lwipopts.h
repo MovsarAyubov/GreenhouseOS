@@ -74,8 +74,8 @@
 #define LWIP_SOCKET 0
 /*----- Value in opt.h for TCPIP_THREAD_STACKSIZE: 0 -----*/
 #define TCPIP_THREAD_STACKSIZE 1024
-/*----- Value in opt.h for TCPIP_THREAD_PRIO: 1 -----*/
-#define TCPIP_THREAD_PRIO 24
+/* Keep lwIP core above application normal-priority workers to reduce TCP jitter. */
+#define TCPIP_THREAD_PRIO 32
 /*----- Value in opt.h for TCPIP_MBOX_SIZE: 0 -----*/
 #define TCPIP_MBOX_SIZE 6
 /*----- Value in opt.h for SLIPIF_THREAD_STACKSIZE: 0 -----*/

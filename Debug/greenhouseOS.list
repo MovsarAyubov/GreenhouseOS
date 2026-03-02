@@ -64110,7 +64110,7 @@ tcpip_init(tcpip_init_done_fn initfunc, void *arg)
 #endif /* LWIP_TCPIP_CORE_LOCKING */
 
   sys_thread_new(TCPIP_THREAD_NAME, tcpip_thread, NULL, TCPIP_THREAD_STACKSIZE, TCPIP_THREAD_PRIO);
- 801884c:	2318      	movs	r3, #24
+ 801884c:	2320      	movs	r3, #32
  801884e:	9300      	str	r3, [sp, #0]
  8018850:	f44f 6300 	mov.w	r3, #2048	@ 0x800
  8018854:	2200      	movs	r2, #0
