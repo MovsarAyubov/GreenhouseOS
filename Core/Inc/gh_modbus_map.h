@@ -21,6 +21,18 @@
 #define GH_MB_CMD_REGS        (GH_MB_MAX_SLAVES * GH_MB_CMD_BLOCK_SIZE)
 #define GH_MB_DIR_BASE        (GH_MB_CMD_BASE + GH_MB_CMD_REGS)
 #define GH_MB_DIR_REGS        32U
+#define GH_MB_DIR_OFF_RTC_HOUR   14U
+#define GH_MB_DIR_OFF_RTC_MINUTE 15U
+#define GH_MB_DIR_OFF_RTC_SET_HOUR   16U
+#define GH_MB_DIR_OFF_RTC_SET_MINUTE 17U
+#define GH_MB_DIR_OFF_RTC_SET_TOKEN  18U
+#define GH_MB_DIR_OFF_RTC_SET_APPLIED_TOKEN 19U
+#define GH_MB_DIR_OFF_RTC_SET_RESULT 20U
+#define GH_MB_RTC_SET_RESULT_IDLE         0U
+#define GH_MB_RTC_SET_RESULT_QUEUED       1U
+#define GH_MB_RTC_SET_RESULT_APPLIED      2U
+#define GH_MB_RTC_SET_RESULT_REJECT_RANGE 3U
+#define GH_MB_RTC_SET_RESULT_FAILED       4U
 #define GH_MB_CFG_BASE        (GH_MB_DIR_BASE + GH_MB_DIR_REGS)
 #define GH_MB_CFG_REGS        80U
 #define GH_MB_DIAG_BASE       (GH_MB_CFG_BASE + GH_MB_CFG_REGS)
@@ -37,8 +49,18 @@ typedef struct
   uint16_t out_cmd_mask;
 } gh_slave_apply_request_t;
 
+typedef struct
+{
+  uint16_t token;
+  uint8_t hour;
+  uint8_t minute;
+} gh_rtc_set_request_t;
+
 void GH_ModbusMap_Init(void);
 void GH_ModbusMap_UpdateAges(uint32_t now_ms);
+void GH_ModbusMap_UpdateRtcTime(uint8_t hour, uint8_t minute);
+bool GH_ModbusMap_GetRtcSetRequest(gh_rtc_set_request_t *out_req);
+void GH_ModbusMap_MarkRtcSetResult(uint16_t token, bool applied, uint8_t hour, uint8_t minute);
 
 bool GH_ModbusMap_ReadRange(uint16_t start_addr, uint16_t qty, uint16_t *out_regs);
 bool GH_ModbusMap_WriteSingle(uint16_t addr, uint16_t value);

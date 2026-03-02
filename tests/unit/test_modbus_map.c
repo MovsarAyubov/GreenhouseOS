@@ -32,6 +32,13 @@
 #define TOPO_OFF_CHUNK_BASE 20U
 
 #define CMD_OFF_MODE 0U
+#define DIR_OFF_RTC_HOUR 14U
+#define DIR_OFF_RTC_MINUTE 15U
+#define DIR_OFF_RTC_SET_HOUR 16U
+#define DIR_OFF_RTC_SET_MINUTE 17U
+#define DIR_OFF_RTC_SET_TOKEN 18U
+#define DIR_OFF_RTC_SET_APPLIED_TOKEN 19U
+#define DIR_OFF_RTC_SET_RESULT 20U
 
 int test_modbus_map_run(void)
 {
@@ -58,6 +65,7 @@ int test_modbus_map_run(void)
   uint16_t topo_size_hi;
   uint16_t topo_size_lo;
   uint16_t topo_token = 22U;
+  gh_rtc_set_request_t rtc_req = {0};
 
   UT_OsHooks_Reset();
   memset(&g_status, 0, sizeof(g_status));
@@ -78,6 +86,33 @@ int test_modbus_map_run(void)
   UT_ASSERT_TRUE(GH_ModbusMap_WriteSingle((uint16_t)(GH_MB_CMD_BASE + CMD_OFF_MODE), 1234U));
   UT_ASSERT_TRUE(GH_ModbusMap_ReadRange((uint16_t)(GH_MB_CMD_BASE + CMD_OFF_MODE), 1U, regs));
   UT_ASSERT_EQ_U32(1234U, regs[0]);
+  GH_ModbusMap_UpdateRtcTime(9U, 37U);
+  UT_ASSERT_TRUE(GH_ModbusMap_ReadRange((uint16_t)(GH_MB_DIR_BASE + DIR_OFF_RTC_HOUR), 2U, regs));
+  UT_ASSERT_EQ_U32(9U, regs[0]);
+  UT_ASSERT_EQ_U32(37U, regs[1]);
+  UT_ASSERT_TRUE(GH_ModbusMap_WriteSingle((uint16_t)(GH_MB_DIR_BASE + DIR_OFF_RTC_SET_HOUR), 13U));
+  UT_ASSERT_TRUE(GH_ModbusMap_WriteSingle((uint16_t)(GH_MB_DIR_BASE + DIR_OFF_RTC_SET_MINUTE), 50U));
+  UT_ASSERT_TRUE(GH_ModbusMap_WriteSingle((uint16_t)(GH_MB_DIR_BASE + DIR_OFF_RTC_SET_TOKEN), 31U));
+  UT_ASSERT_TRUE(GH_ModbusMap_ReadRange((uint16_t)(GH_MB_DIR_BASE + DIR_OFF_RTC_SET_RESULT), 1U, regs));
+  UT_ASSERT_EQ_U32(GH_MB_RTC_SET_RESULT_QUEUED, regs[0]);
+  UT_ASSERT_TRUE(GH_ModbusMap_GetRtcSetRequest(&rtc_req));
+  UT_ASSERT_EQ_U32(31U, rtc_req.token);
+  UT_ASSERT_EQ_U32(13U, rtc_req.hour);
+  UT_ASSERT_EQ_U32(50U, rtc_req.minute);
+  GH_ModbusMap_MarkRtcSetResult(rtc_req.token, true, rtc_req.hour, rtc_req.minute);
+  UT_ASSERT_TRUE(GH_ModbusMap_ReadRange((uint16_t)(GH_MB_DIR_BASE + DIR_OFF_RTC_SET_APPLIED_TOKEN), 2U, regs));
+  UT_ASSERT_EQ_U32(31U, regs[0]);
+  UT_ASSERT_EQ_U32(GH_MB_RTC_SET_RESULT_APPLIED, regs[1]);
+  UT_ASSERT_TRUE(GH_ModbusMap_ReadRange((uint16_t)(GH_MB_DIR_BASE + DIR_OFF_RTC_HOUR), 2U, regs));
+  UT_ASSERT_EQ_U32(13U, regs[0]);
+  UT_ASSERT_EQ_U32(50U, regs[1]);
+  UT_ASSERT_TRUE(GH_ModbusMap_WriteSingle((uint16_t)(GH_MB_DIR_BASE + DIR_OFF_RTC_SET_HOUR), 25U));
+  UT_ASSERT_TRUE(GH_ModbusMap_WriteSingle((uint16_t)(GH_MB_DIR_BASE + DIR_OFF_RTC_SET_MINUTE), 10U));
+  UT_ASSERT_TRUE(GH_ModbusMap_WriteSingle((uint16_t)(GH_MB_DIR_BASE + DIR_OFF_RTC_SET_TOKEN), 32U));
+  UT_ASSERT_TRUE(!GH_ModbusMap_GetRtcSetRequest(&rtc_req));
+  UT_ASSERT_TRUE(GH_ModbusMap_ReadRange((uint16_t)(GH_MB_DIR_BASE + DIR_OFF_RTC_SET_APPLIED_TOKEN), 2U, regs));
+  UT_ASSERT_EQ_U32(32U, regs[0]);
+  UT_ASSERT_EQ_U32(GH_MB_RTC_SET_RESULT_REJECT_RANGE, regs[1]);
 
   crc = gh_crc32_compute(payload, CONFIG_PAYLOAD_SIZE);
   crc_hi = (uint16_t)((crc >> 16U) & 0xFFFFU);

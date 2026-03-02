@@ -70,7 +70,14 @@ enum
   DIR_OFF_DATA_VER_LO = 10U,
   DIR_OFF_MAX_POINTS = 11U,
   DIR_OFF_CMD_BLOCK_SIZE = 12U,
-  DIR_OFF_STATUS_BLOCK_SIZE = 13U
+  DIR_OFF_STATUS_BLOCK_SIZE = 13U,
+  DIR_OFF_RTC_HOUR = GH_MB_DIR_OFF_RTC_HOUR,
+  DIR_OFF_RTC_MINUTE = GH_MB_DIR_OFF_RTC_MINUTE,
+  DIR_OFF_RTC_SET_HOUR = GH_MB_DIR_OFF_RTC_SET_HOUR,
+  DIR_OFF_RTC_SET_MINUTE = GH_MB_DIR_OFF_RTC_SET_MINUTE,
+  DIR_OFF_RTC_SET_TOKEN = GH_MB_DIR_OFF_RTC_SET_TOKEN,
+  DIR_OFF_RTC_SET_APPLIED_TOKEN = GH_MB_DIR_OFF_RTC_SET_APPLIED_TOKEN,
+  DIR_OFF_RTC_SET_RESULT = GH_MB_DIR_OFF_RTC_SET_RESULT
 };
 
 enum
@@ -159,6 +166,9 @@ static uint16_t s_point_module_id[GH_MB_POINT_MAX];
 static gh_topology_point_binding_t s_point_bindings_cache[GH_MB_POINT_MAX] __attribute__((section(".ccmram")));
 static uint16_t s_last_submit_token = 0U;
 static uint16_t s_last_topo_submit_token = 0U;
+static uint16_t s_last_rtc_submit_token = 0U;
+static gh_rtc_set_request_t s_rtc_set_request = {0};
+static bool s_rtc_set_pending = false;
 static uint32_t s_point_module_generation = 0U;
 static uint32_t s_map_data_version = 0U;
 static osMutexId_t s_map_mutex = NULL;
@@ -670,6 +680,42 @@ static void topo_maybe_submit_after_write(uint16_t start_idx, uint16_t qty)
   (void)topo_try_submit(token);
 }
 
+static void dir_maybe_submit_rtc_set_after_write(uint16_t start_idx, uint16_t qty)
+{
+  uint16_t submit_idx = dir_index(DIR_OFF_RTC_SET_TOKEN);
+  uint16_t token;
+  uint16_t req_hour;
+  uint16_t req_minute;
+
+  if ((start_idx > submit_idx) || ((start_idx + qty) <= submit_idx))
+  {
+    return;
+  }
+
+  token = s_holding[submit_idx];
+  if ((token == 0U) || (token == s_last_rtc_submit_token))
+  {
+    return;
+  }
+
+  s_last_rtc_submit_token = token;
+  req_hour = s_holding[dir_index(DIR_OFF_RTC_SET_HOUR)];
+  req_minute = s_holding[dir_index(DIR_OFF_RTC_SET_MINUTE)];
+  if ((req_hour > 23U) || (req_minute > 59U))
+  {
+    s_rtc_set_pending = false;
+    s_holding[dir_index(DIR_OFF_RTC_SET_APPLIED_TOKEN)] = token;
+    s_holding[dir_index(DIR_OFF_RTC_SET_RESULT)] = GH_MB_RTC_SET_RESULT_REJECT_RANGE;
+    return;
+  }
+
+  s_rtc_set_request.token = token;
+  s_rtc_set_request.hour = (uint8_t)req_hour;
+  s_rtc_set_request.minute = (uint8_t)req_minute;
+  s_rtc_set_pending = true;
+  s_holding[dir_index(DIR_OFF_RTC_SET_RESULT)] = GH_MB_RTC_SET_RESULT_QUEUED;
+}
+
 void GH_ModbusMap_Init(void)
 {
   uint8_t s;
@@ -688,6 +734,9 @@ void GH_ModbusMap_Init(void)
   memset(s_point_module_id, 0, sizeof(s_point_module_id));
   s_last_submit_token = 0U;
   s_last_topo_submit_token = 0U;
+  s_last_rtc_submit_token = 0U;
+  memset(&s_rtc_set_request, 0, sizeof(s_rtc_set_request));
+  s_rtc_set_pending = false;
   s_point_module_generation = 0U;
   s_map_data_version = 0U;
 
@@ -721,6 +770,9 @@ void GH_ModbusMap_Init(void)
   s_holding[topo_index(TOPO_OFF_SUBMIT_TOKEN)] = 0U;
   s_holding[topo_index(TOPO_OFF_REQ_CHUNK_WORDS)] = TOPOLOGY_UPLOAD_CHUNK_WORDS;
   s_holding[topo_index(TOPO_OFF_REQ_FLAGS)] = 0U;
+  s_holding[dir_index(DIR_OFF_RTC_SET_TOKEN)] = 0U;
+  s_holding[dir_index(DIR_OFF_RTC_SET_APPLIED_TOKEN)] = 0U;
+  s_holding[dir_index(DIR_OFF_RTC_SET_RESULT)] = GH_MB_RTC_SET_RESULT_IDLE;
 
   map_refresh_runtime_diag_nolock();
   map_unlock();
@@ -781,6 +833,69 @@ void GH_ModbusMap_UpdateAges(uint32_t now_ms)
   map_unlock();
 }
 
+void GH_ModbusMap_UpdateRtcTime(uint8_t hour, uint8_t minute)
+{
+  if ((hour > 23U) || (minute > 59U))
+  {
+    return;
+  }
+
+  if (!map_lock())
+  {
+    return;
+  }
+
+  s_holding[dir_index(DIR_OFF_RTC_HOUR)] = (uint16_t)hour;
+  s_holding[dir_index(DIR_OFF_RTC_MINUTE)] = (uint16_t)minute;
+  map_unlock();
+}
+
+bool GH_ModbusMap_GetRtcSetRequest(gh_rtc_set_request_t *out_req)
+{
+  if (out_req == NULL)
+  {
+    return false;
+  }
+
+  if (!map_lock())
+  {
+    return false;
+  }
+
+  if (!s_rtc_set_pending)
+  {
+    map_unlock();
+    return false;
+  }
+
+  *out_req = s_rtc_set_request;
+  s_rtc_set_pending = false;
+  map_unlock();
+  return true;
+}
+
+void GH_ModbusMap_MarkRtcSetResult(uint16_t token, bool applied, uint8_t hour, uint8_t minute)
+{
+  if (!map_lock())
+  {
+    return;
+  }
+
+  s_holding[dir_index(DIR_OFF_RTC_SET_APPLIED_TOKEN)] = token;
+  if (applied && (hour <= 23U) && (minute <= 59U))
+  {
+    s_holding[dir_index(DIR_OFF_RTC_HOUR)] = (uint16_t)hour;
+    s_holding[dir_index(DIR_OFF_RTC_MINUTE)] = (uint16_t)minute;
+    s_holding[dir_index(DIR_OFF_RTC_SET_RESULT)] = GH_MB_RTC_SET_RESULT_APPLIED;
+  }
+  else
+  {
+    s_holding[dir_index(DIR_OFF_RTC_SET_RESULT)] = GH_MB_RTC_SET_RESULT_FAILED;
+  }
+
+  map_unlock();
+}
+
 bool GH_ModbusMap_ReadRange(uint16_t start_addr, uint16_t qty, uint16_t *out_regs)
 {
   uint16_t idx;
@@ -815,6 +930,7 @@ bool GH_ModbusMap_WriteSingle(uint16_t addr, uint16_t value)
   s_holding[idx] = value;
   cfg_maybe_submit_after_write(idx, 1U);
   topo_maybe_submit_after_write(idx, 1U);
+  dir_maybe_submit_rtc_set_after_write(idx, 1U);
   map_unlock();
   return true;
 }
@@ -835,6 +951,7 @@ bool GH_ModbusMap_WriteRange(uint16_t start_addr, uint16_t qty, const uint16_t *
   memcpy(&s_holding[idx], values, (uint32_t)qty * sizeof(uint16_t));
   cfg_maybe_submit_after_write(idx, qty);
   topo_maybe_submit_after_write(idx, qty);
+  dir_maybe_submit_rtc_set_after_write(idx, qty);
   map_unlock();
   return true;
 }

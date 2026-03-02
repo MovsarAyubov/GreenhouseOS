@@ -43,6 +43,55 @@ static gh_topology_point_binding_t s_topology_point_cache[GH_TOPOLOGY_V2_MAX_POI
 static gh_topology_cmd_binding_t s_topology_cmd_cache[GH_TOPOLOGY_V2_MAX_COMMANDS] __attribute__((section(".ccmram")));
 static gh_topology_policy_binding_t s_topology_policy_cache[GH_TOPOLOGY_V2_MAX_POLICIES] __attribute__((section(".ccmram")));
 
+extern RTC_HandleTypeDef hrtc;
+
+static void gh_refresh_rtc_clock_registers(void)
+{
+  static uint16_t s_last_hhmm = 0xFFFFU;
+  RTC_TimeTypeDef rtc_time = {0};
+  RTC_DateTypeDef rtc_date = {0};
+  uint16_t hhmm;
+
+  if ((HAL_RTC_GetTime(&hrtc, &rtc_time, RTC_FORMAT_BIN) != HAL_OK) ||
+      (HAL_RTC_GetDate(&hrtc, &rtc_date, RTC_FORMAT_BIN) != HAL_OK))
+  {
+    return;
+  }
+
+  hhmm = (uint16_t)(((uint16_t)rtc_time.Hours * 60U) + (uint16_t)rtc_time.Minutes);
+  if (hhmm == s_last_hhmm)
+  {
+    return;
+  }
+
+  s_last_hhmm = hhmm;
+  GH_ModbusMap_UpdateRtcTime(rtc_time.Hours, rtc_time.Minutes);
+}
+
+static void gh_apply_rtc_set_request(void)
+{
+  gh_rtc_set_request_t req = {0};
+  RTC_TimeTypeDef rtc_time = {0};
+  bool applied = false;
+
+  if (!GH_ModbusMap_GetRtcSetRequest(&req))
+  {
+    return;
+  }
+
+  rtc_time.Hours = req.hour;
+  rtc_time.Minutes = req.minute;
+  rtc_time.Seconds = 0U;
+  rtc_time.DayLightSaving = RTC_DAYLIGHTSAVING_NONE;
+  rtc_time.StoreOperation = RTC_STOREOPERATION_RESET;
+  if (HAL_RTC_SetTime(&hrtc, &rtc_time, RTC_FORMAT_BIN) == HAL_OK)
+  {
+    applied = true;
+  }
+
+  GH_ModbusMap_MarkRtcSetResult(req.token, applied, req.hour, req.minute);
+}
+
 static uint8_t gh_slave_to_index(uint8_t slave_id)
 {
   return (uint8_t)(slave_id - 1U);
@@ -1213,6 +1262,8 @@ void GH_ModbusMasterTask_Run(void *argument)
     cycle_start_ms = HAL_GetTick();
     task_heartbeat_kick(TASK_BIT_MODBUS);
     GH_ModbusMap_UpdateAges(cycle_start_ms);
+    gh_apply_rtc_set_request();
+    gh_refresh_rtc_clock_registers();
 
     topology_mode = gh_run_topology_cycle(s_comm_fail_streak, s_comm_ok_streak, fail_offline_cycles);
     if (!topology_mode)

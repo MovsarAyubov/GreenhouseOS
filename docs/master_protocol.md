@@ -91,6 +91,13 @@ Register map (`base + off`):
 - `+11` `MAX_POINTS`.
 - `+12` `CMD_BLOCK_SIZE`.
 - `+13` `STATUS_BLOCK_SIZE`.
+- `+14` `RTC_HOUR` (`0..23`).
+- `+15` `RTC_MINUTE` (`0..59`, updated at most once per minute).
+- `+16` `RTC_SET_HOUR` (`0..23`, W).
+- `+17` `RTC_SET_MINUTE` (`0..59`, W).
+- `+18` `RTC_SET_TOKEN` (W): non-zero changed token triggers RTC set.
+- `+19` `RTC_SET_APPLIED_TOKEN` (R): last processed token.
+- `+20` `RTC_SET_RESULT` (R): `0=IDLE`, `1=QUEUED`, `2=APPLIED`, `3=REJECT_RANGE`, `4=FAILED`.
 
 ## Legacy config pipeline window (`GH_MB_CFG_BASE`)
 - Base index: `1472` (SCADA `42472`).
@@ -172,7 +179,8 @@ Upload logic details and client algorithm: `docs/topology_upload_protocol.md`.
 - `24` `REJECT_TOPOLOGY_BUDGET`
 
 ## Register ownership contract
-- Points/status/directory/diagnostics windows are runtime-owned; clients should treat them as read-only.
+- Points/status/diagnostics windows are runtime-owned; clients should treat them as read-only.
+- Directory window is runtime-owned except `RTC_SET_HOUR`, `RTC_SET_MINUTE`, `RTC_SET_TOKEN` (`+16..+18`), which are client-written.
 - Command ingress window is client-written (`FC=6/16`) and consumed by `ModbusMasterTask` via `GH_ModbusMap_GetApplyRequest`.
 - Legacy config window (`1472..1551`) request fields are written from TCP and consumed by `ConfigStorageTask`.
 - Topology window (`1584..1727`) request fields are written from TCP and consumed by `ConfigStorageTask`.

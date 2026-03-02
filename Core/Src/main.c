@@ -679,8 +679,8 @@ static void MX_RTC_Init(void)
   HAL_PWR_EnableBkUpAccess();
   if (HAL_RTCEx_BKUPRead(&hrtc, RTC_BKP_DR1) != RTC_BKP_INIT_MARKER)
   {
-    sTime.Hours = 0;
-    sTime.Minutes = 0;
+    sTime.Hours = 13;
+    sTime.Minutes = 50;
     sTime.Seconds = 0;
     sTime.DayLightSaving = RTC_DAYLIGHTSAVING_NONE;
     sTime.StoreOperation = RTC_STOREOPERATION_RESET;
