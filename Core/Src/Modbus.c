@@ -14,6 +14,7 @@
 #include "Modbus.h"
 #include "timers.h"
 #include "semphr.h"
+#include <string.h>
 #ifdef GH_USE_LWIP_NETCONN
 #include "gh_modbus_map.h"
 #endif
@@ -116,6 +117,7 @@ static void  TCPinitserver(modbusHandler_t *modH);
 static mb_err_op_t TCPconnectserver(modbusHandler_t * modH, modbus_t *telegram);
 static mb_err_op_t TCPgetRxBuffer(modbusHandler_t * modH);
 static modbusTcpDiag_t s_tcpDiag = {0};
+#define TCP_MBAP_HEADER_SIZE 6U
 
 static uint32_t TCPgetIdleCycleLimit(const modbusHandler_t *modH)
 {
@@ -135,6 +137,112 @@ static uint32_t TCPgetIdleCycleLimit(const modbusHandler_t *modH)
     limit = 1U;
   }
   return limit;
+}
+
+static void TCPclearClientRx(tcpclients_t *clientconn)
+{
+  if (clientconn != NULL)
+  {
+    clientconn->rxLen = 0U;
+  }
+}
+
+static bool TCPappendNetbufData(tcpclients_t *clientconn, struct netbuf *inbuf)
+{
+  uint16_t copyLen;
+  uint16_t copied;
+
+  if ((clientconn == NULL) || (inbuf == NULL) || (inbuf->p == NULL))
+  {
+    return false;
+  }
+
+  copyLen = (uint16_t)netbuf_len(inbuf);
+  if (copyLen == 0U)
+  {
+    return true;
+  }
+  if ((uint32_t)clientconn->rxLen + (uint32_t)copyLen > (uint32_t)sizeof(clientconn->rxBuffer))
+  {
+    return false;
+  }
+
+  copied = netbuf_copy(inbuf, &clientconn->rxBuffer[clientconn->rxLen], copyLen);
+  if (copied != copyLen)
+  {
+    return false;
+  }
+
+  clientconn->rxLen = (uint16_t)(clientconn->rxLen + copyLen);
+  return true;
+}
+
+static bool TCPextractFrame(modbusHandler_t *modH, tcpclients_t *clientconn)
+{
+  uint16_t uLength;
+  uint16_t frameLen;
+  uint16_t ad;
+  uint16_t remaining;
+
+  if ((modH == NULL) || (clientconn == NULL))
+  {
+    return false;
+  }
+
+  while (clientconn->rxLen >= TCP_MBAP_HEADER_SIZE)
+  {
+    if ((clientconn->rxBuffer[2] != 0U) || (clientconn->rxBuffer[3] != 0U))
+    {
+      s_tcpDiag.malformedMbapCount++;
+      memmove(&clientconn->rxBuffer[0], &clientconn->rxBuffer[1], (size_t)(clientconn->rxLen - 1U));
+      clientconn->rxLen--;
+      continue;
+    }
+
+    uLength = ((uint16_t)clientconn->rxBuffer[4] << 8U) | (uint16_t)clientconn->rxBuffer[5];
+    if ((uLength < 2U) || (uLength > (MAX_BUFFER - 2U)))
+    {
+      s_tcpDiag.malformedMbapCount++;
+      memmove(&clientconn->rxBuffer[0], &clientconn->rxBuffer[1], (size_t)(clientconn->rxLen - 1U));
+      clientconn->rxLen--;
+      continue;
+    }
+
+    frameLen = (uint16_t)(uLength + TCP_MBAP_HEADER_SIZE);
+    if (frameLen > clientconn->rxLen)
+    {
+      return false;
+    }
+
+    memcpy(modH->u8Buffer, &clientconn->rxBuffer[TCP_MBAP_HEADER_SIZE], uLength);
+
+    /* Accept SCADA addressing with 4xxxx offsets. */
+    if ((modH->u8Buffer[FUNC] == MB_FC_READ_REGISTERS) ||
+        (modH->u8Buffer[FUNC] == MB_FC_WRITE_REGISTER) ||
+        (modH->u8Buffer[FUNC] == MB_FC_WRITE_MULTIPLE_REGISTERS))
+    {
+      ad = ((uint16_t)modH->u8Buffer[ADD_HI] << 8U) | (uint16_t)modH->u8Buffer[ADD_LO];
+      if (ad >= 41000U)
+      {
+        ad = (uint16_t)(ad - 41000U);
+        modH->u8Buffer[ADD_HI] = (uint8_t)(ad >> 8U);
+        modH->u8Buffer[ADD_LO] = (uint8_t)(ad & 0x00FFU);
+      }
+    }
+
+    modH->u16TransactionID = ((uint16_t)clientconn->rxBuffer[0] << 8U) | (uint16_t)clientconn->rxBuffer[1];
+    modH->u8BufferSize = (uint8_t)(uLength + 2U); // add 2 dummy bytes for CRC
+
+    remaining = (uint16_t)(clientconn->rxLen - frameLen);
+    if (remaining > 0U)
+    {
+      memmove(clientconn->rxBuffer, &clientconn->rxBuffer[frameLen], remaining);
+    }
+    clientconn->rxLen = remaining;
+    return true;
+  }
+
+  return false;
 }
 
 #endif
@@ -552,13 +660,11 @@ void vTimerCallbackTimeout(TimerHandle_t *pxTimer)
 
 bool TCPwaitConnData(modbusHandler_t *modH)
 {
-  struct netbuf *inbuf;
-  err_t recv_err, accept_err;
-  char* buf;
-  uint16_t buflen;
-  uint16_t uLength;
-  bool xTCPvalid;
-  xTCPvalid = false;
+  struct netbuf *inbuf = NULL;
+  err_t recv_err;
+  err_t accept_err;
+  bool xTCPvalid = false;
+  uint32_t idleCycleLimit;
   tcpclients_t *clientconn;
 
   //select the next connection slot to work with using round-robin
@@ -566,8 +672,8 @@ bool TCPwaitConnData(modbusHandler_t *modH)
   if (modH->newconnIndex >= NUMBERTCPCONN)
   {
 	  modH->newconnIndex = 0;
-  }
-  clientconn = &modH->newconns[modH->newconnIndex];
+	  }
+	  clientconn = &modH->newconns[modH->newconnIndex];
 
   if (modH->conn == NULL)
   {
@@ -580,135 +686,102 @@ bool TCPwaitConnData(modbusHandler_t *modH)
   }
 
 
-  //NULL means there is a free connection slot, so we can accept an incoming client connection
-  if (clientconn->conn == NULL){
-      /* accept any incoming connection */
-	  accept_err = netconn_accept(modH->conn, &clientconn->conn);
-	  if(accept_err != ERR_OK)
-	  {
-		  // not valid incoming connection at this time
-		  //ModbusCloseConn(clientconn->conn);
-		  s_tcpDiag.acceptErrCount++;
-		  ModbusCloseConnNull(modH);
-		  return xTCPvalid;
-      }
-	  else
-	  {
-		  clientconn->aging=0;
+	  //NULL means there is a free connection slot, so we can accept an incoming client connection
+	  if (clientconn->conn == NULL){
+	      /* accept any incoming connection */
+		  accept_err = netconn_accept(modH->conn, &clientconn->conn);
+		  if(accept_err == ERR_TIMEOUT)
+		  {
+			  return xTCPvalid;
+		  }
+		  if(accept_err != ERR_OK)
+		  {
+			  s_tcpDiag.acceptErrCount++;
+			  s_tcpDiag.lastRecvErr = (int32_t)accept_err;
+			  return xTCPvalid;
+	      }
+		  else
+		  {
+			  clientconn->aging=0;
+			  TCPclearClientRx(clientconn);
+		  }
+
 	  }
 
-  }
+	  if (TCPextractFrame(modH, clientconn))
+	  {
+		  clientconn->aging = 0U;
+		  return true;
+	  }
 
-  netconn_set_recvtimeout(clientconn->conn ,  modH->u16timeOut);
-  recv_err = netconn_recv(clientconn->conn, &inbuf);
+	  netconn_set_recvtimeout(clientconn->conn ,  modH->u16timeOut);
+	  recv_err = netconn_recv(clientconn->conn, &inbuf);
 
   if (recv_err == ERR_CLSD) //the connection was closed
-  {
-	  //Close and clean the connection
-	  //ModbusCloseConn(clientconn->conn);
-	  s_tcpDiag.recvClosedCount++;
-	  s_tcpDiag.lastRecvErr = (int32_t)recv_err;
-	  ModbusCloseConnNull(modH);
-
-	  clientconn->aging = 0;
-	  return xTCPvalid;
-
-  }
-
-  if (recv_err == ERR_TIMEOUT) //No new data
-   {
-	  uint32_t idleCycleLimit;
-	  s_tcpDiag.recvTimeoutCount++;
- 	  //continue the aging process
-	  modH->newconns[modH->newconnIndex].aging++;
-	  idleCycleLimit = TCPgetIdleCycleLimit(modH);
-
-	  // if the connection is old enough and inactive close and clean it up
-	  if (modH->newconns[modH->newconnIndex].aging >= idleCycleLimit)
 	  {
-		  //ModbusCloseConn(clientconn->conn);
-		  s_tcpDiag.staleCloseCount++;
+		  s_tcpDiag.recvClosedCount++;
+		  s_tcpDiag.lastRecvErr = (int32_t)recv_err;
 		  ModbusCloseConnNull(modH);
-		  clientconn->aging = 0;
+		  TCPclearClientRx(clientconn);
+		  clientconn->aging = 0U;
+		  return xTCPvalid;
+
 	  }
 
- 	  return xTCPvalid;
+	  if (recv_err == ERR_TIMEOUT) //No new data
+	   {
+		  s_tcpDiag.recvTimeoutCount++;
+	 	  //continue the aging process
+		  clientconn->aging++;
+		  idleCycleLimit = TCPgetIdleCycleLimit(modH);
+
+		  // if the connection is old enough and inactive close and clean it up
+		  if (clientconn->aging >= idleCycleLimit)
+		  {
+			  s_tcpDiag.staleCloseCount++;
+			  ModbusCloseConnNull(modH);
+			  TCPclearClientRx(clientconn);
+			  clientconn->aging = 0U;
+		  }
+
+	 	  return xTCPvalid;
 
    }
 
   if (recv_err != ERR_OK)
-  {
-	  s_tcpDiag.recvOtherErrCount++;
-	  s_tcpDiag.lastRecvErr = (int32_t)recv_err;
-	  ModbusCloseConnNull(modH);
-	  clientconn->aging = 0;
-	  return xTCPvalid;
-  }
+	  {
+		  s_tcpDiag.recvOtherErrCount++;
+		  s_tcpDiag.lastRecvErr = (int32_t)recv_err;
+		  ModbusCloseConnNull(modH);
+		  TCPclearClientRx(clientconn);
+		  clientconn->aging = 0U;
+		  return xTCPvalid;
+	  }
 
-  if (recv_err == ERR_OK)
-  {
-      if (netconn_err(clientconn->conn) == ERR_OK)
-      {
-    	  /* Read the data from the port, blocking if nothing yet there.
-    	  We assume the request (the part we care about) is in one netbuf */
-   	      netbuf_data(inbuf, (void**)&buf, &buflen);
-		  if (buflen>11) // minimum frame size for modbus TCP
-		  {
-			  if(buf[2] == 0 && buf[3] == 0 ) //validate protocol ID
-			  {
-			  	  uLength = (buf[4]<<8 & 0xff00) | buf[5];
-			  	  if(uLength< (MAX_BUFFER-2)  && (uLength + 6) <= buflen)
-			   	  {
-			          for(int i = 0; i < uLength; i++)
-			          {
-			        	  modH->u8Buffer[i] = buf[i+6];
-			          }
-
-			          /* Accept SCADA addressing with 4xxxx offsets. */
-			          if ((modH->u8Buffer[FUNC] == MB_FC_READ_REGISTERS) ||
-			              (modH->u8Buffer[FUNC] == MB_FC_WRITE_REGISTER) ||
-			              (modH->u8Buffer[FUNC] == MB_FC_WRITE_MULTIPLE_REGISTERS))
-			          {
-			            uint16_t ad = ((uint16_t)modH->u8Buffer[ADD_HI] << 8U) | (uint16_t)modH->u8Buffer[ADD_LO];
-			            if (ad >= 41000U)
-			            {
-			              ad = (uint16_t)(ad - 41000U);
-			              modH->u8Buffer[ADD_HI] = (uint8_t)(ad >> 8U);
-			              modH->u8Buffer[ADD_LO] = (uint8_t)(ad & 0x00FFU);
-			            }
-			          }
-
-			          modH->u16TransactionID = (buf[0]<<8 & 0xff00) | buf[1];
-			          modH->u8BufferSize = uLength + 2; //add 2 dummy bytes for CRC
-			          xTCPvalid = true; // we have data for the modbus slave
-
-			      }
-			      else
-			      {
-			    	  s_tcpDiag.malformedMbapCount++;
-			      }
-			  }
-			  else
-			  {
-				  s_tcpDiag.malformedMbapCount++;
-			  }
-
-		  }
-		  else
-		  {
-			  s_tcpDiag.malformedMbapCount++;
-		  }
+	  if (recv_err == ERR_OK)
+	  {
+	      if (netconn_err(clientconn->conn) == ERR_OK)
+	      {
+	    	  if (!TCPappendNetbufData(clientconn, inbuf))
+	    	  {
+	    		  s_tcpDiag.malformedMbapCount++;
+	    		  TCPclearClientRx(clientconn);
+	    	  }
+	    	  else
+	    	  {
+	    		  xTCPvalid = TCPextractFrame(modH, clientconn);
+	    	  }
+		   }
+	      else
+	      {
+	    	  s_tcpDiag.recvOtherErrCount++;
+	    	  s_tcpDiag.lastRecvErr = (int32_t)netconn_err(clientconn->conn);
+	      }
+		  netbuf_delete(inbuf); // delete buffer on all ERR_OK paths
+		  clientconn->aging = 0U; // reset the aging counter
 	   }
-      else
-      {
-    	  s_tcpDiag.recvOtherErrCount++;
-    	  s_tcpDiag.lastRecvErr = (int32_t)netconn_err(clientconn->conn);
-      }
-	  netbuf_delete(inbuf); // delete buffer on all ERR_OK paths
-	  clientconn->aging = 0; //reset the aging counter
-   }
 
-  return xTCPvalid;
+	  return xTCPvalid;
 
 }
 
@@ -963,6 +1036,7 @@ void ModbusCloseConn(struct netconn *conn)
 void ModbusCloseConnNull(modbusHandler_t * modH)
 {
 
+	modH->newconns[modH->newconnIndex].rxLen = 0U;
 	if(modH->newconns[modH->newconnIndex].conn  != NULL)
 	{
 
@@ -1190,7 +1264,7 @@ static mb_err_op_t TCPgetRxBuffer(modbusHandler_t * modH)
                  if( (buflen>11  && (modH->uModbusType == MB_SLAVE  ))  ||
                 	 (buflen>=10 && (modH->uModbusType == MB_MASTER ))  ) // minimum frame size for modbus TCP
                  {
-        	         if(buf[2] == 0 || buf[3] == 0 ) //validate protocol ID
+	        	  	         if(buf[2] == 0 && buf[3] == 0 ) //validate protocol ID
         	         {
         	  	          uLength = (buf[4]<<8 & 0xff00) | buf[5];
         	  	          if(uLength< (MAX_BUFFER-2)  && (uLength + 6) <= buflen)

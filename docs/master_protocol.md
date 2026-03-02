@@ -113,6 +113,24 @@ Register map (`base + off`):
 - Exposes boot/reset/error/network counters and key runtime diagnostics.
 - Detailed meaning of diagnostics and codes: `docs/error_codes.md`.
 
+Register map (`base + off`):
+- `+0..+1` `BOOT_COUNT`.
+- `+2..+3` `POWERON_COUNT`.
+- `+4..+5` `ERROR_HANDLER_COUNT`.
+- `+6..+7` `WDG_MISS_COUNT`.
+- `+8..+9` `FAULT_RESET_COUNT`.
+- `+10..+11` `LAST_EVENT_CODE`.
+- `+12..+13` `LAST_RESET_REASON`.
+- `+14..+15` `LAST_ERROR_CODE`.
+- `+16..+17` `MODBUS_TIMEOUTS[0]`.
+- `+18..+19` `MODBUS_TIMEOUTS[1]`.
+- `+20..+21` `TCP_ACCEPT_ERR_COUNT`.
+- `+22..+23` `TCP_RECV_TIMEOUT_COUNT`.
+- `+24..+25` `TCP_STALE_CLOSE_COUNT`.
+- `+26..+27` `TCP_MALFORMED_MBAP_COUNT`.
+- `+28..+29` `TCP_SEND_ERR_COUNT`.
+- `+30..+31` `TCP_LAST_ERR` (signed `int32`, `lastRecvErr` with fallback to `lastSendErr`).
+
 ## Topology upload window (`GH_MB_TOPO_BASE`)
 - Base index: `1584` (SCADA `42584`).
 - Size: `144` registers.
@@ -122,7 +140,7 @@ Register map (`base + off`):
 - `+0` `SUBMIT_TOKEN` (W): non-zero changed token enqueues one chunk request to `qTopologyStoreHandle`.
 - `+1` `RESULT_CODE` (R): last topology pipeline result.
 - `+2` `RESULT_TOKEN` (R): token for the last processed topology request.
-- `+3` `ACTIVE_FLAGS` (R): bit0=`topology_active`.
+- `+3` `ACTIVE_FLAGS` (R): bit0=`topology_active`, bit1=`commit_in_progress`.
 - `+4` `ACTIVE_VER_MAJOR` (R).
 - `+5` `ACTIVE_VER_MINOR` (R).
 - `+6..+7` `ACTIVE_GENERATION` (R, hi/lo).

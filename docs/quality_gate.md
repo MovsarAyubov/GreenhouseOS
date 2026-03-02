@@ -16,6 +16,17 @@ Run without host unit tests (if `gcc` unavailable):
 powershell -ExecutionPolicy Bypass -File .\tools\quality\Run-QualityGate.ps1 -SkipUnitTests
 ```
 
+Run long TCP soak test (24-48h), with reconnect flap and optional background topology uploads:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\quality\Run-TcpSoakTest.ps1 `
+  -Host 192.168.1.50 `
+  -DurationHours 24 `
+  -ReconnectEveryCycles 60 `
+  -ReconnectProbability 0.05 `
+  -Chunks .\build\topology\one_zone_chunks.json
+```
+
 ## Gate criteria
 
 1. Firmware build passes in both `Debug` and `Release` profiles.

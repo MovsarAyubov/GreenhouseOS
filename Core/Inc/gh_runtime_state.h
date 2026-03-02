@@ -52,6 +52,8 @@
 #define TOPOLOGY_VALID_MARKER         0x324F5054UL
 #define TOPOLOGY_UPLOAD_FLAG_COMMIT   0x0001U
 #define TOPOLOGY_UPLOAD_FLAG_RESET    0x0002U
+#define TOPOLOGY_FLASH_WRITE_RETRIES  1U
+#define TOPOLOGY_FLASH_RETRY_DELAY_MS 20U
 
 #define EVENT_CODE_LINK_DOWN          1000U
 #define EVENT_CODE_LINK_UP            1001U
@@ -248,6 +250,7 @@ extern volatile uint16_t g_topology_v2_point_count;
 extern volatile uint16_t g_topology_v2_cmd_count;
 extern volatile uint16_t g_topology_v2_policy_count;
 extern volatile uint32_t g_topology_v2_active_size;
+extern volatile uint8_t g_topology_commit_in_progress;
 
 bool modbus_read_holding_registers(uint8_t slave_id,
                                    uint16_t start_reg,

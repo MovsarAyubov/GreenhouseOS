@@ -1452,7 +1452,7 @@ static bool cfg_write_slot_with_retries(uint32_t slot_addr,
   uint8_t attempt;
   bool ok;
 
-  for (attempt = 0U; attempt < CONFIG_FLASH_WRITE_RETRIES; attempt++)
+  for (attempt = 0U; attempt < TOPOLOGY_FLASH_WRITE_RETRIES; attempt++)
   {
     ok = config_write_to_slot(slot_addr, sector, cfg);
     if (ok && s_topology_active_valid)
@@ -1466,9 +1466,9 @@ static bool cfg_write_slot_with_retries(uint32_t slot_addr,
     {
       return true;
     }
-    if ((attempt + 1U) < CONFIG_FLASH_WRITE_RETRIES)
+    if ((attempt + 1U) < TOPOLOGY_FLASH_WRITE_RETRIES)
     {
-      osDelay(CONFIG_FLASH_RETRY_DELAY_MS);
+      osDelay(TOPOLOGY_FLASH_RETRY_DELAY_MS);
     }
   }
 
@@ -1851,7 +1851,15 @@ void GH_ConfigStorageTask_Run(void *argument)
   {
     if (osMessageQueueGet(qTopologyStoreHandle, &topo_req, NULL, 0U) == osOK)
     {
+      if ((topo_req.flags & TOPOLOGY_UPLOAD_FLAG_COMMIT) != 0U)
+      {
+        g_topology_commit_in_progress = 1U;
+      }
       topo_result = topology_process_chunk(&topo_req);
+      if ((topo_req.flags & TOPOLOGY_UPLOAD_FLAG_COMMIT) != 0U)
+      {
+        g_topology_commit_in_progress = 0U;
+      }
       GH_ModbusMap_ReportTopologyResult(topo_req.request_token,
                                         topo_result,
                                         g_topology_v2_generation,

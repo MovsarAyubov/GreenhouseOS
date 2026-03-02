@@ -173,6 +173,8 @@ typedef struct
 {
 	struct netconn *conn;
 	uint32_t aging;
+	uint16_t rxLen;
+	uint8_t rxBuffer[MAX_BUFFER + 6U];
 }
 tcpclients_t;
 

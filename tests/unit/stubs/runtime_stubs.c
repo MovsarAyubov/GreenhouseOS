@@ -1,5 +1,20 @@
 #include "gh_runtime_state.h"
 
+#include <string.h>
+
+typedef struct
+{
+  uint32_t acceptErrCount;
+  uint32_t recvTimeoutCount;
+  uint32_t recvClosedCount;
+  uint32_t recvOtherErrCount;
+  uint32_t staleCloseCount;
+  uint32_t malformedMbapCount;
+  uint32_t sendErrCount;
+  int32_t lastRecvErr;
+  int32_t lastSendErr;
+} modbusTcpDiag_t;
+
 UART_HandleTypeDef huart2 = {0};
 
 osMessageQueueId_t qConfigApplyHandle = (osMessageQueueId_t)0x2;
@@ -23,6 +38,7 @@ volatile uint16_t g_topology_v2_point_count = 0U;
 volatile uint16_t g_topology_v2_cmd_count = 0U;
 volatile uint16_t g_topology_v2_policy_count = 0U;
 volatile uint32_t g_topology_v2_active_size = 0U;
+volatile uint8_t g_topology_commit_in_progress = 0U;
 volatile uint32_t g_persist_boot_count = 0U;
 volatile uint32_t g_persist_poweron_count = 0U;
 volatile uint32_t g_persist_error_handler_count = 0U;
@@ -131,4 +147,16 @@ bool apply_control_to_slave(uint8_t slave_id, const active_config_t *cfg)
   (void)slave_id;
   (void)cfg;
   return false;
+}
+
+void ModbusTcpGetDiag(modbusTcpDiag_t *diagOut)
+{
+  if (diagOut != NULL)
+  {
+    memset(diagOut, 0, sizeof(*diagOut));
+  }
+}
+
+void ModbusTcpClearDiag(void)
+{
 }

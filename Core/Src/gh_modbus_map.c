@@ -3,6 +3,22 @@
 
 #include <string.h>
 
+#ifdef GH_USE_LWIP_NETCONN
+typedef struct
+{
+  uint32_t acceptErrCount;
+  uint32_t recvTimeoutCount;
+  uint32_t recvClosedCount;
+  uint32_t recvOtherErrCount;
+  uint32_t staleCloseCount;
+  uint32_t malformedMbapCount;
+  uint32_t sendErrCount;
+  int32_t lastRecvErr;
+  int32_t lastSendErr;
+} modbusTcpDiag_t;
+void ModbusTcpGetDiag(modbusTcpDiag_t *diagOut);
+#endif
+
 enum
 {
   PNT_OFF_VALUE_HI = 0U,
@@ -98,18 +114,18 @@ enum
   DBG_OFF_MODBUS_TIMEOUT0_LO = 17U,
   DBG_OFF_MODBUS_TIMEOUT1_HI = 18U,
   DBG_OFF_MODBUS_TIMEOUT1_LO = 19U,
-  DBG_OFF_PHY_ADDR_HI = 20U,
-  DBG_OFF_PHY_ADDR_LO = 21U,
-  DBG_OFF_PHY_SCAN_OK_HI = 22U,
-  DBG_OFF_PHY_SCAN_OK_LO = 23U,
-  DBG_OFF_PHY_LINK_STATE_HI = 24U,
-  DBG_OFF_PHY_LINK_STATE_LO = 25U,
-  DBG_OFF_RX_SEM_OK_HI = 26U,
-  DBG_OFF_RX_SEM_OK_LO = 27U,
-  DBG_OFF_TX_SEM_OK_HI = 28U,
-  DBG_OFF_TX_SEM_OK_LO = 29U,
-  DBG_OFF_INPUT_TASK_OK_HI = 30U,
-  DBG_OFF_INPUT_TASK_OK_LO = 31U
+  DBG_OFF_TCP_ACCEPT_ERR_HI = 20U,
+  DBG_OFF_TCP_ACCEPT_ERR_LO = 21U,
+  DBG_OFF_TCP_RECV_TIMEOUT_HI = 22U,
+  DBG_OFF_TCP_RECV_TIMEOUT_LO = 23U,
+  DBG_OFF_TCP_STALE_CLOSE_HI = 24U,
+  DBG_OFF_TCP_STALE_CLOSE_LO = 25U,
+  DBG_OFF_TCP_MALFORMED_MBAP_HI = 26U,
+  DBG_OFF_TCP_MALFORMED_MBAP_LO = 27U,
+  DBG_OFF_TCP_SEND_ERR_HI = 28U,
+  DBG_OFF_TCP_SEND_ERR_LO = 29U,
+  DBG_OFF_TCP_LAST_ERR_HI = 30U,
+  DBG_OFF_TCP_LAST_ERR_LO = 31U
 };
 
 enum
@@ -431,6 +447,13 @@ static void map_refresh_directory_nolock(void)
 
 static void map_refresh_runtime_diag_nolock(void)
 {
+  uint32_t tcp_accept_err = 0U;
+  uint32_t tcp_recv_timeout = 0U;
+  uint32_t tcp_stale_close = 0U;
+  uint32_t tcp_malformed = 0U;
+  uint32_t tcp_send_err = 0U;
+  int32_t tcp_last_err = 0;
+
   dbg_set_u32(DBG_OFF_BOOT_COUNT_HI, DBG_OFF_BOOT_COUNT_LO, g_persist_boot_count);
   dbg_set_u32(DBG_OFF_POWERON_COUNT_HI, DBG_OFF_POWERON_COUNT_LO, g_persist_poweron_count);
   dbg_set_u32(DBG_OFF_ERR_HANDLER_COUNT_HI, DBG_OFF_ERR_HANDLER_COUNT_LO, g_persist_error_handler_count);
@@ -441,14 +464,26 @@ static void map_refresh_runtime_diag_nolock(void)
   dbg_set_u32(DBG_OFF_LAST_ERROR_CODE_HI, DBG_OFF_LAST_ERROR_CODE_LO, g_status.last_error_code);
   dbg_set_u32(DBG_OFF_MODBUS_TIMEOUT0_HI, DBG_OFF_MODBUS_TIMEOUT0_LO, g_status.modbus_timeouts[0]);
   dbg_set_u32(DBG_OFF_MODBUS_TIMEOUT1_HI, DBG_OFF_MODBUS_TIMEOUT1_LO, g_status.modbus_timeouts[1]);
-  dbg_set_u32(DBG_OFF_PHY_ADDR_HI, DBG_OFF_PHY_ADDR_LO, g_eth_diag_phy_addr);
-  dbg_set_u32(DBG_OFF_PHY_SCAN_OK_HI, DBG_OFF_PHY_SCAN_OK_LO, g_eth_diag_phy_scan_ok);
-  dbg_set_u32(DBG_OFF_PHY_LINK_STATE_HI, DBG_OFF_PHY_LINK_STATE_LO, (uint32_t)g_eth_diag_phy_link_state);
-  dbg_set_u32(DBG_OFF_RX_SEM_OK_HI, DBG_OFF_RX_SEM_OK_LO, g_eth_diag_rx_sem_ok);
-  dbg_set_u32(DBG_OFF_TX_SEM_OK_HI, DBG_OFF_TX_SEM_OK_LO, g_eth_diag_tx_sem_ok);
-  dbg_set_u32(DBG_OFF_INPUT_TASK_OK_HI, DBG_OFF_INPUT_TASK_OK_LO, g_eth_diag_input_task_ok);
 
-  s_holding[topo_index(TOPO_OFF_ACTIVE_FLAGS)] = (g_topology_v2_active != 0U) ? 1U : 0U;
+#ifdef GH_USE_LWIP_NETCONN
+  modbusTcpDiag_t tcp_diag = {0};
+  ModbusTcpGetDiag(&tcp_diag);
+  tcp_accept_err = tcp_diag.acceptErrCount;
+  tcp_recv_timeout = tcp_diag.recvTimeoutCount;
+  tcp_stale_close = tcp_diag.staleCloseCount;
+  tcp_malformed = tcp_diag.malformedMbapCount;
+  tcp_send_err = tcp_diag.sendErrCount;
+  tcp_last_err = (tcp_diag.lastRecvErr != 0) ? tcp_diag.lastRecvErr : tcp_diag.lastSendErr;
+#endif
+  dbg_set_u32(DBG_OFF_TCP_ACCEPT_ERR_HI, DBG_OFF_TCP_ACCEPT_ERR_LO, tcp_accept_err);
+  dbg_set_u32(DBG_OFF_TCP_RECV_TIMEOUT_HI, DBG_OFF_TCP_RECV_TIMEOUT_LO, tcp_recv_timeout);
+  dbg_set_u32(DBG_OFF_TCP_STALE_CLOSE_HI, DBG_OFF_TCP_STALE_CLOSE_LO, tcp_stale_close);
+  dbg_set_u32(DBG_OFF_TCP_MALFORMED_MBAP_HI, DBG_OFF_TCP_MALFORMED_MBAP_LO, tcp_malformed);
+  dbg_set_u32(DBG_OFF_TCP_SEND_ERR_HI, DBG_OFF_TCP_SEND_ERR_LO, tcp_send_err);
+  dbg_set_u32(DBG_OFF_TCP_LAST_ERR_HI, DBG_OFF_TCP_LAST_ERR_LO, (uint32_t)tcp_last_err);
+
+  s_holding[topo_index(TOPO_OFF_ACTIVE_FLAGS)] = ((g_topology_v2_active != 0U) ? 0x0001U : 0U) |
+                                                 ((g_topology_commit_in_progress != 0U) ? 0x0002U : 0U);
   s_holding[topo_index(TOPO_OFF_ACTIVE_VER_MAJOR)] = g_topology_v2_ver_major;
   s_holding[topo_index(TOPO_OFF_ACTIVE_VER_MINOR)] = g_topology_v2_ver_minor;
   topo_set_u32(TOPO_OFF_ACTIVE_GEN_HI, TOPO_OFF_ACTIVE_GEN_LO, g_topology_v2_generation);

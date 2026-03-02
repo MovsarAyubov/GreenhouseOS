@@ -196,6 +196,7 @@ volatile uint16_t g_topology_v2_point_count = 0U;
 volatile uint16_t g_topology_v2_cmd_count = 0U;
 volatile uint16_t g_topology_v2_policy_count = 0U;
 volatile uint32_t g_topology_v2_active_size = 0U;
+volatile uint8_t g_topology_commit_in_progress = 0U;
 
 bool g_setpoints_apply_in_progress = false;
 volatile uint8_t g_control_sync_pending = 0U;

@@ -38,7 +38,7 @@
 ../Core/Src/gh_config_storage.c:1359:13:topo_flash_write_words	3
 ../Core/Src/gh_config_storage.c:1378:13:topology_write_payload	7
 ../Core/Src/gh_config_storage.c:1411:13:topology_slot_read	9
-../Core/Src/gh_config_storage.c:1448:13:cfg_write_slot_with_retries	6
+../Core/Src/gh_config_storage.c:1448:13:cfg_write_slot_with_retries	5
 ../Core/Src/gh_config_storage.c:1478:13:topology_write_slot_with_retries	5
 ../Core/Src/gh_config_storage.c:1508:13:cfg_store_ab_with_fallback	8
 ../Core/Src/gh_config_storage.c:1553:13:topology_store_ab_with_fallback	9
@@ -46,4 +46,4 @@
 ../Core/Src/gh_config_storage.c:1664:6:GH_ConfigStorage_PayloadValuesValid	5
 ../Core/Src/gh_config_storage.c:1681:6:GH_ConfigStorage_ValidateRequest	7
 ../Core/Src/gh_config_storage.c:1720:29:topology_process_chunk	22
-../Core/Src/gh_config_storage.c:1836:6:GH_ConfigStorageTask_Run	12
+../Core/Src/gh_config_storage.c:1836:6:GH_ConfigStorageTask_Run	14
