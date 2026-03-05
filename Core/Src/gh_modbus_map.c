@@ -77,7 +77,16 @@ enum
   DIR_OFF_RTC_SET_MINUTE = GH_MB_DIR_OFF_RTC_SET_MINUTE,
   DIR_OFF_RTC_SET_TOKEN = GH_MB_DIR_OFF_RTC_SET_TOKEN,
   DIR_OFF_RTC_SET_APPLIED_TOKEN = GH_MB_DIR_OFF_RTC_SET_APPLIED_TOKEN,
-  DIR_OFF_RTC_SET_RESULT = GH_MB_DIR_OFF_RTC_SET_RESULT
+  DIR_OFF_RTC_SET_RESULT = GH_MB_DIR_OFF_RTC_SET_RESULT,
+  DIR_OFF_RTC_SYNC_ATTEMPT_HI = GH_MB_DIR_OFF_RTC_SYNC_ATTEMPT_HI,
+  DIR_OFF_RTC_SYNC_ATTEMPT_LO = GH_MB_DIR_OFF_RTC_SYNC_ATTEMPT_LO,
+  DIR_OFF_RTC_SYNC_OK_HI = GH_MB_DIR_OFF_RTC_SYNC_OK_HI,
+  DIR_OFF_RTC_SYNC_OK_LO = GH_MB_DIR_OFF_RTC_SYNC_OK_LO,
+  DIR_OFF_RTC_SYNC_FAIL_HI = GH_MB_DIR_OFF_RTC_SYNC_FAIL_HI,
+  DIR_OFF_RTC_SYNC_FAIL_LO = GH_MB_DIR_OFF_RTC_SYNC_FAIL_LO,
+  DIR_OFF_RTC_SYNC_LAST_SLAVE = GH_MB_DIR_OFF_RTC_SYNC_LAST_SLAVE,
+  DIR_OFF_RTC_SYNC_LAST_TOKEN = GH_MB_DIR_OFF_RTC_SYNC_LAST_TOKEN,
+  DIR_OFF_RTC_SYNC_LAST_RESULT = GH_MB_DIR_OFF_RTC_SYNC_LAST_RESULT
 };
 
 enum
@@ -893,6 +902,27 @@ void GH_ModbusMap_MarkRtcSetResult(uint16_t token, bool applied, uint8_t hour, u
     s_holding[dir_index(DIR_OFF_RTC_SET_RESULT)] = GH_MB_RTC_SET_RESULT_FAILED;
   }
 
+  map_unlock();
+}
+
+void GH_ModbusMap_ReportRtcSyncDiag(uint32_t attempts,
+                                    uint32_t success,
+                                    uint32_t failed,
+                                    uint16_t last_slave_id,
+                                    uint16_t last_token,
+                                    uint16_t last_result)
+{
+  if (!map_lock())
+  {
+    return;
+  }
+
+  dir_set_u32(DIR_OFF_RTC_SYNC_ATTEMPT_HI, DIR_OFF_RTC_SYNC_ATTEMPT_LO, attempts);
+  dir_set_u32(DIR_OFF_RTC_SYNC_OK_HI, DIR_OFF_RTC_SYNC_OK_LO, success);
+  dir_set_u32(DIR_OFF_RTC_SYNC_FAIL_HI, DIR_OFF_RTC_SYNC_FAIL_LO, failed);
+  s_holding[dir_index(DIR_OFF_RTC_SYNC_LAST_SLAVE)] = last_slave_id;
+  s_holding[dir_index(DIR_OFF_RTC_SYNC_LAST_TOKEN)] = last_token;
+  s_holding[dir_index(DIR_OFF_RTC_SYNC_LAST_RESULT)] = last_result;
   map_unlock();
 }
 

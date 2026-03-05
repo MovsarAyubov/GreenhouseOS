@@ -28,6 +28,15 @@
 #define GH_MB_DIR_OFF_RTC_SET_TOKEN  18U
 #define GH_MB_DIR_OFF_RTC_SET_APPLIED_TOKEN 19U
 #define GH_MB_DIR_OFF_RTC_SET_RESULT 20U
+#define GH_MB_DIR_OFF_RTC_SYNC_ATTEMPT_HI 21U
+#define GH_MB_DIR_OFF_RTC_SYNC_ATTEMPT_LO 22U
+#define GH_MB_DIR_OFF_RTC_SYNC_OK_HI      23U
+#define GH_MB_DIR_OFF_RTC_SYNC_OK_LO      24U
+#define GH_MB_DIR_OFF_RTC_SYNC_FAIL_HI    25U
+#define GH_MB_DIR_OFF_RTC_SYNC_FAIL_LO    26U
+#define GH_MB_DIR_OFF_RTC_SYNC_LAST_SLAVE 27U
+#define GH_MB_DIR_OFF_RTC_SYNC_LAST_TOKEN 28U
+#define GH_MB_DIR_OFF_RTC_SYNC_LAST_RESULT 29U
 #define GH_MB_RTC_SET_RESULT_IDLE         0U
 #define GH_MB_RTC_SET_RESULT_QUEUED       1U
 #define GH_MB_RTC_SET_RESULT_APPLIED      2U
@@ -61,6 +70,12 @@ void GH_ModbusMap_UpdateAges(uint32_t now_ms);
 void GH_ModbusMap_UpdateRtcTime(uint8_t hour, uint8_t minute);
 bool GH_ModbusMap_GetRtcSetRequest(gh_rtc_set_request_t *out_req);
 void GH_ModbusMap_MarkRtcSetResult(uint16_t token, bool applied, uint8_t hour, uint8_t minute);
+void GH_ModbusMap_ReportRtcSyncDiag(uint32_t attempts,
+                                    uint32_t success,
+                                    uint32_t failed,
+                                    uint16_t last_slave_id,
+                                    uint16_t last_token,
+                                    uint16_t last_result);
 
 bool GH_ModbusMap_ReadRange(uint16_t start_addr, uint16_t qty, uint16_t *out_regs);
 bool GH_ModbusMap_WriteSingle(uint16_t addr, uint16_t value);

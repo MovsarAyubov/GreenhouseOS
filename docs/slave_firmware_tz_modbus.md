@@ -121,6 +121,16 @@ REMOTE расписания света (до 4):
 - 125: APPLY_STATUS
 - 126-127: ACTIVE_CTRL_VERSION
 
+RTC sync (master -> slave):
+- 140: RTC_SET_HOUR (0..23)
+- 141: RTC_SET_MINUTE (0..59)
+- 142: RTC_SET_TOKEN (new non-zero token triggers processing)
+- 143: RTC_SET_APPLIED_TOKEN (echo token after processing)
+- 144: RTC_SET_RESULT
+  - 2: APPLIED (slave RTC updated)
+  - 5: NOOP (drift below threshold, update skipped)
+  - any other value: treated as failed sync on master side
+
 ## 10. Приемка
 1. Мастер стабильно читает reg+0..8
 2. Масштаб x10 корректен

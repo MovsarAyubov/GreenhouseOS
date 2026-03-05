@@ -21,6 +21,17 @@
 #define GH_RTU_CTRL_SP_WATER_UPPER_REG 108U
 #define GH_RTU_CTRL_SP_WATER_UNDER_REG 109U
 #define GH_RTU_APPLY_TRIGGER_REG      122U
+#define GH_RTU_RTC_SET_BASE_REG       140U
+#define GH_RTU_RTC_SET_HOUR_REG       (GH_RTU_RTC_SET_BASE_REG + 0U)
+#define GH_RTU_RTC_SET_MINUTE_REG     (GH_RTU_RTC_SET_BASE_REG + 1U)
+#define GH_RTU_RTC_APPLIED_TOKEN_REG  (GH_RTU_RTC_SET_BASE_REG + 3U)
+#define GH_RTU_RTC_SYNC_RESULT_APPLIED      2U
+#define GH_RTU_RTC_SYNC_RESULT_NOOP         5U
+#define GH_RTU_RTC_SYNC_PERIOD_MS           86400000UL
+#define GH_RTU_RTC_SYNC_RETRY_BACKOFF_MS    60000UL
+#define GH_RTU_RTC_SYNC_MAX_RETRIES         3U
+#define GH_RTU_RTC_SYNC_ACK_POLL_ATTEMPTS   3U
+#define GH_RTU_RTC_SYNC_ACK_POLL_DELAY_MS   100U
 #define GH_QUALITY_RECOVER_OK_CYCLES  2U
 #define GH_QUALITY_FAIL_STALE_CYCLES  2U
 
@@ -42,30 +53,227 @@ static gh_topology_poll_req_t s_topology_plan_cache[GH_TOPOLOGY_V2_MAX_REQ_PROFI
 static gh_topology_point_binding_t s_topology_point_cache[GH_TOPOLOGY_V2_MAX_POINTS] __attribute__((section(".ccmram")));
 static gh_topology_cmd_binding_t s_topology_cmd_cache[GH_TOPOLOGY_V2_MAX_COMMANDS] __attribute__((section(".ccmram")));
 static gh_topology_policy_binding_t s_topology_policy_cache[GH_TOPOLOGY_V2_MAX_POLICIES] __attribute__((section(".ccmram")));
+static bool s_slave_comm_up[MODBUS_MAX_SLAVES] = {false};
+static uint32_t s_rtc_sync_last_ok_ms[MODBUS_MAX_SLAVES] = {0U};
+static uint32_t s_rtc_sync_last_attempt_ms[MODBUS_MAX_SLAVES] = {0U};
+static uint8_t s_rtc_sync_retry_count[MODBUS_MAX_SLAVES] = {0U};
+static uint16_t s_rtc_sync_token_seq = 1U;
+static uint32_t s_rtc_sync_attempt_count = 0U;
+static uint32_t s_rtc_sync_success_count = 0U;
+static uint32_t s_rtc_sync_fail_count = 0U;
+static uint16_t s_rtc_sync_last_slave_id = 0U;
+static uint16_t s_rtc_sync_last_token = 0U;
+static uint16_t s_rtc_sync_last_result = 0U;
 
 extern RTC_HandleTypeDef hrtc;
 
-static void gh_refresh_rtc_clock_registers(void)
+static uint8_t gh_slave_to_index(uint8_t slave_id);
+static bool gh_slave_id_valid(uint8_t slave_id);
+static bool gh_modbus_read_holding_retry(uint8_t slave_id,
+                                         uint16_t start_reg,
+                                         uint16_t reg_count,
+                                         uint16_t *out_regs,
+                                         uint32_t timeout_ms,
+                                         uint8_t retries,
+                                         uint8_t backoff_ms,
+                                         modbus_io_error_t *out_last_err);
+static bool gh_modbus_write_multi_retry(uint8_t slave_id,
+                                        uint16_t start_reg,
+                                        uint16_t reg_count,
+                                        const uint16_t *regs,
+                                        uint8_t retries,
+                                        uint32_t timeout_ms);
+static void gh_rtc_sync_publish_diag(void);
+
+static bool gh_get_server_rtc_hhmm(uint8_t *out_hour, uint8_t *out_minute)
 {
-  static uint16_t s_last_hhmm = 0xFFFFU;
   RTC_TimeTypeDef rtc_time = {0};
   RTC_DateTypeDef rtc_date = {0};
-  uint16_t hhmm;
+
+  if ((out_hour == NULL) || (out_minute == NULL))
+  {
+    return false;
+  }
 
   if ((HAL_RTC_GetTime(&hrtc, &rtc_time, RTC_FORMAT_BIN) != HAL_OK) ||
       (HAL_RTC_GetDate(&hrtc, &rtc_date, RTC_FORMAT_BIN) != HAL_OK))
   {
+    return false;
+  }
+
+  *out_hour = rtc_time.Hours;
+  *out_minute = rtc_time.Minutes;
+  return true;
+}
+
+static uint16_t gh_rtc_sync_next_token(void)
+{
+  uint16_t token = s_rtc_sync_token_seq;
+
+  s_rtc_sync_token_seq++;
+  if (s_rtc_sync_token_seq == 0U)
+  {
+    s_rtc_sync_token_seq = 1U;
+  }
+  return token;
+}
+
+static bool gh_rtc_sync_wait_ack(uint8_t slave_id, uint16_t token)
+{
+  uint8_t attempt;
+  uint16_t ack_regs[2] = {0U, 0U};
+
+  for (attempt = 0U; attempt < GH_RTU_RTC_SYNC_ACK_POLL_ATTEMPTS; attempt++)
+  {
+    if (gh_modbus_read_holding_retry(slave_id,
+                                     GH_RTU_RTC_APPLIED_TOKEN_REG,
+                                     2U,
+                                     ack_regs,
+                                     MODBUS_RTU_RESP_TIMEOUT_MS,
+                                     MODBUS_RETRY_COUNT,
+                                     MODBUS_RETRY_BACKOFF_MS,
+                                     NULL))
+    {
+      if (ack_regs[0] == token)
+      {
+        s_rtc_sync_last_result = ack_regs[1];
+        return ((ack_regs[1] == GH_RTU_RTC_SYNC_RESULT_APPLIED) ||
+                (ack_regs[1] == GH_RTU_RTC_SYNC_RESULT_NOOP));
+      }
+    }
+
+    if ((attempt + 1U) < GH_RTU_RTC_SYNC_ACK_POLL_ATTEMPTS)
+    {
+      osDelay(GH_RTU_RTC_SYNC_ACK_POLL_DELAY_MS);
+    }
+  }
+
+  return false;
+}
+
+static bool gh_rtc_sync_send(uint8_t slave_id, uint8_t hour, uint8_t minute, uint16_t token)
+{
+  uint16_t write_regs[3];
+
+  write_regs[0] = (uint16_t)hour;
+  write_regs[1] = (uint16_t)minute;
+  write_regs[2] = token;
+
+  if (!gh_modbus_write_multi_retry(slave_id,
+                                   GH_RTU_RTC_SET_HOUR_REG,
+                                   3U,
+                                   write_regs,
+                                   MODBUS_RETRY_COUNT,
+                                   MODBUS_RTU_RESP_TIMEOUT_MS))
+  {
+    s_rtc_sync_last_result = 0xFFFEU; /* write failed */
+    return false;
+  }
+
+  return gh_rtc_sync_wait_ack(slave_id, token);
+}
+
+static void gh_rtc_sync_publish_diag(void)
+{
+  GH_ModbusMap_ReportRtcSyncDiag(s_rtc_sync_attempt_count,
+                                 s_rtc_sync_success_count,
+                                 s_rtc_sync_fail_count,
+                                 s_rtc_sync_last_slave_id,
+                                 s_rtc_sync_last_token,
+                                 s_rtc_sync_last_result);
+}
+
+static void gh_maybe_sync_slave_rtc(uint8_t slave_id, uint32_t now_ms, bool force_sync)
+{
+  uint8_t slave_idx;
+  uint8_t hour;
+  uint8_t minute;
+  uint16_t token;
+  bool sync_ok;
+
+  if (!gh_slave_id_valid(slave_id))
+  {
     return;
   }
 
-  hhmm = (uint16_t)(((uint16_t)rtc_time.Hours * 60U) + (uint16_t)rtc_time.Minutes);
+  slave_idx = gh_slave_to_index(slave_id);
+  if (!force_sync)
+  {
+    if (s_rtc_sync_retry_count[slave_idx] > 0U)
+    {
+      if (s_rtc_sync_retry_count[slave_idx] >= GH_RTU_RTC_SYNC_MAX_RETRIES)
+      {
+        if ((uint32_t)(now_ms - s_rtc_sync_last_attempt_ms[slave_idx]) < GH_RTU_RTC_SYNC_PERIOD_MS)
+        {
+          return;
+        }
+        s_rtc_sync_retry_count[slave_idx] = 0U;
+      }
+      else if ((uint32_t)(now_ms - s_rtc_sync_last_attempt_ms[slave_idx]) < GH_RTU_RTC_SYNC_RETRY_BACKOFF_MS)
+      {
+        return;
+      }
+    }
+    else if ((s_rtc_sync_last_ok_ms[slave_idx] != 0U) &&
+             ((uint32_t)(now_ms - s_rtc_sync_last_ok_ms[slave_idx]) < GH_RTU_RTC_SYNC_PERIOD_MS))
+    {
+      return;
+    }
+  }
+
+  if (!gh_get_server_rtc_hhmm(&hour, &minute))
+  {
+    return;
+  }
+
+  token = gh_rtc_sync_next_token();
+  s_rtc_sync_attempt_count++;
+  s_rtc_sync_last_slave_id = slave_id;
+  s_rtc_sync_last_token = token;
+  s_rtc_sync_last_result = 0xFFFFU; /* pending */
+  sync_ok = gh_rtc_sync_send(slave_id, hour, minute, token);
+  s_rtc_sync_last_attempt_ms[slave_idx] = now_ms;
+  if (sync_ok)
+  {
+    s_rtc_sync_last_ok_ms[slave_idx] = now_ms;
+    s_rtc_sync_retry_count[slave_idx] = 0U;
+    s_rtc_sync_success_count++;
+    gh_rtc_sync_publish_diag();
+    return;
+  }
+
+  if (s_rtc_sync_retry_count[slave_idx] < 0xFFU)
+  {
+    s_rtc_sync_retry_count[slave_idx]++;
+  }
+  s_rtc_sync_fail_count++;
+  if (s_rtc_sync_last_result == 0xFFFFU)
+  {
+    s_rtc_sync_last_result = 0xFFFD; /* ack timeout/no token match */
+  }
+  gh_rtc_sync_publish_diag();
+}
+
+static void gh_refresh_rtc_clock_registers(void)
+{
+  static uint16_t s_last_hhmm = 0xFFFFU;
+  uint8_t hour;
+  uint8_t minute;
+  uint16_t hhmm;
+
+  if (!gh_get_server_rtc_hhmm(&hour, &minute))
+  {
+    return;
+  }
+
+  hhmm = (uint16_t)(((uint16_t)hour * 60U) + (uint16_t)minute);
   if (hhmm == s_last_hhmm)
   {
     return;
   }
 
   s_last_hhmm = hhmm;
-  GH_ModbusMap_UpdateRtcTime(rtc_time.Hours, rtc_time.Minutes);
+  GH_ModbusMap_UpdateRtcTime(hour, minute);
 }
 
 static void gh_apply_rtc_set_request(void)
@@ -1014,6 +1222,7 @@ static bool gh_run_topology_cycle(uint8_t *comm_fail_streak,
   for (slave_id = GH_RTU_SLAVE_FIRST; slave_id <= GH_RTU_SLAVE_LAST; slave_id++)
   {
     uint32_t bit = (1UL << (uint32_t)(slave_id - 1U));
+    bool force_rtc_sync = false;
 
     if ((plan_slave_mask & bit) == 0U)
     {
@@ -1029,6 +1238,7 @@ static bool gh_run_topology_cycle(uint8_t *comm_fail_streak,
     if (slave_success[slave_idx])
     {
       policy = gh_find_policy_for_slave(s_topology_policy_cache, policy_count, slave_id);
+      force_rtc_sync = ((!s_slave_comm_up[slave_idx]) || (comm_fail_streak[slave_idx] > 0U));
       comm_fail_streak[slave_idx] = 0U;
       if (comm_ok_streak[slave_idx] < 0xFFU)
       {
@@ -1044,6 +1254,8 @@ static bool gh_run_topology_cycle(uint8_t *comm_fail_streak,
         s_last_policy_reason[slave_idx] = GH_POLICY_REASON_NONE;
         s_last_policy_action[slave_idx] = GH_TOPOLOGY_POLICY_ACTION_KEEP_LAST;
       }
+      gh_maybe_sync_slave_rtc(slave_id, HAL_GetTick(), force_rtc_sync);
+      s_slave_comm_up[slave_idx] = true;
     }
     else
     {
@@ -1096,6 +1308,7 @@ static bool gh_run_topology_cycle(uint8_t *comm_fail_streak,
         g_status.modbus_timeouts[slave_id - 1U]++;
       }
       GH_ModbusMap_ReportTimeout(slave_id, HAL_GetTick());
+      s_slave_comm_up[slave_idx] = false;
     }
   }
 
@@ -1120,6 +1333,7 @@ static void gh_run_legacy_cycle(uint8_t *comm_fail_streak,
   uint32_t now = 0U;
   bool ok;
   bool set_quality = false;
+  bool force_rtc_sync = false;
   uint8_t target_quality = SENSOR_QUALITY_STALE;
   uint8_t slave_id;
   uint8_t streak_idx = 0U;
@@ -1150,6 +1364,7 @@ static void gh_run_legacy_cycle(uint8_t *comm_fail_streak,
                                       NULL);
     if (ok)
     {
+      force_rtc_sync = ((!s_slave_comm_up[streak_idx]) || (comm_fail_streak[streak_idx] > 0U));
       comm_fail_streak[streak_idx] = 0U;
       if (comm_ok_streak[streak_idx] < 0xFFU)
       {
@@ -1182,6 +1397,8 @@ static void gh_run_legacy_cycle(uint8_t *comm_fail_streak,
         }
       }
       GH_ModbusMap_UpdateTelemetry(slave_id, sens, 0x01FFU, 0U, now);
+      gh_maybe_sync_slave_rtc(slave_id, now, force_rtc_sync);
+      s_slave_comm_up[streak_idx] = true;
     }
     else
     {
@@ -1207,6 +1424,7 @@ static void gh_run_legacy_cycle(uint8_t *comm_fail_streak,
         g_status.modbus_timeouts[s - 1U]++;
       }
       GH_ModbusMap_ReportTimeout(slave_id, now);
+      s_slave_comm_up[streak_idx] = false;
       if (set_quality)
       {
         for (i = 0U; i < GH_RTU_SENSORS_PER_SLAVE; i++)
@@ -1256,6 +1474,7 @@ void GH_ModbusMasterTask_Run(void *argument)
   (void)argument;
 
   fail_offline_cycles = gh_quality_fail_offline_cycles();
+  gh_rtc_sync_publish_diag();
 
   for (;;)
   {

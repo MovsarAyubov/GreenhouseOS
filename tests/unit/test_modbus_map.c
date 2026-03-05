@@ -39,11 +39,20 @@
 #define DIR_OFF_RTC_SET_TOKEN 18U
 #define DIR_OFF_RTC_SET_APPLIED_TOKEN 19U
 #define DIR_OFF_RTC_SET_RESULT 20U
+#define DIR_OFF_RTC_SYNC_ATTEMPT_HI 21U
+#define DIR_OFF_RTC_SYNC_ATTEMPT_LO 22U
+#define DIR_OFF_RTC_SYNC_OK_HI 23U
+#define DIR_OFF_RTC_SYNC_OK_LO 24U
+#define DIR_OFF_RTC_SYNC_FAIL_HI 25U
+#define DIR_OFF_RTC_SYNC_FAIL_LO 26U
+#define DIR_OFF_RTC_SYNC_LAST_SLAVE 27U
+#define DIR_OFF_RTC_SYNC_LAST_TOKEN 28U
+#define DIR_OFF_RTC_SYNC_LAST_RESULT 29U
 
 int test_modbus_map_run(void)
 {
   uint16_t regs[4] = {0U};
-  uint16_t regs_u32[2] = {0U};
+  uint16_t regs_u32[6] = {0U};
   uint16_t payload_words[CONFIG_PAYLOAD_SIZE / 2U] = {0U};
   uint8_t payload[CONFIG_PAYLOAD_SIZE] = {0U};
   uint32_t crc;
@@ -113,6 +122,15 @@ int test_modbus_map_run(void)
   UT_ASSERT_TRUE(GH_ModbusMap_ReadRange((uint16_t)(GH_MB_DIR_BASE + DIR_OFF_RTC_SET_APPLIED_TOKEN), 2U, regs));
   UT_ASSERT_EQ_U32(32U, regs[0]);
   UT_ASSERT_EQ_U32(GH_MB_RTC_SET_RESULT_REJECT_RANGE, regs[1]);
+  GH_ModbusMap_ReportRtcSyncDiag(10U, 8U, 2U, 20U, 100U, 5U);
+  UT_ASSERT_TRUE(GH_ModbusMap_ReadRange((uint16_t)(GH_MB_DIR_BASE + DIR_OFF_RTC_SYNC_ATTEMPT_HI), 6U, regs_u32));
+  UT_ASSERT_EQ_U32(10U, (((uint32_t)regs_u32[0] << 16U) | regs_u32[1]));
+  UT_ASSERT_EQ_U32(8U, (((uint32_t)regs_u32[2] << 16U) | regs_u32[3]));
+  UT_ASSERT_EQ_U32(2U, (((uint32_t)regs_u32[4] << 16U) | regs_u32[5]));
+  UT_ASSERT_TRUE(GH_ModbusMap_ReadRange((uint16_t)(GH_MB_DIR_BASE + DIR_OFF_RTC_SYNC_LAST_SLAVE), 3U, regs));
+  UT_ASSERT_EQ_U32(20U, regs[0]);
+  UT_ASSERT_EQ_U32(100U, regs[1]);
+  UT_ASSERT_EQ_U32(5U, regs[2]);
 
   crc = gh_crc32_compute(payload, CONFIG_PAYLOAD_SIZE);
   crc_hi = (uint16_t)((crc >> 16U) & 0xFFFFU);

@@ -98,6 +98,12 @@ Register map (`base + off`):
 - `+18` `RTC_SET_TOKEN` (W): non-zero changed token triggers RTC set.
 - `+19` `RTC_SET_APPLIED_TOKEN` (R): last processed token.
 - `+20` `RTC_SET_RESULT` (R): `0=IDLE`, `1=QUEUED`, `2=APPLIED`, `3=REJECT_RANGE`, `4=FAILED`.
+- `+21..+22` `RTC_SYNC_ATTEMPT_COUNT` (R, hi/lo, master -> slave sync attempts).
+- `+23..+24` `RTC_SYNC_SUCCESS_COUNT` (R, hi/lo).
+- `+25..+26` `RTC_SYNC_FAIL_COUNT` (R, hi/lo).
+- `+27` `RTC_SYNC_LAST_SLAVE_ID` (R).
+- `+28` `RTC_SYNC_LAST_TOKEN` (R).
+- `+29` `RTC_SYNC_LAST_RESULT` (R): last slave result code, or internal master error marker (`0xFFFE` write fail, `0xFFFD` ack timeout).
 
 ## Legacy config pipeline window (`GH_MB_CFG_BASE`)
 - Base index: `1472` (SCADA `42472`).
