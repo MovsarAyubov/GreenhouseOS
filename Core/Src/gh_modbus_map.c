@@ -57,6 +57,20 @@ enum
 
 enum
 {
+  SCHED_SLOT_WORDS = 3U,
+  SCHED_SLOT_COUNT = 4U,
+  SCHED_OFF_APPLY_VALUE = (SCHED_SLOT_WORDS * SCHED_SLOT_COUNT),
+  SCHED_OFF_EXPECTED_VER_HI = (SCHED_SLOT_WORDS * SCHED_SLOT_COUNT) + 1U,
+  SCHED_OFF_EXPECTED_VER_LO = (SCHED_SLOT_WORDS * SCHED_SLOT_COUNT) + 2U,
+  SCHED_OFF_CMD_KIND = (SCHED_SLOT_WORDS * SCHED_SLOT_COUNT) + 3U,
+  SCHED_OFF_APPLY_TRIGGER = (SCHED_SLOT_WORDS * SCHED_SLOT_COUNT) + 4U,
+  SCHED_OFF_LAST_APPLIED_TRIGGER = (SCHED_SLOT_WORDS * SCHED_SLOT_COUNT) + 5U,
+  SCHED_OFF_LAST_RESULT = (SCHED_SLOT_WORDS * SCHED_SLOT_COUNT) + 6U,
+  SCHED_OFF_LAST_IO_ERR = (SCHED_SLOT_WORDS * SCHED_SLOT_COUNT) + 7U
+};
+
+enum
+{
   DIR_OFF_MAP_VERSION = 0U,
   DIR_OFF_MAP_FLAGS = 1U,
   DIR_OFF_TOPO_GEN_HI = 2U,
@@ -86,7 +100,9 @@ enum
   DIR_OFF_RTC_SYNC_FAIL_LO = GH_MB_DIR_OFF_RTC_SYNC_FAIL_LO,
   DIR_OFF_RTC_SYNC_LAST_SLAVE = GH_MB_DIR_OFF_RTC_SYNC_LAST_SLAVE,
   DIR_OFF_RTC_SYNC_LAST_TOKEN = GH_MB_DIR_OFF_RTC_SYNC_LAST_TOKEN,
-  DIR_OFF_RTC_SYNC_LAST_RESULT = GH_MB_DIR_OFF_RTC_SYNC_LAST_RESULT
+  DIR_OFF_RTC_SYNC_LAST_RESULT = GH_MB_DIR_OFF_RTC_SYNC_LAST_RESULT,
+  DIR_OFF_SCHED_BASE = GH_MB_DIR_OFF_SCHED_BASE,
+  DIR_OFF_SCHED_BLOCK_SIZE = GH_MB_DIR_OFF_SCHED_BLOCK_SIZE
 };
 
 enum
@@ -273,6 +289,16 @@ static bool cmd_base(uint8_t slave_id, uint16_t *out_base)
   return true;
 }
 
+static bool sched_base(uint8_t slave_id, uint16_t *out_base)
+{
+  if ((slave_id == 0U) || (slave_id > GH_MB_MAX_SLAVES) || (out_base == NULL))
+  {
+    return false;
+  }
+  *out_base = (uint16_t)(GH_MB_SCHED_BASE + ((uint16_t)(slave_id - 1U) * GH_MB_SCHED_BLOCK_SIZE));
+  return true;
+}
+
 static bool point_base(uint16_t publish_index, uint16_t *out_base)
 {
   if ((publish_index >= GH_MB_POINT_MAX) || (out_base == NULL))
@@ -449,7 +475,7 @@ static void map_refresh_directory_nolock(void)
     flags |= 0x0002U;
   }
 
-  s_holding[dir_index(DIR_OFF_MAP_VERSION)] = 2U;
+  s_holding[dir_index(DIR_OFF_MAP_VERSION)] = 3U;
   s_holding[dir_index(DIR_OFF_MAP_FLAGS)] = flags;
   s_holding[dir_index(DIR_OFF_TOPO_GEN_HI)] = (uint16_t)((g_topology_v2_generation >> 16U) & 0xFFFFU);
   s_holding[dir_index(DIR_OFF_TOPO_GEN_LO)] = (uint16_t)(g_topology_v2_generation & 0xFFFFU);
@@ -462,6 +488,8 @@ static void map_refresh_directory_nolock(void)
   s_holding[dir_index(DIR_OFF_MAX_POINTS)] = GH_MB_POINT_MAX;
   s_holding[dir_index(DIR_OFF_CMD_BLOCK_SIZE)] = GH_MB_CMD_BLOCK_SIZE;
   s_holding[dir_index(DIR_OFF_STATUS_BLOCK_SIZE)] = GH_MB_SLAVE_STATUS_BLOCK_SIZE;
+  s_holding[dir_index(DIR_OFF_SCHED_BASE)] = GH_MB_SCHED_BASE;
+  s_holding[dir_index(DIR_OFF_SCHED_BLOCK_SIZE)] = GH_MB_SCHED_BLOCK_SIZE;
 }
 
 static void map_refresh_runtime_diag_nolock(void)
@@ -730,6 +758,7 @@ void GH_ModbusMap_Init(void)
   uint8_t s;
   uint16_t status_base;
   uint16_t cmd_base_addr;
+  uint16_t sched_base_addr;
   uint16_t i;
 
   (void)map_ensure_mutex();
@@ -756,7 +785,7 @@ void GH_ModbusMap_Init(void)
 
   for (s = 1U; s <= GH_MB_MAX_SLAVES; s++)
   {
-    if (!slave_status_base(s, &status_base) || !cmd_base(s, &cmd_base_addr))
+    if (!slave_status_base(s, &status_base) || !cmd_base(s, &cmd_base_addr) || !sched_base(s, &sched_base_addr))
     {
       continue;
     }
@@ -767,6 +796,12 @@ void GH_ModbusMap_Init(void)
     s_holding[cmd_base_addr + CMD_OFF_MODE] = 0U;
     s_holding[cmd_base_addr + CMD_OFF_APPLY_TRIGGER] = 0U;
     s_holding[cmd_base_addr + CMD_OFF_LAST_APPLIED_TRIGGER] = 0U;
+
+    s_holding[sched_base_addr + SCHED_OFF_CMD_KIND] = GH_MB_SCHED_CMD_KIND_LEGACY;
+    s_holding[sched_base_addr + SCHED_OFF_APPLY_TRIGGER] = 0U;
+    s_holding[sched_base_addr + SCHED_OFF_LAST_APPLIED_TRIGGER] = 0U;
+    s_holding[sched_base_addr + SCHED_OFF_LAST_RESULT] = GH_MB_SCHED_RESULT_IDLE;
+    s_holding[sched_base_addr + SCHED_OFF_LAST_IO_ERR] = (uint16_t)MODBUS_IO_ERR_NONE;
   }
 
   s_holding[cfg_index(CFG_OFF_RESULT_CODE)] = (uint16_t)CFG_RESULT_IDLE;
@@ -1125,6 +1160,75 @@ void GH_ModbusMap_MarkApplyResult(uint8_t slave_id, uint16_t trigger, bool appli
     s_holding[base + CMD_OFF_LAST_APPLIED_TRIGGER] = trigger;
     bump_slave_data_version_nolock(status_base);
   }
+  map_unlock();
+}
+
+bool GH_ModbusMap_GetScheduleApplyRequest(uint8_t slave_id, schedule_apply_request_t *out_req)
+{
+  uint16_t base;
+  uint16_t trigger;
+  uint16_t applied;
+  uint16_t slot;
+  uint16_t slot_off;
+
+  if ((out_req == NULL) || !sched_base(slave_id, &base))
+  {
+    return false;
+  }
+  if (!map_lock())
+  {
+    return false;
+  }
+
+  trigger = s_holding[base + SCHED_OFF_APPLY_TRIGGER];
+  applied = s_holding[base + SCHED_OFF_LAST_APPLIED_TRIGGER];
+  if (trigger == applied)
+  {
+    map_unlock();
+    return false;
+  }
+
+  memset(out_req, 0, sizeof(*out_req));
+  out_req->trigger = trigger;
+  out_req->apply_value = s_holding[base + SCHED_OFF_APPLY_VALUE];
+  out_req->expected_active_ctrl_version = ((uint32_t)s_holding[base + SCHED_OFF_EXPECTED_VER_HI] << 16U) |
+                                          (uint32_t)s_holding[base + SCHED_OFF_EXPECTED_VER_LO];
+  out_req->cmd_kind = s_holding[base + SCHED_OFF_CMD_KIND];
+
+  for (slot = 0U; slot < SCHED_SLOT_COUNT; slot++)
+  {
+    slot_off = (uint16_t)(slot * SCHED_SLOT_WORDS);
+    out_req->slots[slot].enabled = s_holding[base + slot_off + 0U];
+    out_req->slots[slot].on_hhmm = s_holding[base + slot_off + 1U];
+    out_req->slots[slot].off_hhmm = s_holding[base + slot_off + 2U];
+  }
+
+  map_unlock();
+  return true;
+}
+
+void GH_ModbusMap_MarkScheduleApplyResult(uint8_t slave_id, const schedule_apply_result_t *result)
+{
+  uint16_t base;
+  uint16_t status_base;
+
+  if ((result == NULL) || !sched_base(slave_id, &base) || !slave_status_base(slave_id, &status_base))
+  {
+    return;
+  }
+  if (!map_lock())
+  {
+    return;
+  }
+
+  s_holding[base + SCHED_OFF_LAST_RESULT] = result->result;
+  s_holding[base + SCHED_OFF_LAST_IO_ERR] = (uint16_t)result->io_error;
+  if (result->result == GH_MB_SCHED_RESULT_APPLIED)
+  {
+    s_holding[base + SCHED_OFF_LAST_APPLIED_TRIGGER] = result->trigger;
+    bump_slave_data_version_nolock(status_base);
+  }
+
   map_unlock();
 }
 

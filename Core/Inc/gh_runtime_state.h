@@ -61,6 +61,12 @@
 #define EVENT_CODE_CFG_REJECTED       1101U
 #define EVENT_CODE_WDG_MISS           1200U
 #define EVENT_CODE_CTRL_SYNC_FAIL     1300U
+#define EVENT_CODE_CTRL_SYNC_ACK_STATUS_FAIL 1301U
+#define EVENT_CODE_CTRL_SYNC_VERSION_MISMATCH 1302U
+#define EVENT_CODE_CTRL_SYNC_INVALID_CMD_KIND 1303U
+#define EVENT_CODE_CTRL_SYNC_INVALID_SCHEDULE 1304U
+#define EVENT_CODE_CTRL_SYNC_TOPOLOGY_CONTRACT 1305U
+#define EVENT_CODE_CTRL_SYNC_TRANSPORT_TIMEOUT 1306U
 
 #define MODBUS_DIAG_BASE               128U
 #define MODBUS_DIAG_REG_COUNT          6U
@@ -114,6 +120,29 @@ typedef enum
   CFG_RESULT_REJECT_TOPOLOGY_COLLISION = 23U,
   CFG_RESULT_REJECT_TOPOLOGY_BUDGET = 24U
 } config_result_code_t;
+
+typedef struct
+{
+  uint16_t enabled;
+  uint16_t on_hhmm;
+  uint16_t off_hhmm;
+} schedule_slot_t;
+
+typedef struct
+{
+  uint16_t trigger;
+  uint16_t apply_value;
+  uint16_t cmd_kind;
+  uint32_t expected_active_ctrl_version;
+  schedule_slot_t slots[4];
+} schedule_apply_request_t;
+
+typedef struct
+{
+  uint16_t trigger;
+  uint16_t result;
+  modbus_io_error_t io_error;
+} schedule_apply_result_t;
 
 typedef struct
 {

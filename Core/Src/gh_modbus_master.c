@@ -4,6 +4,7 @@
 #include "gh_modbus_map.h"
 #include "gh_topology_runtime.h"
 #include "gh_topology_v2.h"
+#include "ModbusConfig.h"
 
 #include <math.h>
 #include <string.h>
@@ -20,7 +21,11 @@
 #define GH_RTU_CTRL_SP_WATER_GROW_REG 107U
 #define GH_RTU_CTRL_SP_WATER_UPPER_REG 108U
 #define GH_RTU_CTRL_SP_WATER_UNDER_REG 109U
+#define GH_RTU_SCHEDULE_BASE_REG      110U
+#define GH_RTU_SCHEDULE_REG_COUNT     12U
 #define GH_RTU_APPLY_TRIGGER_REG      122U
+#define GH_RTU_APPLY_STATUS_REG       125U
+#define GH_RTU_APPLY_STATUS_REG_COUNT 3U
 #define GH_RTU_RTC_SET_BASE_REG       140U
 #define GH_RTU_RTC_SET_HOUR_REG       (GH_RTU_RTC_SET_BASE_REG + 0U)
 #define GH_RTU_RTC_SET_MINUTE_REG     (GH_RTU_RTC_SET_BASE_REG + 1U)
@@ -84,6 +89,15 @@ static bool gh_modbus_write_multi_retry(uint8_t slave_id,
                                         uint8_t retries,
                                         uint32_t timeout_ms);
 static void gh_rtc_sync_publish_diag(void);
+static bool gh_hhmm_is_valid(uint16_t hhmm);
+static uint16_t gh_schedule_event_for_io_error(modbus_io_error_t io_err);
+static void gh_schedule_publish_failure(uint8_t slave_id,
+                                        uint16_t event_code,
+                                        uint16_t detail,
+                                        modbus_io_error_t io_err);
+static bool gh_apply_schedule_request_execute(uint8_t slave_id,
+                                              const schedule_apply_request_t *req,
+                                              schedule_apply_result_t *out_result);
 
 static bool gh_get_server_rtc_hhmm(uint8_t *out_hour, uint8_t *out_minute)
 {
@@ -461,6 +475,161 @@ static bool gh_modbus_write_multi_retry(uint8_t slave_id,
     }
   }
 
+  return false;
+}
+
+static bool gh_hhmm_is_valid(uint16_t hhmm)
+{
+  uint16_t hh = (uint16_t)(hhmm / 100U);
+  uint16_t mm = (uint16_t)(hhmm % 100U);
+
+  return (hh < 24U) && (mm < 60U);
+}
+
+static uint16_t gh_schedule_event_for_io_error(modbus_io_error_t io_err)
+{
+  switch (io_err)
+  {
+    case MODBUS_IO_ERR_NONE:
+    case MODBUS_IO_ERR_TIMEOUT:
+    case MODBUS_IO_ERR_CRC:
+    case MODBUS_IO_ERR_FRAME:
+    case MODBUS_IO_ERR_UART:
+    default:
+      return EVENT_CODE_CTRL_SYNC_TRANSPORT_TIMEOUT;
+  }
+}
+
+static void gh_schedule_publish_failure(uint8_t slave_id,
+                                        uint16_t event_code,
+                                        uint16_t detail,
+                                        modbus_io_error_t io_err)
+{
+  float value = (detail != 0U) ? (float)detail : (float)io_err;
+
+  publish_event(EVENT_SEV_WARN, event_code, slave_id, value);
+  g_status.last_error_code = event_code;
+}
+
+static bool gh_apply_schedule_request_execute(uint8_t slave_id,
+                                              const schedule_apply_request_t *req,
+                                              schedule_apply_result_t *out_result)
+{
+  uint16_t payload[GH_RTU_SCHEDULE_REG_COUNT] = {0U};
+  uint16_t apply_regs[GH_RTU_APPLY_STATUS_REG_COUNT] = {0U};
+  modbus_io_error_t io_err = MODBUS_IO_ERR_NONE;
+  uint32_t active_ver = 0U;
+  uint32_t expected_ver = 0U;
+  uint16_t fail_code = GH_MB_SCHED_RESULT_APPLIED;
+  uint16_t fail_detail = 0U;
+  uint16_t slot;
+  uint16_t slot_off;
+
+  if ((req == NULL) || (out_result == NULL))
+  {
+    return false;
+  }
+
+  memset(out_result, 0, sizeof(*out_result));
+  out_result->trigger = req->trigger;
+  out_result->result = GH_MB_SCHED_RESULT_APPLIED;
+  out_result->io_error = MODBUS_IO_ERR_NONE;
+
+  if (req->cmd_kind != GH_MB_SCHED_CMD_KIND_REMOTE_SCHEDULE)
+  {
+    fail_code = EVENT_CODE_CTRL_SYNC_INVALID_CMD_KIND;
+    fail_detail = req->cmd_kind;
+    goto fail;
+  }
+
+  for (slot = 0U; slot < 4U; slot++)
+  {
+    if (req->slots[slot].enabled > 1U)
+    {
+      fail_code = EVENT_CODE_CTRL_SYNC_INVALID_SCHEDULE;
+      fail_detail = (uint16_t)(slot + 1U);
+      goto fail;
+    }
+
+    if (!gh_hhmm_is_valid(req->slots[slot].on_hhmm) ||
+        !gh_hhmm_is_valid(req->slots[slot].off_hhmm))
+    {
+      fail_code = EVENT_CODE_CTRL_SYNC_INVALID_SCHEDULE;
+      fail_detail = (uint16_t)(slot + 1U);
+      goto fail;
+    }
+
+    slot_off = (uint16_t)(slot * 3U);
+    payload[slot_off + 0U] = req->slots[slot].enabled;
+    payload[slot_off + 1U] = req->slots[slot].on_hhmm;
+    payload[slot_off + 2U] = req->slots[slot].off_hhmm;
+  }
+
+  if (!gh_modbus_write_multi_retry(slave_id,
+                                   GH_RTU_SCHEDULE_BASE_REG,
+                                   GH_RTU_SCHEDULE_REG_COUNT,
+                                   payload,
+                                   MODBUS_RETRY_COUNT,
+                                   MODBUS_RTU_RESP_TIMEOUT_MS))
+  {
+    io_err = modbus_get_last_error();
+    fail_code = gh_schedule_event_for_io_error(io_err);
+    goto fail;
+  }
+
+  if (!gh_modbus_write_single_retry(slave_id,
+                                    GH_RTU_APPLY_TRIGGER_REG,
+                                    req->apply_value,
+                                    MODBUS_RETRY_COUNT,
+                                    MODBUS_RTU_RESP_TIMEOUT_MS))
+  {
+    io_err = modbus_get_last_error();
+    fail_code = gh_schedule_event_for_io_error(io_err);
+    goto fail;
+  }
+
+  if (!gh_modbus_read_holding_retry(slave_id,
+                                    GH_RTU_APPLY_STATUS_REG,
+                                    GH_RTU_APPLY_STATUS_REG_COUNT,
+                                    apply_regs,
+                                    MODBUS_RTU_RESP_TIMEOUT_MS,
+                                    MODBUS_RETRY_COUNT,
+                                    MODBUS_RETRY_BACKOFF_MS,
+                                    &io_err))
+  {
+    fail_code = gh_schedule_event_for_io_error(io_err);
+    goto fail;
+  }
+
+  g_status.last_apply_status = (uint8_t)(apply_regs[0] & 0x00FFU);
+  if (apply_regs[0] != APPLY_APPLIED)
+  {
+    fail_code = EVENT_CODE_CTRL_SYNC_ACK_STATUS_FAIL;
+    fail_detail = apply_regs[0];
+    io_err = MODBUS_IO_ERR_NONE;
+    goto fail;
+  }
+
+  active_ver = ((uint32_t)apply_regs[1] << 16U) | (uint32_t)apply_regs[2];
+  expected_ver = req->expected_active_ctrl_version;
+#if (GH_SCHEDULE_VERSION_CHECK_ALLOW_DISABLED == 1U)
+  if ((expected_ver != 0U) && (active_ver != expected_ver))
+#else
+  if (active_ver != expected_ver)
+#endif
+  {
+    fail_code = EVENT_CODE_CTRL_SYNC_VERSION_MISMATCH;
+    fail_detail = (uint16_t)(active_ver & 0xFFFFU);
+    io_err = MODBUS_IO_ERR_NONE;
+    goto fail;
+  }
+
+  return true;
+
+fail:
+  out_result->result = fail_code;
+  out_result->io_error = io_err;
+  gh_schedule_publish_failure(slave_id, fail_code, fail_detail, io_err);
   return false;
 }
 
@@ -972,7 +1141,19 @@ static void gh_apply_request_for_slave(uint8_t slave_id,
 {
   bool apply_ok = false;
   bool used_topology = false;
+  schedule_apply_request_t sched_req = {0};
+  schedule_apply_result_t sched_result = {0};
   gh_slave_apply_request_t req = {0};
+
+  if (GH_ModbusMap_GetScheduleApplyRequest(slave_id, &sched_req))
+  {
+    sched_result.trigger = sched_req.trigger;
+    sched_result.result = GH_MB_SCHED_RESULT_APPLIED;
+    sched_result.io_error = MODBUS_IO_ERR_NONE;
+    (void)gh_apply_schedule_request_execute(slave_id, &sched_req, &sched_result);
+    GH_ModbusMap_MarkScheduleApplyResult(slave_id, &sched_result);
+    return;
+  }
 
   if (!GH_ModbusMap_GetApplyRequest(slave_id, &req))
   {

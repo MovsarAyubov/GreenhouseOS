@@ -48,8 +48,18 @@
 #define GH_MB_DIAG_REGS       32U
 #define GH_MB_TOPO_BASE       (GH_MB_DIAG_BASE + GH_MB_DIAG_REGS)
 #define GH_MB_TOPO_REGS       144U
+#define GH_MB_SCHED_BASE      (GH_MB_TOPO_BASE + GH_MB_TOPO_REGS)
+#define GH_MB_SCHED_BLOCK_SIZE 20U
+#define GH_MB_SCHED_REGS      (GH_MB_MAX_SLAVES * GH_MB_SCHED_BLOCK_SIZE)
 #define GH_MB_TOTAL_REGS      (GH_MB_POINTS_REGS + GH_MB_SLAVE_STATUS_REGS + GH_MB_CMD_REGS + \
-                               GH_MB_DIR_REGS + GH_MB_CFG_REGS + GH_MB_DIAG_REGS + GH_MB_TOPO_REGS)
+                               GH_MB_DIR_REGS + GH_MB_CFG_REGS + GH_MB_DIAG_REGS + GH_MB_TOPO_REGS + \
+                               GH_MB_SCHED_REGS)
+#define GH_MB_DIR_OFF_SCHED_BASE 30U
+#define GH_MB_DIR_OFF_SCHED_BLOCK_SIZE 31U
+#define GH_MB_SCHED_CMD_KIND_LEGACY   0U
+#define GH_MB_SCHED_CMD_KIND_REMOTE_SCHEDULE 1U
+#define GH_MB_SCHED_RESULT_IDLE    0U
+#define GH_MB_SCHED_RESULT_APPLIED 2U
 
 typedef struct
 {
@@ -94,6 +104,8 @@ void GH_ModbusMap_UpdateDiag(uint8_t slave_id,
 
 bool GH_ModbusMap_GetApplyRequest(uint8_t slave_id, gh_slave_apply_request_t *out_req);
 void GH_ModbusMap_MarkApplyResult(uint8_t slave_id, uint16_t trigger, bool applied);
+bool GH_ModbusMap_GetScheduleApplyRequest(uint8_t slave_id, schedule_apply_request_t *out_req);
+void GH_ModbusMap_MarkScheduleApplyResult(uint8_t slave_id, const schedule_apply_result_t *result);
 void GH_ModbusMap_ReportConfigResult(uint16_t token,
                                      config_result_code_t result,
                                      uint32_t active_version);
