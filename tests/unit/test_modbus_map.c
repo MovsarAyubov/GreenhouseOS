@@ -31,21 +31,15 @@
 #define TOPO_OFF_REQ_GEN_LO 18U
 #define TOPO_OFF_CHUNK_BASE 20U
 
-#define CMD_OFF_MODE 0U
-#define SCHED_OFF_SCH0_EN 0U
-#define SCHED_OFF_SCH0_ON 1U
-#define SCHED_OFF_SCH0_OFF 2U
-#define SCHED_OFF_SCH1_EN 3U
-#define SCHED_OFF_SCH1_ON 4U
-#define SCHED_OFF_SCH1_OFF 5U
-#define SCHED_OFF_APPLY_VALUE 12U
-#define SCHED_OFF_EXPECTED_VER_HI 13U
-#define SCHED_OFF_EXPECTED_VER_LO 14U
-#define SCHED_OFF_CMD_KIND 15U
-#define SCHED_OFF_APPLY_TRIGGER 16U
-#define SCHED_OFF_LAST_APPLIED_TRIGGER 17U
-#define SCHED_OFF_LAST_RESULT 18U
-#define SCHED_OFF_LAST_IO_ERR 19U
+#define CMD_OFF_TARGET_SLAVE_ID 0U
+#define CMD_OFF_TARGET_MODULE_ID 1U
+#define CMD_OFF_CMD_PROFILE_ID 2U
+#define CMD_OFF_PAYLOAD_LEN 3U
+#define CMD_OFF_PAYLOAD_BASE 4U
+#define CMD_OFF_TRIGGER (CMD_OFF_PAYLOAD_BASE + GH_MB_CMD_PAYLOAD_WORDS)
+#define CMD_OFF_LAST_APPLIED_TRIGGER (CMD_OFF_TRIGGER + 1U)
+#define CMD_OFF_RESULT (CMD_OFF_TRIGGER + 2U)
+#define CMD_OFF_IO_ERR (CMD_OFF_TRIGGER + 3U)
 #define DIR_OFF_RTC_HOUR 14U
 #define DIR_OFF_RTC_MINUTE 15U
 #define DIR_OFF_RTC_SET_HOUR 16U
@@ -88,11 +82,8 @@ int test_modbus_map_run(void)
   uint16_t topo_size_hi;
   uint16_t topo_size_lo;
   uint16_t topo_token = 22U;
-  uint32_t expected_ver = 0x12345678UL;
-  uint16_t expected_hi = (uint16_t)((expected_ver >> 16U) & 0xFFFFU);
-  uint16_t expected_lo = (uint16_t)(expected_ver & 0xFFFFU);
-  schedule_apply_request_t sched_req = {0};
-  schedule_apply_result_t sched_result = {0};
+  gh_data_driven_command_request_t dcmd_req = {0};
+  gh_data_driven_command_result_t dcmd_result = {0};
   gh_rtc_set_request_t rtc_req = {0};
 
   UT_OsHooks_Reset();
@@ -105,10 +96,7 @@ int test_modbus_map_run(void)
   GH_ModbusMap_Init();
 
   UT_ASSERT_TRUE(GH_ModbusMap_ReadRange((uint16_t)(GH_MB_DIR_BASE + 0U), 1U, regs));
-  UT_ASSERT_EQ_U32(3U, regs[0]);
-  UT_ASSERT_TRUE(GH_ModbusMap_ReadRange((uint16_t)(GH_MB_DIR_BASE + GH_MB_DIR_OFF_SCHED_BASE), 2U, regs));
-  UT_ASSERT_EQ_U32(GH_MB_SCHED_BASE, regs[0]);
-  UT_ASSERT_EQ_U32(GH_MB_SCHED_BLOCK_SIZE, regs[1]);
+  UT_ASSERT_EQ_U32(4U, regs[0]);
 
   UT_ASSERT_TRUE(GH_ModbusMap_ReadRange((uint16_t)(GH_MB_CFG_BASE + CFG_OFF_RESULT_CODE), 1U, regs));
   UT_ASSERT_EQ_U32(CFG_RESULT_IDLE, regs[0]);
@@ -117,60 +105,83 @@ int test_modbus_map_run(void)
   UT_ASSERT_EQ_U32((g_active_config.version >> 16U) & 0xFFFFU, regs[0]);
   UT_ASSERT_EQ_U32(g_active_config.version & 0xFFFFU, regs[1]);
 
-  UT_ASSERT_TRUE(GH_ModbusMap_WriteSingle((uint16_t)(GH_MB_CMD_BASE + CMD_OFF_MODE), 1234U));
-  UT_ASSERT_TRUE(GH_ModbusMap_ReadRange((uint16_t)(GH_MB_CMD_BASE + CMD_OFF_MODE), 1U, regs));
-  UT_ASSERT_EQ_U32(1234U, regs[0]);
+  UT_ASSERT_TRUE(GH_ModbusMap_WriteSingle((uint16_t)(GH_MB_CMD_BASE + CMD_OFF_TARGET_SLAVE_ID), 1U));
+  UT_ASSERT_TRUE(GH_ModbusMap_WriteSingle((uint16_t)(GH_MB_CMD_BASE + CMD_OFF_TARGET_MODULE_ID), 101U));
+  UT_ASSERT_TRUE(GH_ModbusMap_WriteSingle((uint16_t)(GH_MB_CMD_BASE + CMD_OFF_CMD_PROFILE_ID), 5001U));
+  UT_ASSERT_TRUE(GH_ModbusMap_WriteSingle((uint16_t)(GH_MB_CMD_BASE + CMD_OFF_PAYLOAD_LEN), 3U));
+  UT_ASSERT_TRUE(GH_ModbusMap_WriteSingle((uint16_t)(GH_MB_CMD_BASE + CMD_OFF_PAYLOAD_BASE + 0U), 11U));
+  UT_ASSERT_TRUE(GH_ModbusMap_WriteSingle((uint16_t)(GH_MB_CMD_BASE + CMD_OFF_PAYLOAD_BASE + 1U), 22U));
+  UT_ASSERT_TRUE(GH_ModbusMap_WriteSingle((uint16_t)(GH_MB_CMD_BASE + CMD_OFF_PAYLOAD_BASE + 2U), 33U));
+  UT_ASSERT_TRUE(!GH_ModbusMap_GetDataDrivenCommandRequest(&dcmd_req));
+  UT_ASSERT_TRUE(GH_ModbusMap_WriteSingle((uint16_t)(GH_MB_CMD_BASE + CMD_OFF_TRIGGER), 77U));
+  UT_ASSERT_TRUE(GH_ModbusMap_GetDataDrivenCommandRequest(&dcmd_req));
+  UT_ASSERT_EQ_U32(77U, dcmd_req.trigger);
+  UT_ASSERT_EQ_U32(1U, dcmd_req.slave_id);
+  UT_ASSERT_EQ_U32(101U, dcmd_req.module_id);
+  UT_ASSERT_EQ_U32(5001U, dcmd_req.cmd_profile_id);
+  UT_ASSERT_EQ_U32(3U, dcmd_req.payload_len);
+  UT_ASSERT_EQ_U32(11U, dcmd_req.payload[0]);
+  UT_ASSERT_EQ_U32(33U, dcmd_req.payload[2]);
 
-  UT_ASSERT_TRUE(GH_ModbusMap_WriteSingle((uint16_t)(GH_MB_SCHED_BASE + SCHED_OFF_SCH0_EN), 1U));
-  UT_ASSERT_TRUE(GH_ModbusMap_WriteSingle((uint16_t)(GH_MB_SCHED_BASE + SCHED_OFF_SCH0_ON), 2300U));
-  UT_ASSERT_TRUE(GH_ModbusMap_WriteSingle((uint16_t)(GH_MB_SCHED_BASE + SCHED_OFF_SCH0_OFF), 100U));
-  UT_ASSERT_TRUE(GH_ModbusMap_WriteSingle((uint16_t)(GH_MB_SCHED_BASE + SCHED_OFF_SCH1_EN), 0U));
-  UT_ASSERT_TRUE(GH_ModbusMap_WriteSingle((uint16_t)(GH_MB_SCHED_BASE + SCHED_OFF_SCH1_ON), 830U));
-  UT_ASSERT_TRUE(GH_ModbusMap_WriteSingle((uint16_t)(GH_MB_SCHED_BASE + SCHED_OFF_SCH1_OFF), 1730U));
-  UT_ASSERT_TRUE(GH_ModbusMap_WriteSingle((uint16_t)(GH_MB_SCHED_BASE + SCHED_OFF_APPLY_VALUE), 1U));
-  UT_ASSERT_TRUE(GH_ModbusMap_WriteSingle((uint16_t)(GH_MB_SCHED_BASE + SCHED_OFF_EXPECTED_VER_HI), expected_hi));
-  UT_ASSERT_TRUE(GH_ModbusMap_WriteSingle((uint16_t)(GH_MB_SCHED_BASE + SCHED_OFF_EXPECTED_VER_LO), expected_lo));
-  UT_ASSERT_TRUE(GH_ModbusMap_WriteSingle((uint16_t)(GH_MB_SCHED_BASE + SCHED_OFF_CMD_KIND),
-                                          GH_MB_SCHED_CMD_KIND_REMOTE_SCHEDULE));
-  UT_ASSERT_TRUE(GH_ModbusMap_WriteSingle((uint16_t)(GH_MB_SCHED_BASE + SCHED_OFF_APPLY_TRIGGER), 77U));
-
-  UT_ASSERT_TRUE(GH_ModbusMap_GetScheduleApplyRequest(1U, &sched_req));
-  UT_ASSERT_EQ_U32(77U, sched_req.trigger);
-  UT_ASSERT_EQ_U32(1U, sched_req.apply_value);
-  UT_ASSERT_EQ_U32(expected_ver, sched_req.expected_active_ctrl_version);
-  UT_ASSERT_EQ_U32(GH_MB_SCHED_CMD_KIND_REMOTE_SCHEDULE, sched_req.cmd_kind);
-  UT_ASSERT_EQ_U32(1U, sched_req.slots[0].enabled);
-  UT_ASSERT_EQ_U32(2300U, sched_req.slots[0].on_hhmm);
-  UT_ASSERT_EQ_U32(100U, sched_req.slots[0].off_hhmm);
-  UT_ASSERT_EQ_U32(0U, sched_req.slots[1].enabled);
-
-  sched_result.trigger = sched_req.trigger;
-  sched_result.result = GH_MB_SCHED_RESULT_APPLIED;
-  sched_result.io_error = MODBUS_IO_ERR_NONE;
-  GH_ModbusMap_MarkScheduleApplyResult(1U, &sched_result);
-  UT_ASSERT_TRUE(!GH_ModbusMap_GetScheduleApplyRequest(1U, &sched_req));
-  UT_ASSERT_TRUE(GH_ModbusMap_ReadRange((uint16_t)(GH_MB_SCHED_BASE + SCHED_OFF_LAST_APPLIED_TRIGGER), 3U, regs));
+  dcmd_result.trigger = dcmd_req.trigger;
+  dcmd_result.result = GH_MB_DCMD_RESULT_APPLIED;
+  dcmd_result.io_error = MODBUS_IO_ERR_NONE;
+  GH_ModbusMap_MarkDataDrivenCommandResult(&dcmd_result);
+  UT_ASSERT_TRUE(!GH_ModbusMap_GetDataDrivenCommandRequest(&dcmd_req));
+  UT_ASSERT_TRUE(GH_ModbusMap_ReadRange((uint16_t)(GH_MB_CMD_BASE + CMD_OFF_LAST_APPLIED_TRIGGER), 3U, regs));
   UT_ASSERT_EQ_U32(77U, regs[0]);
-  UT_ASSERT_EQ_U32(GH_MB_SCHED_RESULT_APPLIED, regs[1]);
+  UT_ASSERT_EQ_U32(GH_MB_DCMD_RESULT_APPLIED, regs[1]);
   UT_ASSERT_EQ_U32(MODBUS_IO_ERR_NONE, regs[2]);
-  UT_ASSERT_TRUE(GH_ModbusMap_WriteSingle((uint16_t)(GH_MB_SCHED_BASE + SCHED_OFF_APPLY_TRIGGER), 78U));
-  UT_ASSERT_TRUE(GH_ModbusMap_GetScheduleApplyRequest(1U, &sched_req));
-  UT_ASSERT_EQ_U32(78U, sched_req.trigger);
-  sched_result.trigger = sched_req.trigger;
-  sched_result.result = EVENT_CODE_CTRL_SYNC_TRANSPORT_TIMEOUT;
-  sched_result.io_error = MODBUS_IO_ERR_TIMEOUT;
-  GH_ModbusMap_MarkScheduleApplyResult(1U, &sched_result);
-  UT_ASSERT_TRUE(GH_ModbusMap_ReadRange((uint16_t)(GH_MB_SCHED_BASE + SCHED_OFF_LAST_APPLIED_TRIGGER), 3U, regs));
-  UT_ASSERT_EQ_U32(77U, regs[0]);
-  UT_ASSERT_EQ_U32(EVENT_CODE_CTRL_SYNC_TRANSPORT_TIMEOUT, regs[1]);
-  UT_ASSERT_EQ_U32(MODBUS_IO_ERR_TIMEOUT, regs[2]);
-  UT_ASSERT_TRUE(GH_ModbusMap_GetScheduleApplyRequest(1U, &sched_req));
-  UT_ASSERT_EQ_U32(78U, sched_req.trigger);
-  sched_result.trigger = sched_req.trigger;
-  sched_result.result = GH_MB_SCHED_RESULT_APPLIED;
-  sched_result.io_error = MODBUS_IO_ERR_NONE;
-  GH_ModbusMap_MarkScheduleApplyResult(1U, &sched_result);
-  UT_ASSERT_TRUE(!GH_ModbusMap_GetScheduleApplyRequest(1U, &sched_req));
+
+  UT_ASSERT_TRUE(!GH_ModbusMap_WriteSingle((uint16_t)(GH_MB_CMD_BASE + CMD_OFF_RESULT), 123U));
+  UT_ASSERT_TRUE(!GH_ModbusMap_WriteSingle((uint16_t)(GH_MB_CMD_BASE + CMD_OFF_PAYLOAD_LEN),
+                                           (uint16_t)(GH_MB_CMD_PAYLOAD_WORDS + 1U)));
+
+  UT_ASSERT_TRUE(GH_ModbusMap_WriteSingle((uint16_t)(GH_MB_CMD_BASE + CMD_OFF_PAYLOAD_LEN), 1U));
+  UT_ASSERT_TRUE(GH_ModbusMap_WriteSingle((uint16_t)(GH_MB_CMD_BASE + CMD_OFF_PAYLOAD_BASE + 0U), 99U));
+  UT_ASSERT_TRUE(GH_ModbusMap_WriteSingle((uint16_t)(GH_MB_CMD_BASE + CMD_OFF_TRIGGER), 78U));
+  UT_ASSERT_TRUE(GH_ModbusMap_GetDataDrivenCommandRequest(&dcmd_req));
+  UT_ASSERT_EQ_U32(78U, dcmd_req.trigger);
+  UT_ASSERT_TRUE(GH_ModbusMap_WriteSingle((uint16_t)(GH_MB_CMD_BASE + CMD_OFF_TRIGGER), 79U));
+  UT_ASSERT_TRUE(GH_ModbusMap_ReadRange((uint16_t)(GH_MB_CMD_BASE + CMD_OFF_RESULT), 1U, regs));
+  UT_ASSERT_EQ_U32(GH_MB_DCMD_RESULT_REJECT_BUSY, regs[0]);
+  dcmd_result.trigger = dcmd_req.trigger;
+  dcmd_result.result = GH_MB_DCMD_RESULT_APPLIED;
+  dcmd_result.io_error = MODBUS_IO_ERR_NONE;
+  GH_ModbusMap_MarkDataDrivenCommandResult(&dcmd_result);
+
+  UT_ASSERT_TRUE(GH_ModbusMap_WriteSingle((uint16_t)(GH_MB_CMD_BASE + CMD_OFF_PAYLOAD_BASE + 0U), 1234U));
+  UT_ASSERT_TRUE(GH_ModbusMap_WriteSingle((uint16_t)(GH_MB_CMD_BASE + CMD_OFF_TRIGGER), 79U));
+  UT_ASSERT_TRUE(!GH_ModbusMap_GetDataDrivenCommandRequest(&dcmd_req));
+  UT_ASSERT_TRUE(GH_ModbusMap_ReadRange((uint16_t)(GH_MB_CMD_BASE + CMD_OFF_RESULT), 1U, regs));
+  UT_ASSERT_EQ_U32(GH_MB_DCMD_RESULT_APPLIED, regs[0]);
+
+  UT_ASSERT_TRUE(GH_ModbusMap_WriteSingle((uint16_t)(GH_MB_CMD_BASE + CMD_OFF_TARGET_SLAVE_ID), 1U));
+  UT_ASSERT_TRUE(GH_ModbusMap_WriteSingle((uint16_t)(GH_MB_CMD_BASE + CMD_OFF_TARGET_MODULE_ID), 0U));
+  UT_ASSERT_TRUE(GH_ModbusMap_WriteSingle((uint16_t)(GH_MB_CMD_BASE + CMD_OFF_CMD_PROFILE_ID), 5001U));
+  UT_ASSERT_TRUE(GH_ModbusMap_WriteSingle((uint16_t)(GH_MB_CMD_BASE + CMD_OFF_PAYLOAD_LEN), 1U));
+  UT_ASSERT_TRUE(GH_ModbusMap_WriteSingle((uint16_t)(GH_MB_CMD_BASE + CMD_OFF_PAYLOAD_BASE + 0U), 44U));
+  UT_ASSERT_TRUE(GH_ModbusMap_WriteSingle((uint16_t)(GH_MB_CMD_BASE + CMD_OFF_TRIGGER), 90U));
+  UT_ASSERT_TRUE(!GH_ModbusMap_GetDataDrivenCommandRequest(&dcmd_req));
+  UT_ASSERT_TRUE(GH_ModbusMap_ReadRange((uint16_t)(GH_MB_CMD_BASE + CMD_OFF_RESULT), 1U, regs));
+  UT_ASSERT_EQ_U32(GH_MB_DCMD_RESULT_REJECT_PARTIAL, regs[0]);
+
+  UT_ASSERT_TRUE(GH_ModbusMap_WriteSingle((uint16_t)(GH_MB_CMD_BASE + CMD_OFF_TARGET_SLAVE_ID), 0U));
+  UT_ASSERT_TRUE(GH_ModbusMap_WriteSingle((uint16_t)(GH_MB_CMD_BASE + CMD_OFF_TARGET_MODULE_ID), 101U));
+  UT_ASSERT_TRUE(GH_ModbusMap_WriteSingle((uint16_t)(GH_MB_CMD_BASE + CMD_OFF_CMD_PROFILE_ID), 5001U));
+  UT_ASSERT_TRUE(GH_ModbusMap_WriteSingle((uint16_t)(GH_MB_CMD_BASE + CMD_OFF_PAYLOAD_LEN), 1U));
+  UT_ASSERT_TRUE(GH_ModbusMap_WriteSingle((uint16_t)(GH_MB_CMD_BASE + CMD_OFF_PAYLOAD_BASE + 0U), 55U));
+  UT_ASSERT_TRUE(GH_ModbusMap_WriteSingle((uint16_t)(GH_MB_CMD_BASE + CMD_OFF_TRIGGER), 91U));
+  UT_ASSERT_TRUE(!GH_ModbusMap_GetDataDrivenCommandRequest(&dcmd_req));
+  UT_ASSERT_TRUE(GH_ModbusMap_ReadRange((uint16_t)(GH_MB_CMD_BASE + CMD_OFF_RESULT), 1U, regs));
+  UT_ASSERT_EQ_U32(GH_MB_DCMD_RESULT_REJECT_BOUNDS, regs[0]);
+
+  {
+    uint16_t readonly_overwrite[3] = {1U, 2U, 3U};
+    UT_ASSERT_TRUE(!GH_ModbusMap_WriteRange((uint16_t)(GH_MB_CMD_BASE + CMD_OFF_LAST_APPLIED_TRIGGER),
+                                            3U,
+                                            readonly_overwrite));
+  }
 
   GH_ModbusMap_UpdateRtcTime(9U, 37U);
   UT_ASSERT_TRUE(GH_ModbusMap_ReadRange((uint16_t)(GH_MB_DIR_BASE + DIR_OFF_RTC_HOUR), 2U, regs));

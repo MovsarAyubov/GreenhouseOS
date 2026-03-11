@@ -10,6 +10,13 @@
 #define GH_TOPOLOGY_POLICY_ACTION_KEEP_LAST    0U
 #define GH_TOPOLOGY_POLICY_ACTION_SAFE_DEFAULT 1U
 #define GH_TOPOLOGY_POLICY_ACTION_FORCE_OFFLINE 2U
+#define GH_TOPOLOGY_CMD_KIND_GENERIC 0U
+#define GH_TOPOLOGY_CMD_KIND_SCHEDULE 1U
+#define GH_TOPOLOGY_CMD_KIND_MAX GH_TOPOLOGY_CMD_KIND_SCHEDULE
+#define GH_TOPOLOGY_CMD_FLAG_KIND_SHIFT 14U
+#define GH_TOPOLOGY_CMD_FLAG_KIND_MASK (0x3U << GH_TOPOLOGY_CMD_FLAG_KIND_SHIFT)
+#define GH_TOPOLOGY_CMD_KIND_FROM_FLAGS(_flags) \
+  (uint8_t)((((uint16_t)(_flags)) & GH_TOPOLOGY_CMD_FLAG_KIND_MASK) >> GH_TOPOLOGY_CMD_FLAG_KIND_SHIFT)
 
 typedef struct
 {
@@ -51,6 +58,7 @@ typedef struct
   uint8_t fc;
   uint16_t start_reg;
   uint16_t reg_count;
+  uint16_t payload_offset;
   uint16_t timeout_ms;
   uint8_t retries;
   uint16_t ack_point_id;

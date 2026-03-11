@@ -1,12 +1,12 @@
 # Topology Upload Protocol (Modbus TCP, Port 502)
 
-Date: `2026-02-25`.
+Date: `2026-03-08`.
 
 This document defines the exact client-side write sequence for uploading `topology_config v2` into firmware.
 
 ## 1. Register window
 
-- Base: `GH_MB_TOPO_BASE = 1584` (SCADA `42584`).
+- Base: `GH_MB_TOPO_BASE = 1408` (SCADA `42408`).
 - Size: `GH_MB_TOPO_REGS = 144`.
 
 Offsets (`base + off`):

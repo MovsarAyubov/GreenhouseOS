@@ -1,6 +1,6 @@
 # Master Protocol Baseline (STM32F407)
 
-Date: `2026-02-26`.
+Date: `2026-03-08`.
 
 ## Transport (implemented)
 - `Modbus TCP` server on port `502`.
@@ -14,12 +14,12 @@ Date: `2026-02-26`.
 Windows:
 - Points window: `GH_MB_POINTS_REGS = SENSOR_COUNT * 6 = 1080` (`0..1079`).
 - Slave status window: `GH_MB_SLAVE_STATUS_REGS = 20 * 8 = 160` (`1080..1239`).
-- Command ingress window: `GH_MB_CMD_REGS = 20 * 10 = 200` (`1240..1439`).
-- Directory window: `GH_MB_DIR_REGS = 32` (`1440..1471`).
-- Legacy config window: `GH_MB_CFG_REGS = 80` (`1472..1551`).
-- Diagnostics window: `GH_MB_DIAG_REGS = 32` (`1552..1583`).
-- Topology upload window: `GH_MB_TOPO_REGS = 144` (`1584..1727`).
-- Total: `GH_MB_TOTAL_REGS = 1728`.
+- Command ingress window: `GH_MB_CMD_REGS = 24` (`1240..1263`).
+- Directory window: `GH_MB_DIR_REGS = 32` (`1264..1295`).
+- Config window: `GH_MB_CFG_REGS = 80` (`1296..1375`).
+- Diagnostics window: `GH_MB_DIAG_REGS = 32` (`1376..1407`).
+- Topology upload window: `GH_MB_TOPO_REGS = 144` (`1408..1551`).
+- Total: `GH_MB_TOTAL_REGS = 1552`.
 
 ## Supported Modbus TCP operations
 - Holding read (`FC=3`).
@@ -54,32 +54,30 @@ Register map (`row_base + off`):
 
 ## Command ingress window (`GH_MB_CMD_BASE`)
 - Base index: `1240` (SCADA `42240`).
-- Row stride: `10` registers per slave.
+- Block size: `24` registers.
 
-Register map (`row_base + off`):
-- `+0` `MODE`.
-- `+1` `SET_TEMP_X10`.
-- `+2` `SET_HUM_X10`.
-- `+3` `HYST_TEMP_X10`.
-- `+4` `HYST_HUM_X10`.
-- `+5` `MIN_ON_SEC`.
-- `+6` `MIN_OFF_SEC`.
-- `+7` `OUT_CMD_MASK`.
-- `+8` `APPLY_TRIGGER`.
-- `+9` `LAST_APPLIED_TRIGGER`.
+Register map (`base + off`):
+- `+0` `TARGET_SLAVE_ID` (W).
+- `+1` `TARGET_MODULE_ID` (W).
+- `+2` `CMD_PROFILE_ID` (W).
+- `+3` `PAYLOAD_LEN` (W).
+- `+4..+19` `PAYLOAD[16]` (W).
+- `+20` `TRIGGER` (W, commit field; write last).
+- `+21` `LAST_APPLIED_TRIGGER` (R).
+- `+22` `RESULT` (R).
+- `+23` `IO_ERR` (R).
 
 Runtime behavior:
-- In topology mode, this block is interpreted as command payload for `commands[]` of the module.
-- `FC6` command uses payload word `+0`.
-- `FC16` command uses first `max_reg_count` words from payload (`+0..+7`, max `8` words).
-- If no topology command is bound to slave, legacy hardcoded apply mapping is used.
+- Single in-flight request model: second trigger while pending yields `REJECT_BUSY`.
+- Runtime consumes request through `GH_ModbusMap_GetDataDrivenCommandRequest(...)`.
+- Result path writes `LAST_APPLIED_TRIGGER/RESULT/IO_ERR` via `GH_ModbusMap_MarkDataDrivenCommandResult(...)`.
 
 ## Directory window (`GH_MB_DIR_BASE`)
-- Base index: `1440` (SCADA `42440`).
+- Base index: `1264` (SCADA `42264`).
 - Size: `32` registers.
 
 Register map (`base + off`):
-- `+0` `MAP_VERSION` (`2` for current layout).
+- `+0` `MAP_VERSION` (`4` for current layout).
 - `+1` `MAP_FLAGS` (bit0=`dir_valid`, bit1=`topology_active`).
 - `+2..+3` `TOPOLOGY_GENERATION` (hi/lo).
 - `+4` `POINT_COUNT`.
@@ -105,8 +103,8 @@ Register map (`base + off`):
 - `+28` `RTC_SYNC_LAST_TOKEN` (R).
 - `+29` `RTC_SYNC_LAST_RESULT` (R): last slave result code, or internal master error marker (`0xFFFE` write fail, `0xFFFD` ack timeout).
 
-## Legacy config pipeline window (`GH_MB_CFG_BASE`)
-- Base index: `1472` (SCADA `42472`).
+## Config pipeline window (`GH_MB_CFG_BASE`)
+- Base index: `1296` (SCADA `42296`).
 - Size: `80` registers.
 
 Register map (`base + off`):
@@ -121,7 +119,7 @@ Register map (`base + off`):
 - `+16..+79` `REQ_PAYLOAD_WORDS[64]` (W).
 
 ## Diagnostics window (`GH_MB_DIAG_BASE`)
-- Base index: `1552` (SCADA `42552`).
+- Base index: `1376` (SCADA `42376`).
 - Size: `32` registers.
 - Exposes boot/reset/error/network counters and key runtime diagnostics.
 - Detailed meaning of diagnostics and codes: `docs/error_codes.md`.
@@ -145,7 +143,7 @@ Register map (`base + off`):
 - `+30..+31` `TCP_LAST_ERR` (signed `int32`, `lastRecvErr` with fallback to `lastSendErr`).
 
 ## Topology upload window (`GH_MB_TOPO_BASE`)
-- Base index: `1584` (SCADA `42584`).
+- Base index: `1408` (SCADA `42408`).
 - Size: `144` registers.
 - Used for chunked upload of `topology_config v2` blob.
 
@@ -187,9 +185,9 @@ Upload logic details and client algorithm: `docs/topology_upload_protocol.md`.
 ## Register ownership contract
 - Points/status/diagnostics windows are runtime-owned; clients should treat them as read-only.
 - Directory window is runtime-owned except `RTC_SET_HOUR`, `RTC_SET_MINUTE`, `RTC_SET_TOKEN` (`+16..+18`), which are client-written.
-- Command ingress window is client-written (`FC=6/16`) and consumed by `ModbusMasterTask` via `GH_ModbusMap_GetApplyRequest`.
-- Legacy config window (`1472..1551`) request fields are written from TCP and consumed by `ConfigStorageTask`.
-- Topology window (`1584..1727`) request fields are written from TCP and consumed by `ConfigStorageTask`.
+- Command ingress window is client-written (`FC=6/16`) and consumed by `ModbusMasterTask` via `GH_ModbusMap_GetDataDrivenCommandRequest`.
+- Config window (`1296..1375`) request fields are written from TCP and consumed by `ConfigStorageTask`.
+- Topology window (`1408..1551`) request fields are written from TCP and consumed by `ConfigStorageTask`.
 - Config/topology result fields are written by backend tasks and read by TCP clients.
 
 ## Master to slave RS485/RTU cycle

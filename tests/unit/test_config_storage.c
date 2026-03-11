@@ -1,6 +1,7 @@
 #include "gh_config_storage.h"
 #include "gh_crc32.h"
 #include "gh_modbus_map.h"
+#include "gh_topology_runtime.h"
 #include "gh_topology_v2.h"
 #include "test_common.h"
 
@@ -177,6 +178,7 @@ static bool topo_build_runtime_valid_payload_with_command(uint8_t *payload,
   cmd.retries = 2U;
   cmd.start_reg = 100U;
   cmd.max_reg_count = 6U;
+  cmd.payload_offset = 0U;
   cmd.timeout_ms = 300U;
   cmd.ack_point_id = 1001U;
   cmd.flags = 0U;
@@ -314,8 +316,64 @@ int test_config_storage_run(void)
 
   UT_ASSERT_TRUE(topo_build_runtime_valid_payload_with_command(topo_blob, sizeof(topo_blob), &topo_blob_size));
   memcpy(&hdr, topo_blob, sizeof(hdr));
+  {
+    gh_topology_v2_cmd_t cmd_row = {0};
+    memcpy(&cmd_row, &topo_blob[hdr.off_commands], sizeof(cmd_row));
+    cmd_row.flags = (uint16_t)((cmd_row.flags & ~GH_TOPOLOGY_CMD_FLAG_KIND_MASK) |
+                               (GH_TOPOLOGY_CMD_KIND_SCHEDULE << GH_TOPOLOGY_CMD_FLAG_KIND_SHIFT));
+    cmd_row.max_reg_count = 8U;
+    memcpy(&topo_blob[hdr.off_commands], &cmd_row, sizeof(cmd_row));
+  }
+  topo_finalize_crc(topo_blob, topo_blob_size);
+  UT_ASSERT_TRUE(!GH_TopologyV2_ValidatePayload(topo_blob, topo_blob_size, &result));
+  UT_ASSERT_EQ_U32(CFG_RESULT_REJECT_TOPOLOGY_SCHEMA, result);
+
+  UT_ASSERT_TRUE(topo_build_runtime_valid_payload_with_command(topo_blob, sizeof(topo_blob), &topo_blob_size));
+  memcpy(&hdr, topo_blob, sizeof(hdr));
   UT_ASSERT_EQ_U32(1U, hdr.cmd_count);
   UT_ASSERT_TRUE(hdr.off_commands != 0U);
+  {
+    gh_topology_v2_cmd_t cmd_row = {0};
+    memcpy(&cmd_row, &topo_blob[hdr.off_commands], sizeof(cmd_row));
+    cmd_row.payload_offset = (uint16_t)(GH_MB_CMD_PAYLOAD_WORDS - 1U);
+    cmd_row.max_reg_count = 2U;
+    memcpy(&topo_blob[hdr.off_commands], &cmd_row, sizeof(cmd_row));
+  }
+  topo_finalize_crc(topo_blob, topo_blob_size);
+  UT_ASSERT_TRUE(!GH_TopologyV2_ValidatePayload(topo_blob, topo_blob_size, &result));
+  UT_ASSERT_EQ_U32(CFG_RESULT_REJECT_TOPOLOGY_BOUNDS, result);
+
+  UT_ASSERT_TRUE(topo_build_runtime_valid_payload_with_command(topo_blob, sizeof(topo_blob), &topo_blob_size));
+  memcpy(&hdr, topo_blob, sizeof(hdr));
+  {
+    gh_topology_v2_module_t mod_local = {0};
+    gh_topology_v2_cmd_t cmd_row = {0};
+    gh_topology_v2_cmd_t cmd_row2 = {0};
+    uint32_t total_size_with_second_cmd;
+
+    memcpy(&mod_local, &topo_blob[hdr.off_modules], sizeof(mod_local));
+    memcpy(&cmd_row, &topo_blob[hdr.off_commands], sizeof(cmd_row));
+    cmd_row2 = cmd_row;
+    cmd_row2.cmd_id = (uint16_t)(cmd_row.cmd_id + 1U);
+    cmd_row2.start_reg = (uint16_t)(cmd_row.start_reg + 1U);
+    cmd_row2.max_reg_count = 2U;
+    cmd_row2.payload_offset = 2U;
+
+    total_size_with_second_cmd = hdr.total_size + sizeof(cmd_row2);
+    UT_ASSERT_TRUE(total_size_with_second_cmd <= sizeof(topo_blob));
+    mod_local.cmd_count = 2U;
+    memcpy(&topo_blob[hdr.off_modules], &mod_local, sizeof(mod_local));
+    memcpy(&topo_blob[hdr.off_commands + sizeof(cmd_row)], &cmd_row2, sizeof(cmd_row2));
+    hdr.cmd_count = 2U;
+    memcpy(topo_blob, &hdr, sizeof(hdr));
+
+    topo_finalize_crc(topo_blob, total_size_with_second_cmd);
+    UT_ASSERT_TRUE(!GH_TopologyV2_ValidatePayload(topo_blob, total_size_with_second_cmd, &result));
+    UT_ASSERT_EQ_U32(CFG_RESULT_REJECT_TOPOLOGY_COLLISION, result);
+  }
+
+  UT_ASSERT_TRUE(topo_build_runtime_valid_payload_with_command(topo_blob, sizeof(topo_blob), &topo_blob_size));
+  memcpy(&hdr, topo_blob, sizeof(hdr));
   {
     gh_topology_v2_cmd_t cmd_row = {0};
     memcpy(&cmd_row, &topo_blob[hdr.off_commands], sizeof(cmd_row));

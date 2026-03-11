@@ -1,0 +1,33 @@
+{
+  "schema": "greenhouse_profile_v1",
+  "ver_minor": 0,
+  "generation": 10,
+  "topology_id": 1001,
+  "created_unix_s": 1772064000,
+  "flags": 0,
+  "site_no": 5,
+  "greenhouse_no": 1,
+  "zones": [
+    {
+      "zone_no": 1,
+      "slave_id": 1,
+      "channels": [
+        "AIR_TEMP",
+        "AIR_HUM",
+        "WATER_RAIL"
+      ]
+    },
+    {
+      "zone_no": 2,
+      "slave_id": 2,
+      "channels": [
+        "AIR_TEMP",
+        "AIR_HUM",
+        "WATER_GROW",
+        "WINDOWS_POS_A",
+        "CURTAIN_POS"
+      ]
+    }
+  ]
+}
+

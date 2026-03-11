@@ -206,15 +206,21 @@ typedef struct __attribute__((packed)) {
   uint8_t  retries;
   uint16_t start_reg;
   uint16_t max_reg_count;
+  uint16_t payload_offset;     // offset inside ingress payload buffer
   uint16_t timeout_ms;
   uint16_t ack_point_id;       // optional acknowledgement point
-  uint16_t flags;              // idempotent/verify-after-write/etc.
+  uint16_t flags;              // bit[15:14]=cmd_kind, other bits reserved for command options
 } topo_cmd_v2_t;
 ```
 
 Current firmware constraints for RTU1 command execution:
-- `max_reg_count <= 8` (command ingress payload budget per slave).
+- `payload_offset + max_reg_count <= 16` (command ingress payload budget per request).
+- `fc=6` requires `max_reg_count == 1`.
 - `ack_point_id` (if non-zero) must reference existing `point_id` from the same module.
+- `cmd_kind` is encoded in `flags[15:14]`:
+  - `0`: generic single-step command profile
+  - `1`: schedule command step (executed by generic dispatcher as contiguous `payload_offset` chain)
+- for `cmd_kind=schedule` and `fc=16`, `max_reg_count` must be `12` (`4` slots x `3` words).
 
 ### 6.5 Fault policy table
 

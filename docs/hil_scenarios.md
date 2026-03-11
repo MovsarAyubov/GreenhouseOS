@@ -1,6 +1,6 @@
 # HIL Scenarios
 
-Date: `2026-02-23`
+Date: `2026-03-08`
 
 The following scenarios are mandatory for release acceptance:
 
@@ -28,3 +28,18 @@ The following scenarios are mandatory for release acceptance:
 - Submit config with bad CRC and with out-of-range float payload.
 - Verify reject result code is exposed through Modbus config window.
 - Verify active config version remains unchanged.
+
+6. `topology_invalid_safe_mode`
+- Provide invalid/empty topology so runtime plan becomes unavailable.
+- Verify device enters deterministic safe mode (quality `STALE/OFFLINE`, heartbeat intact).
+- Verify no legacy fallback execution path is observed.
+
+7. `command_ingress_busy_pressure`
+- Submit two command triggers back-to-back through generic command block.
+- Verify second trigger is rejected with `REJECT_BUSY`.
+- Verify first accepted trigger reaches final result path (`LAST_APPLIED_TRIGGER` sync).
+
+8. `schedule_via_command_profile`
+- Submit schedule payload via generic command ingress (`cmd_kind=schedule` contract).
+- Verify FC16 + FC6 sequence executes via topology command profile chain.
+- Verify apply status/version checks and final result code are stable.

@@ -10,9 +10,10 @@ Date: `2026-03-08`.
 ## Preconditions
 - Slave command row is selected by `slave_id`.
 - `APPLY_TRIGGER` is treated as transaction commit and must be written last.
+- Generic command ingress payload budget is `16` words.
 - Topology contract for schedule is deployed on target slaves:
-- `FC16(start_reg=110, reg_count=12, payload_offset=0)`.
-- `FC6(start_reg=122, payload_offset=12)`.
+- `cmd_kind=schedule`, step 1: `FC16(start_reg=110, reg_count=12, payload_offset=0)`.
+- `cmd_kind=schedule`, step 2: `FC6(start_reg=122, reg_count=1, payload_offset=12)`.
 
 ## Legacy algorithm (`CMD_KIND=0`)
 1. Write legacy payload fields (`PAYLOAD[0..7]` and optional extension fields if used).

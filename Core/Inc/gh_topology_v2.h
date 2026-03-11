@@ -100,6 +100,7 @@ typedef struct __attribute__((packed))
   uint8_t retries;
   uint16_t start_reg;
   uint16_t max_reg_count;
+  uint16_t payload_offset;
   uint16_t timeout_ms;
   uint16_t ack_point_id;
   uint16_t flags;

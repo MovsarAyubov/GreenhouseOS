@@ -77,8 +77,10 @@ def _minimal_valid_config() -> dict:
                 "retries": 2,
                 "start_reg": 20,
                 "max_reg_count": 1,
+                "payload_offset": 0,
                 "timeout_ms": 300,
                 "ack_point_id": 100,
+                "cmd_kind": 0,
                 "flags": 0,
             }
         ],
@@ -211,6 +213,23 @@ class TopologyPackerTests(unittest.TestCase):
         cfg["commands"] = []
         cfg["policies"] = []
 
+        with self.assertRaises(packer.TopologyPackError):
+            packer.build_topology_blob(cfg)
+
+    def test_reject_command_payload_window_out_of_budget(self) -> None:
+        cfg = _minimal_valid_config()
+        cfg["commands"][0]["fc"] = 16
+        cfg["commands"][0]["max_reg_count"] = 4
+        cfg["commands"][0]["payload_offset"] = 14
+        with self.assertRaises(packer.TopologyPackError):
+            packer.build_topology_blob(cfg)
+
+    def test_reject_schedule_fc16_wrong_word_count(self) -> None:
+        cfg = _minimal_valid_config()
+        cfg["commands"][0]["fc"] = 16
+        cfg["commands"][0]["cmd_kind"] = 1
+        cfg["commands"][0]["max_reg_count"] = 8
+        cfg["commands"][0]["payload_offset"] = 0
         with self.assertRaises(packer.TopologyPackError):
             packer.build_topology_blob(cfg)
 

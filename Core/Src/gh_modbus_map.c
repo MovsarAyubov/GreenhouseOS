@@ -43,30 +43,15 @@ enum
 
 enum
 {
-  CMD_OFF_MODE = 0U,
-  CMD_OFF_SET_TEMP_X10 = 1U,
-  CMD_OFF_SET_HUM_X10 = 2U,
-  CMD_OFF_HYST_TEMP_X10 = 3U,
-  CMD_OFF_HYST_HUM_X10 = 4U,
-  CMD_OFF_MIN_ON_SEC = 5U,
-  CMD_OFF_MIN_OFF_SEC = 6U,
-  CMD_OFF_OUT_CMD_MASK = 7U,
-  CMD_OFF_APPLY_TRIGGER = 8U,
-  CMD_OFF_LAST_APPLIED_TRIGGER = 9U
-};
-
-enum
-{
-  SCHED_SLOT_WORDS = 3U,
-  SCHED_SLOT_COUNT = 4U,
-  SCHED_OFF_APPLY_VALUE = (SCHED_SLOT_WORDS * SCHED_SLOT_COUNT),
-  SCHED_OFF_EXPECTED_VER_HI = (SCHED_SLOT_WORDS * SCHED_SLOT_COUNT) + 1U,
-  SCHED_OFF_EXPECTED_VER_LO = (SCHED_SLOT_WORDS * SCHED_SLOT_COUNT) + 2U,
-  SCHED_OFF_CMD_KIND = (SCHED_SLOT_WORDS * SCHED_SLOT_COUNT) + 3U,
-  SCHED_OFF_APPLY_TRIGGER = (SCHED_SLOT_WORDS * SCHED_SLOT_COUNT) + 4U,
-  SCHED_OFF_LAST_APPLIED_TRIGGER = (SCHED_SLOT_WORDS * SCHED_SLOT_COUNT) + 5U,
-  SCHED_OFF_LAST_RESULT = (SCHED_SLOT_WORDS * SCHED_SLOT_COUNT) + 6U,
-  SCHED_OFF_LAST_IO_ERR = (SCHED_SLOT_WORDS * SCHED_SLOT_COUNT) + 7U
+  CMD_OFF_TARGET_SLAVE_ID = 0U,
+  CMD_OFF_TARGET_MODULE_ID = 1U,
+  CMD_OFF_CMD_PROFILE_ID = 2U,
+  CMD_OFF_PAYLOAD_LEN = 3U,
+  CMD_OFF_PAYLOAD_BASE = 4U,
+  CMD_OFF_TRIGGER = CMD_OFF_PAYLOAD_BASE + GH_MB_CMD_PAYLOAD_WORDS,
+  CMD_OFF_LAST_APPLIED_TRIGGER = CMD_OFF_TRIGGER + 1U,
+  CMD_OFF_RESULT = CMD_OFF_TRIGGER + 2U,
+  CMD_OFF_IO_ERR = CMD_OFF_TRIGGER + 3U
 };
 
 enum
@@ -100,9 +85,7 @@ enum
   DIR_OFF_RTC_SYNC_FAIL_LO = GH_MB_DIR_OFF_RTC_SYNC_FAIL_LO,
   DIR_OFF_RTC_SYNC_LAST_SLAVE = GH_MB_DIR_OFF_RTC_SYNC_LAST_SLAVE,
   DIR_OFF_RTC_SYNC_LAST_TOKEN = GH_MB_DIR_OFF_RTC_SYNC_LAST_TOKEN,
-  DIR_OFF_RTC_SYNC_LAST_RESULT = GH_MB_DIR_OFF_RTC_SYNC_LAST_RESULT,
-  DIR_OFF_SCHED_BASE = GH_MB_DIR_OFF_SCHED_BASE,
-  DIR_OFF_SCHED_BLOCK_SIZE = GH_MB_DIR_OFF_SCHED_BLOCK_SIZE
+  DIR_OFF_RTC_SYNC_LAST_RESULT = GH_MB_DIR_OFF_RTC_SYNC_LAST_RESULT
 };
 
 enum
@@ -192,7 +175,10 @@ static gh_topology_point_binding_t s_point_bindings_cache[GH_MB_POINT_MAX] __att
 static uint16_t s_last_submit_token = 0U;
 static uint16_t s_last_topo_submit_token = 0U;
 static uint16_t s_last_rtc_submit_token = 0U;
+static uint16_t s_last_cmd_submit_trigger = 0U;
 static gh_rtc_set_request_t s_rtc_set_request = {0};
+static gh_data_driven_command_request_t s_cmd_pending_request = {0};
+static bool s_cmd_pending = false;
 static bool s_rtc_set_pending = false;
 static uint32_t s_point_module_generation = 0U;
 static uint32_t s_map_data_version = 0U;
@@ -276,26 +262,6 @@ static bool slave_status_base(uint8_t slave_id, uint16_t *out_base)
   }
   *out_base = (uint16_t)(GH_MB_SLAVE_STATUS_BASE +
                          ((uint16_t)(slave_id - 1U) * GH_MB_SLAVE_STATUS_BLOCK_SIZE));
-  return true;
-}
-
-static bool cmd_base(uint8_t slave_id, uint16_t *out_base)
-{
-  if ((slave_id == 0U) || (slave_id > GH_MB_MAX_SLAVES) || (out_base == NULL))
-  {
-    return false;
-  }
-  *out_base = (uint16_t)(GH_MB_CMD_BASE + ((uint16_t)(slave_id - 1U) * GH_MB_CMD_BLOCK_SIZE));
-  return true;
-}
-
-static bool sched_base(uint8_t slave_id, uint16_t *out_base)
-{
-  if ((slave_id == 0U) || (slave_id > GH_MB_MAX_SLAVES) || (out_base == NULL))
-  {
-    return false;
-  }
-  *out_base = (uint16_t)(GH_MB_SCHED_BASE + ((uint16_t)(slave_id - 1U) * GH_MB_SCHED_BLOCK_SIZE));
   return true;
 }
 
@@ -475,7 +441,7 @@ static void map_refresh_directory_nolock(void)
     flags |= 0x0002U;
   }
 
-  s_holding[dir_index(DIR_OFF_MAP_VERSION)] = 3U;
+  s_holding[dir_index(DIR_OFF_MAP_VERSION)] = GH_MB_MAP_VERSION;
   s_holding[dir_index(DIR_OFF_MAP_FLAGS)] = flags;
   s_holding[dir_index(DIR_OFF_TOPO_GEN_HI)] = (uint16_t)((g_topology_v2_generation >> 16U) & 0xFFFFU);
   s_holding[dir_index(DIR_OFF_TOPO_GEN_LO)] = (uint16_t)(g_topology_v2_generation & 0xFFFFU);
@@ -488,8 +454,6 @@ static void map_refresh_directory_nolock(void)
   s_holding[dir_index(DIR_OFF_MAX_POINTS)] = GH_MB_POINT_MAX;
   s_holding[dir_index(DIR_OFF_CMD_BLOCK_SIZE)] = GH_MB_CMD_BLOCK_SIZE;
   s_holding[dir_index(DIR_OFF_STATUS_BLOCK_SIZE)] = GH_MB_SLAVE_STATUS_BLOCK_SIZE;
-  s_holding[dir_index(DIR_OFF_SCHED_BASE)] = GH_MB_SCHED_BASE;
-  s_holding[dir_index(DIR_OFF_SCHED_BLOCK_SIZE)] = GH_MB_SCHED_BLOCK_SIZE;
 }
 
 static void map_refresh_runtime_diag_nolock(void)
@@ -717,6 +681,130 @@ static void topo_maybe_submit_after_write(uint16_t start_idx, uint16_t qty)
   (void)topo_try_submit(token);
 }
 
+static bool cmd_validate_write_nolock(uint16_t start_idx, uint16_t qty, const uint16_t *values)
+{
+  uint32_t write_start = start_idx;
+  uint32_t write_end = write_start + qty;
+  uint32_t cmd_start = GH_MB_CMD_BASE;
+  uint32_t cmd_end = GH_MB_CMD_BASE + GH_MB_CMD_REGS;
+  uint16_t i;
+  uint16_t off;
+
+  if ((qty == 0U) || (values == NULL))
+  {
+    return false;
+  }
+  if ((write_start >= cmd_end) || (write_end <= cmd_start))
+  {
+    return true;
+  }
+  if ((write_start < cmd_start) || (write_end > cmd_end))
+  {
+    return false;
+  }
+
+  for (i = 0U; i < qty; i++)
+  {
+    off = (uint16_t)((write_start + i) - cmd_start);
+    if (off >= CMD_OFF_LAST_APPLIED_TRIGGER)
+    {
+      /* Result and applied-trace fields are runtime-owned and read-only for clients. */
+      return false;
+    }
+    if ((off == CMD_OFF_PAYLOAD_LEN) && (values[i] > GH_MB_CMD_PAYLOAD_WORDS))
+    {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+static bool cmd_validate_request_nolock(const gh_data_driven_command_request_t *req, uint16_t *out_result)
+{
+  if ((req == NULL) || (out_result == NULL))
+  {
+    return false;
+  }
+
+  if ((req->slave_id == 0U) || (req->slave_id > GH_MB_MAX_SLAVES))
+  {
+    *out_result = GH_MB_DCMD_RESULT_REJECT_BOUNDS;
+    return false;
+  }
+  if ((req->module_id == 0U) || (req->cmd_profile_id == 0U))
+  {
+    *out_result = GH_MB_DCMD_RESULT_REJECT_PARTIAL;
+    return false;
+  }
+  if ((req->payload_len == 0U) || (req->payload_len > GH_MB_CMD_PAYLOAD_WORDS))
+  {
+    *out_result = GH_MB_DCMD_RESULT_REJECT_BOUNDS;
+    return false;
+  }
+
+  *out_result = GH_MB_DCMD_RESULT_QUEUED;
+  return true;
+}
+
+static bool cmd_try_submit(uint16_t trigger)
+{
+  gh_data_driven_command_request_t req = {0};
+  uint16_t i;
+  uint16_t result_code = GH_MB_DCMD_RESULT_REJECT_PARTIAL;
+  uint16_t base = GH_MB_CMD_BASE;
+
+  if (s_cmd_pending)
+  {
+    s_holding[base + CMD_OFF_RESULT] = GH_MB_DCMD_RESULT_REJECT_BUSY;
+    s_holding[base + CMD_OFF_IO_ERR] = (uint16_t)MODBUS_IO_ERR_NONE;
+    return false;
+  }
+
+  req.trigger = trigger;
+  req.slave_id = (uint8_t)(s_holding[base + CMD_OFF_TARGET_SLAVE_ID] & 0x00FFU);
+  req.module_id = s_holding[base + CMD_OFF_TARGET_MODULE_ID];
+  req.cmd_profile_id = s_holding[base + CMD_OFF_CMD_PROFILE_ID];
+  req.payload_len = s_holding[base + CMD_OFF_PAYLOAD_LEN];
+  for (i = 0U; i < GH_MB_CMD_PAYLOAD_WORDS; i++)
+  {
+    req.payload[i] = s_holding[base + CMD_OFF_PAYLOAD_BASE + i];
+  }
+
+  if (!cmd_validate_request_nolock(&req, &result_code))
+  {
+    s_holding[base + CMD_OFF_RESULT] = result_code;
+    s_holding[base + CMD_OFF_IO_ERR] = (uint16_t)MODBUS_IO_ERR_NONE;
+    return false;
+  }
+
+  s_cmd_pending_request = req;
+  s_cmd_pending = true;
+  s_holding[base + CMD_OFF_RESULT] = GH_MB_DCMD_RESULT_QUEUED;
+  s_holding[base + CMD_OFF_IO_ERR] = (uint16_t)MODBUS_IO_ERR_NONE;
+  return true;
+}
+
+static void cmd_maybe_submit_after_write(uint16_t start_idx, uint16_t qty)
+{
+  uint16_t submit_idx = (uint16_t)(GH_MB_CMD_BASE + CMD_OFF_TRIGGER);
+  uint16_t token;
+
+  if ((start_idx > submit_idx) || ((start_idx + qty) <= submit_idx))
+  {
+    return;
+  }
+
+  token = s_holding[submit_idx];
+  if ((token == 0U) || (token == s_last_cmd_submit_trigger))
+  {
+    return;
+  }
+
+  s_last_cmd_submit_trigger = token;
+  (void)cmd_try_submit(token);
+}
+
 static void dir_maybe_submit_rtc_set_after_write(uint16_t start_idx, uint16_t qty)
 {
   uint16_t submit_idx = dir_index(DIR_OFF_RTC_SET_TOKEN);
@@ -757,9 +845,8 @@ void GH_ModbusMap_Init(void)
 {
   uint8_t s;
   uint16_t status_base;
-  uint16_t cmd_base_addr;
-  uint16_t sched_base_addr;
   uint16_t i;
+  uint16_t cmd_base_addr = GH_MB_CMD_BASE;
 
   (void)map_ensure_mutex();
   if (!map_lock())
@@ -773,7 +860,10 @@ void GH_ModbusMap_Init(void)
   s_last_submit_token = 0U;
   s_last_topo_submit_token = 0U;
   s_last_rtc_submit_token = 0U;
+  s_last_cmd_submit_trigger = 0U;
   memset(&s_rtc_set_request, 0, sizeof(s_rtc_set_request));
+  memset(&s_cmd_pending_request, 0, sizeof(s_cmd_pending_request));
+  s_cmd_pending = false;
   s_rtc_set_pending = false;
   s_point_module_generation = 0U;
   s_map_data_version = 0U;
@@ -785,24 +875,27 @@ void GH_ModbusMap_Init(void)
 
   for (s = 1U; s <= GH_MB_MAX_SLAVES; s++)
   {
-    if (!slave_status_base(s, &status_base) || !cmd_base(s, &cmd_base_addr) || !sched_base(s, &sched_base_addr))
+    if (!slave_status_base(s, &status_base))
     {
       continue;
     }
     s_holding[status_base + ST_OFF_STATUS] = 0x0002U; /* online=0, stale=1 */
     s_holding[status_base + ST_OFF_LAST_OK_AGE_SEC] = 0xFFFFU;
     s_holding[status_base + ST_OFF_DATA_VERSION] = 0U;
-
-    s_holding[cmd_base_addr + CMD_OFF_MODE] = 0U;
-    s_holding[cmd_base_addr + CMD_OFF_APPLY_TRIGGER] = 0U;
-    s_holding[cmd_base_addr + CMD_OFF_LAST_APPLIED_TRIGGER] = 0U;
-
-    s_holding[sched_base_addr + SCHED_OFF_CMD_KIND] = GH_MB_SCHED_CMD_KIND_LEGACY;
-    s_holding[sched_base_addr + SCHED_OFF_APPLY_TRIGGER] = 0U;
-    s_holding[sched_base_addr + SCHED_OFF_LAST_APPLIED_TRIGGER] = 0U;
-    s_holding[sched_base_addr + SCHED_OFF_LAST_RESULT] = GH_MB_SCHED_RESULT_IDLE;
-    s_holding[sched_base_addr + SCHED_OFF_LAST_IO_ERR] = (uint16_t)MODBUS_IO_ERR_NONE;
   }
+
+  s_holding[cmd_base_addr + CMD_OFF_TARGET_SLAVE_ID] = 0U;
+  s_holding[cmd_base_addr + CMD_OFF_TARGET_MODULE_ID] = 0U;
+  s_holding[cmd_base_addr + CMD_OFF_CMD_PROFILE_ID] = 0U;
+  s_holding[cmd_base_addr + CMD_OFF_PAYLOAD_LEN] = 0U;
+  for (i = 0U; i < GH_MB_CMD_PAYLOAD_WORDS; i++)
+  {
+    s_holding[cmd_base_addr + CMD_OFF_PAYLOAD_BASE + i] = 0U;
+  }
+  s_holding[cmd_base_addr + CMD_OFF_TRIGGER] = 0U;
+  s_holding[cmd_base_addr + CMD_OFF_LAST_APPLIED_TRIGGER] = 0U;
+  s_holding[cmd_base_addr + CMD_OFF_RESULT] = GH_MB_DCMD_RESULT_IDLE;
+  s_holding[cmd_base_addr + CMD_OFF_IO_ERR] = (uint16_t)MODBUS_IO_ERR_NONE;
 
   s_holding[cfg_index(CFG_OFF_RESULT_CODE)] = (uint16_t)CFG_RESULT_IDLE;
   s_holding[cfg_index(CFG_OFF_RESULT_TOKEN)] = 0U;
@@ -983,6 +1076,7 @@ bool GH_ModbusMap_ReadRange(uint16_t start_addr, uint16_t qty, uint16_t *out_reg
 bool GH_ModbusMap_WriteSingle(uint16_t addr, uint16_t value)
 {
   uint16_t idx;
+  uint16_t one[1];
 
   if (!addr_to_index(addr, 1U, &idx))
   {
@@ -992,9 +1086,16 @@ bool GH_ModbusMap_WriteSingle(uint16_t addr, uint16_t value)
   {
     return false;
   }
+  one[0] = value;
+  if (!cmd_validate_write_nolock(idx, 1U, one))
+  {
+    map_unlock();
+    return false;
+  }
   s_holding[idx] = value;
   cfg_maybe_submit_after_write(idx, 1U);
   topo_maybe_submit_after_write(idx, 1U);
+  cmd_maybe_submit_after_write(idx, 1U);
   dir_maybe_submit_rtc_set_after_write(idx, 1U);
   map_unlock();
   return true;
@@ -1013,9 +1114,15 @@ bool GH_ModbusMap_WriteRange(uint16_t start_addr, uint16_t qty, const uint16_t *
   {
     return false;
   }
+  if (!cmd_validate_write_nolock(idx, qty, values))
+  {
+    map_unlock();
+    return false;
+  }
   memcpy(&s_holding[idx], values, (uint32_t)qty * sizeof(uint16_t));
   cfg_maybe_submit_after_write(idx, qty);
   topo_maybe_submit_after_write(idx, qty);
+  cmd_maybe_submit_after_write(idx, qty);
   dir_maybe_submit_rtc_set_after_write(idx, qty);
   map_unlock();
   return true;
@@ -1106,13 +1213,9 @@ void GH_ModbusMap_UpdateDiag(uint8_t slave_id,
   map_unlock();
 }
 
-bool GH_ModbusMap_GetApplyRequest(uint8_t slave_id, gh_slave_apply_request_t *out_req)
+bool GH_ModbusMap_GetDataDrivenCommandRequest(gh_data_driven_command_request_t *out_req)
 {
-  uint16_t base;
-  uint16_t trigger;
-  uint16_t applied;
-
-  if ((out_req == NULL) || !cmd_base(slave_id, &base))
+  if (out_req == NULL)
   {
     return false;
   }
@@ -1120,34 +1223,23 @@ bool GH_ModbusMap_GetApplyRequest(uint8_t slave_id, gh_slave_apply_request_t *ou
   {
     return false;
   }
-
-  trigger = s_holding[base + CMD_OFF_APPLY_TRIGGER];
-  applied = s_holding[base + CMD_OFF_LAST_APPLIED_TRIGGER];
-  if (trigger == applied)
+  if (!s_cmd_pending)
   {
     map_unlock();
     return false;
   }
 
-  out_req->trigger = trigger;
-  out_req->setpoints[0] = s_holding[base + CMD_OFF_MODE];
-  out_req->setpoints[1] = s_holding[base + CMD_OFF_SET_TEMP_X10];
-  out_req->setpoints[2] = s_holding[base + CMD_OFF_SET_HUM_X10];
-  out_req->setpoints[3] = s_holding[base + CMD_OFF_HYST_TEMP_X10];
-  out_req->setpoints[4] = s_holding[base + CMD_OFF_HYST_HUM_X10];
-  out_req->setpoints[5] = s_holding[base + CMD_OFF_MIN_ON_SEC];
-  out_req->setpoints[6] = s_holding[base + CMD_OFF_MIN_OFF_SEC];
-  out_req->out_cmd_mask = s_holding[base + CMD_OFF_OUT_CMD_MASK];
-
+  *out_req = s_cmd_pending_request;
   map_unlock();
   return true;
 }
 
-void GH_ModbusMap_MarkApplyResult(uint8_t slave_id, uint16_t trigger, bool applied)
+void GH_ModbusMap_MarkDataDrivenCommandResult(const gh_data_driven_command_result_t *result)
 {
-  uint16_t base;
+  uint16_t base = GH_MB_CMD_BASE;
   uint16_t status_base;
-  if (!cmd_base(slave_id, &base) || !slave_status_base(slave_id, &status_base))
+
+  if (result == NULL)
   {
     return;
   }
@@ -1155,80 +1247,20 @@ void GH_ModbusMap_MarkApplyResult(uint8_t slave_id, uint16_t trigger, bool appli
   {
     return;
   }
-  if (applied)
-  {
-    s_holding[base + CMD_OFF_LAST_APPLIED_TRIGGER] = trigger;
-    bump_slave_data_version_nolock(status_base);
-  }
-  map_unlock();
-}
-
-bool GH_ModbusMap_GetScheduleApplyRequest(uint8_t slave_id, schedule_apply_request_t *out_req)
-{
-  uint16_t base;
-  uint16_t trigger;
-  uint16_t applied;
-  uint16_t slot;
-  uint16_t slot_off;
-
-  if ((out_req == NULL) || !sched_base(slave_id, &base))
-  {
-    return false;
-  }
-  if (!map_lock())
-  {
-    return false;
-  }
-
-  trigger = s_holding[base + SCHED_OFF_APPLY_TRIGGER];
-  applied = s_holding[base + SCHED_OFF_LAST_APPLIED_TRIGGER];
-  if (trigger == applied)
+  if (!s_cmd_pending || (result->trigger != s_cmd_pending_request.trigger))
   {
     map_unlock();
-    return false;
-  }
-
-  memset(out_req, 0, sizeof(*out_req));
-  out_req->trigger = trigger;
-  out_req->apply_value = s_holding[base + SCHED_OFF_APPLY_VALUE];
-  out_req->expected_active_ctrl_version = ((uint32_t)s_holding[base + SCHED_OFF_EXPECTED_VER_HI] << 16U) |
-                                          (uint32_t)s_holding[base + SCHED_OFF_EXPECTED_VER_LO];
-  out_req->cmd_kind = s_holding[base + SCHED_OFF_CMD_KIND];
-
-  for (slot = 0U; slot < SCHED_SLOT_COUNT; slot++)
-  {
-    slot_off = (uint16_t)(slot * SCHED_SLOT_WORDS);
-    out_req->slots[slot].enabled = s_holding[base + slot_off + 0U];
-    out_req->slots[slot].on_hhmm = s_holding[base + slot_off + 1U];
-    out_req->slots[slot].off_hhmm = s_holding[base + slot_off + 2U];
-  }
-
-  map_unlock();
-  return true;
-}
-
-void GH_ModbusMap_MarkScheduleApplyResult(uint8_t slave_id, const schedule_apply_result_t *result)
-{
-  uint16_t base;
-  uint16_t status_base;
-
-  if ((result == NULL) || !sched_base(slave_id, &base) || !slave_status_base(slave_id, &status_base))
-  {
-    return;
-  }
-  if (!map_lock())
-  {
     return;
   }
 
-  s_holding[base + SCHED_OFF_LAST_RESULT] = result->result;
-  s_holding[base + SCHED_OFF_LAST_IO_ERR] = (uint16_t)result->io_error;
-  if (result->result == GH_MB_SCHED_RESULT_APPLIED)
+  s_cmd_pending = false;
+  s_holding[base + CMD_OFF_LAST_APPLIED_TRIGGER] = result->trigger;
+  s_holding[base + CMD_OFF_RESULT] = result->result;
+  s_holding[base + CMD_OFF_IO_ERR] = (uint16_t)result->io_error;
+  if (slave_status_base(s_cmd_pending_request.slave_id, &status_base))
   {
-    s_holding[base + SCHED_OFF_LAST_APPLIED_TRIGGER] = result->trigger;
     bump_slave_data_version_nolock(status_base);
   }
-
   map_unlock();
 }
 

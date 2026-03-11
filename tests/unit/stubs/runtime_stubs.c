@@ -142,13 +142,6 @@ modbus_io_error_t modbus_get_last_error(void)
   return MODBUS_IO_ERR_NONE;
 }
 
-bool apply_control_to_slave(uint8_t slave_id, const active_config_t *cfg)
-{
-  (void)slave_id;
-  (void)cfg;
-  return false;
-}
-
 void ModbusTcpGetDiag(modbusTcpDiag_t *diagOut)
 {
   if (diagOut != NULL)

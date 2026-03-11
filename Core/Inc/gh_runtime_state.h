@@ -12,6 +12,7 @@
 #define STATUS_MODBUS_TIMEOUT_SLOTS   MODBUS_MAX_SLAVES
 #define MODBUS_MAX_SENSORS_PER_SLAVE  12U
 #define MODBUS_MAX_REGS_PER_REQ       32U
+#define TOPOLOGY_CMD_PAYLOAD_BUDGET_WORDS 16U
 #define BLOCK_CHANNEL_COUNT           9U
 #define MODBUS_POLL_PERIOD_MS         5000U
 #define MODBUS_INTER_SLAVE_DELAY_MS   1U
@@ -19,7 +20,7 @@
 #define MODBUS_RETRY_BACKOFF_MS       20U
 #define MODBUS_UART_TX_TIMEOUT_MS     100U
 #define MODBUS_RTU_RESP_TIMEOUT_MS    300U
-#define MODBUS_ENABLED_SLAVE_MASK     0x00000001UL
+#define MODBUS_RTU_FRAME_GAP_MS       3U
 #define MODBUS_OFFLINE_REPROBE_MS     30000U
 #define HEARTBEAT_PERIOD_MS           1000U
 #define WDG_TIMEOUT_CONTROL_MS        2000U
@@ -120,29 +121,6 @@ typedef enum
   CFG_RESULT_REJECT_TOPOLOGY_COLLISION = 23U,
   CFG_RESULT_REJECT_TOPOLOGY_BUDGET = 24U
 } config_result_code_t;
-
-typedef struct
-{
-  uint16_t enabled;
-  uint16_t on_hhmm;
-  uint16_t off_hhmm;
-} schedule_slot_t;
-
-typedef struct
-{
-  uint16_t trigger;
-  uint16_t apply_value;
-  uint16_t cmd_kind;
-  uint32_t expected_active_ctrl_version;
-  schedule_slot_t slots[4];
-} schedule_apply_request_t;
-
-typedef struct
-{
-  uint16_t trigger;
-  uint16_t result;
-  modbus_io_error_t io_error;
-} schedule_apply_result_t;
 
 typedef struct
 {
@@ -305,7 +283,6 @@ bool modbus_write_multiple_holding_registers_timeout(uint8_t slave_id,
                                                      const uint16_t *regs,
                                                      uint32_t timeout_ms);
 modbus_io_error_t modbus_get_last_error(void);
-bool apply_control_to_slave(uint8_t slave_id, const active_config_t *cfg);
 bool config_write_to_slot(uint32_t slot_addr, uint32_t sector, const active_config_t *cfg);
 
 void task_heartbeat_kick(task_heartbeat_bit_t bit);

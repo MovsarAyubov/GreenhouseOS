@@ -13,6 +13,8 @@ if (!$SkipUnitTests)
   & (Join-Path $PSScriptRoot "Run-UnitTests.ps1")
 }
 
+& (Join-Path $PSScriptRoot "Run-PythonTests.ps1")
+
 & (Join-Path $PSScriptRoot "Check-HILScenarios.ps1")
 
 Write-Host "Quality gate passed."

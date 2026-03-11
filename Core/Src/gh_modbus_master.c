@@ -11,21 +11,19 @@
 
 #define GH_RTU_SLAVE_FIRST            1U
 #define GH_RTU_SLAVE_LAST             MODBUS_MAX_SLAVES
-#define GH_RTU_READ_START_REG         0U
 #define GH_RTU_SENSORS_PER_SLAVE      9U
-#define GH_RTU_READ_REG_COUNT         9U
-#define GH_RTU_DIAG_BASE_REG          128U
 #define GH_RTU_DIAG_COUNT             6U
-#define GH_RTU_CTRL_MODE_CMD_REG      102U
-#define GH_RTU_CTRL_SP_WATER_RAIL_REG 106U
-#define GH_RTU_CTRL_SP_WATER_GROW_REG 107U
-#define GH_RTU_CTRL_SP_WATER_UPPER_REG 108U
-#define GH_RTU_CTRL_SP_WATER_UNDER_REG 109U
-#define GH_RTU_SCHEDULE_BASE_REG      110U
-#define GH_RTU_SCHEDULE_REG_COUNT     12U
 #define GH_RTU_APPLY_TRIGGER_REG      122U
 #define GH_RTU_APPLY_STATUS_REG       125U
 #define GH_RTU_APPLY_STATUS_REG_COUNT 3U
+#define GH_SCHEDULE_SLOT_WORDS        3U
+#define GH_SCHEDULE_SLOT_COUNT        4U
+#define GH_SCHEDULE_PAYLOAD_REG_COUNT (GH_SCHEDULE_SLOT_WORDS * GH_SCHEDULE_SLOT_COUNT)
+#define GH_SCHEDULE_PAYLOAD_OFF_APPLY_VALUE      GH_SCHEDULE_PAYLOAD_REG_COUNT
+#define GH_SCHEDULE_PAYLOAD_OFF_EXPECTED_VER_HI  (GH_SCHEDULE_PAYLOAD_REG_COUNT + 1U)
+#define GH_SCHEDULE_PAYLOAD_OFF_EXPECTED_VER_LO  (GH_SCHEDULE_PAYLOAD_REG_COUNT + 2U)
+#define GH_SCHEDULE_PAYLOAD_OFF_CMD_KIND         (GH_SCHEDULE_PAYLOAD_REG_COUNT + 3U)
+#define GH_SCHEDULE_PAYLOAD_REQUIRED_WORDS       (GH_SCHEDULE_PAYLOAD_OFF_CMD_KIND + 1U)
 #define GH_RTU_RTC_SET_BASE_REG       140U
 #define GH_RTU_RTC_SET_HOUR_REG       (GH_RTU_RTC_SET_BASE_REG + 0U)
 #define GH_RTU_RTC_SET_MINUTE_REG     (GH_RTU_RTC_SET_BASE_REG + 1U)
@@ -53,6 +51,13 @@
 #define GH_POLICY_REASON_CRC          2U
 #define GH_POLICY_REASON_LINK_LOSS    3U
 #define GH_POLICY_REASON_RECOVERED    4U
+
+typedef enum
+{
+  GH_TOPOLOGY_CYCLE_OK = 0U,
+  GH_TOPOLOGY_CYCLE_INVALID = 1U,
+  GH_TOPOLOGY_CYCLE_EMPTY = 2U
+} gh_topology_cycle_state_t;
 
 static gh_topology_poll_req_t s_topology_plan_cache[GH_TOPOLOGY_V2_MAX_REQ_PROFILES] __attribute__((section(".ccmram")));
 static gh_topology_point_binding_t s_topology_point_cache[GH_TOPOLOGY_V2_MAX_POINTS] __attribute__((section(".ccmram")));
@@ -89,15 +94,11 @@ static bool gh_modbus_write_multi_retry(uint8_t slave_id,
                                         uint8_t retries,
                                         uint32_t timeout_ms);
 static void gh_rtc_sync_publish_diag(void);
-static bool gh_hhmm_is_valid(uint16_t hhmm);
-static uint16_t gh_schedule_event_for_io_error(modbus_io_error_t io_err);
-static void gh_schedule_publish_failure(uint8_t slave_id,
-                                        uint16_t event_code,
-                                        uint16_t detail,
-                                        modbus_io_error_t io_err);
-static bool gh_apply_schedule_request_execute(uint8_t slave_id,
-                                              const schedule_apply_request_t *req,
-                                              schedule_apply_result_t *out_result);
+static void gh_run_safe_mode(uint8_t *comm_fail_streak,
+                             uint8_t *comm_ok_streak,
+                             uint8_t fail_offline_cycles,
+                             gh_topology_cycle_state_t cycle_state,
+                             bool publish_diag_event);
 
 static bool gh_get_server_rtc_hhmm(uint8_t *out_hour, uint8_t *out_minute)
 {
@@ -339,19 +340,6 @@ static uint8_t gh_quality_fail_offline_cycles(void)
   return (uint8_t)cycles;
 }
 
-static bool gh_slave_enabled(uint8_t slave_id)
-{
-  uint32_t bit;
-
-  if (!gh_slave_id_valid(slave_id))
-  {
-    return false;
-  }
-
-  bit = (1UL << (uint32_t)(slave_id - 1U));
-  return ((MODBUS_ENABLED_SLAVE_MASK & bit) != 0U);
-}
-
 static bool gh_modbus_read_holding_retry(uint8_t slave_id,
                                          uint16_t start_reg,
                                          uint16_t reg_count,
@@ -475,161 +463,6 @@ static bool gh_modbus_write_multi_retry(uint8_t slave_id,
     }
   }
 
-  return false;
-}
-
-static bool gh_hhmm_is_valid(uint16_t hhmm)
-{
-  uint16_t hh = (uint16_t)(hhmm / 100U);
-  uint16_t mm = (uint16_t)(hhmm % 100U);
-
-  return (hh < 24U) && (mm < 60U);
-}
-
-static uint16_t gh_schedule_event_for_io_error(modbus_io_error_t io_err)
-{
-  switch (io_err)
-  {
-    case MODBUS_IO_ERR_NONE:
-    case MODBUS_IO_ERR_TIMEOUT:
-    case MODBUS_IO_ERR_CRC:
-    case MODBUS_IO_ERR_FRAME:
-    case MODBUS_IO_ERR_UART:
-    default:
-      return EVENT_CODE_CTRL_SYNC_TRANSPORT_TIMEOUT;
-  }
-}
-
-static void gh_schedule_publish_failure(uint8_t slave_id,
-                                        uint16_t event_code,
-                                        uint16_t detail,
-                                        modbus_io_error_t io_err)
-{
-  float value = (detail != 0U) ? (float)detail : (float)io_err;
-
-  publish_event(EVENT_SEV_WARN, event_code, slave_id, value);
-  g_status.last_error_code = event_code;
-}
-
-static bool gh_apply_schedule_request_execute(uint8_t slave_id,
-                                              const schedule_apply_request_t *req,
-                                              schedule_apply_result_t *out_result)
-{
-  uint16_t payload[GH_RTU_SCHEDULE_REG_COUNT] = {0U};
-  uint16_t apply_regs[GH_RTU_APPLY_STATUS_REG_COUNT] = {0U};
-  modbus_io_error_t io_err = MODBUS_IO_ERR_NONE;
-  uint32_t active_ver = 0U;
-  uint32_t expected_ver = 0U;
-  uint16_t fail_code = GH_MB_SCHED_RESULT_APPLIED;
-  uint16_t fail_detail = 0U;
-  uint16_t slot;
-  uint16_t slot_off;
-
-  if ((req == NULL) || (out_result == NULL))
-  {
-    return false;
-  }
-
-  memset(out_result, 0, sizeof(*out_result));
-  out_result->trigger = req->trigger;
-  out_result->result = GH_MB_SCHED_RESULT_APPLIED;
-  out_result->io_error = MODBUS_IO_ERR_NONE;
-
-  if (req->cmd_kind != GH_MB_SCHED_CMD_KIND_REMOTE_SCHEDULE)
-  {
-    fail_code = EVENT_CODE_CTRL_SYNC_INVALID_CMD_KIND;
-    fail_detail = req->cmd_kind;
-    goto fail;
-  }
-
-  for (slot = 0U; slot < 4U; slot++)
-  {
-    if (req->slots[slot].enabled > 1U)
-    {
-      fail_code = EVENT_CODE_CTRL_SYNC_INVALID_SCHEDULE;
-      fail_detail = (uint16_t)(slot + 1U);
-      goto fail;
-    }
-
-    if (!gh_hhmm_is_valid(req->slots[slot].on_hhmm) ||
-        !gh_hhmm_is_valid(req->slots[slot].off_hhmm))
-    {
-      fail_code = EVENT_CODE_CTRL_SYNC_INVALID_SCHEDULE;
-      fail_detail = (uint16_t)(slot + 1U);
-      goto fail;
-    }
-
-    slot_off = (uint16_t)(slot * 3U);
-    payload[slot_off + 0U] = req->slots[slot].enabled;
-    payload[slot_off + 1U] = req->slots[slot].on_hhmm;
-    payload[slot_off + 2U] = req->slots[slot].off_hhmm;
-  }
-
-  if (!gh_modbus_write_multi_retry(slave_id,
-                                   GH_RTU_SCHEDULE_BASE_REG,
-                                   GH_RTU_SCHEDULE_REG_COUNT,
-                                   payload,
-                                   MODBUS_RETRY_COUNT,
-                                   MODBUS_RTU_RESP_TIMEOUT_MS))
-  {
-    io_err = modbus_get_last_error();
-    fail_code = gh_schedule_event_for_io_error(io_err);
-    goto fail;
-  }
-
-  if (!gh_modbus_write_single_retry(slave_id,
-                                    GH_RTU_APPLY_TRIGGER_REG,
-                                    req->apply_value,
-                                    MODBUS_RETRY_COUNT,
-                                    MODBUS_RTU_RESP_TIMEOUT_MS))
-  {
-    io_err = modbus_get_last_error();
-    fail_code = gh_schedule_event_for_io_error(io_err);
-    goto fail;
-  }
-
-  if (!gh_modbus_read_holding_retry(slave_id,
-                                    GH_RTU_APPLY_STATUS_REG,
-                                    GH_RTU_APPLY_STATUS_REG_COUNT,
-                                    apply_regs,
-                                    MODBUS_RTU_RESP_TIMEOUT_MS,
-                                    MODBUS_RETRY_COUNT,
-                                    MODBUS_RETRY_BACKOFF_MS,
-                                    &io_err))
-  {
-    fail_code = gh_schedule_event_for_io_error(io_err);
-    goto fail;
-  }
-
-  g_status.last_apply_status = (uint8_t)(apply_regs[0] & 0x00FFU);
-  if (apply_regs[0] != APPLY_APPLIED)
-  {
-    fail_code = EVENT_CODE_CTRL_SYNC_ACK_STATUS_FAIL;
-    fail_detail = apply_regs[0];
-    io_err = MODBUS_IO_ERR_NONE;
-    goto fail;
-  }
-
-  active_ver = ((uint32_t)apply_regs[1] << 16U) | (uint32_t)apply_regs[2];
-  expected_ver = req->expected_active_ctrl_version;
-#if (GH_SCHEDULE_VERSION_CHECK_ALLOW_DISABLED == 1U)
-  if ((expected_ver != 0U) && (active_ver != expected_ver))
-#else
-  if (active_ver != expected_ver)
-#endif
-  {
-    fail_code = EVENT_CODE_CTRL_SYNC_VERSION_MISMATCH;
-    fail_detail = (uint16_t)(active_ver & 0xFFFFU);
-    io_err = MODBUS_IO_ERR_NONE;
-    goto fail;
-  }
-
-  return true;
-
-fail:
-  out_result->result = fail_code;
-  out_result->io_error = io_err;
-  gh_schedule_publish_failure(slave_id, fail_code, fail_detail, io_err);
   return false;
 }
 
@@ -1014,197 +847,419 @@ static bool gh_command_ack_probe(uint8_t slave_id,
                                       NULL);
 }
 
-static bool gh_apply_request_legacy_execute(uint8_t slave_id, const gh_slave_apply_request_t *req)
+static const gh_topology_cmd_binding_t *gh_find_command_profile(const gh_topology_cmd_binding_t *cmds,
+                                                                uint16_t cmd_count,
+                                                                const gh_data_driven_command_request_t *req)
 {
-  bool apply_ok;
-
-  if (req == NULL)
-  {
-    return false;
-  }
-
-  /* Mapping from master TCP setpoints to current slave control map. */
-  apply_ok = gh_modbus_write_single_retry(slave_id,
-                                          GH_RTU_CTRL_MODE_CMD_REG,
-                                          req->setpoints[0],
-                                          MODBUS_RETRY_COUNT,
-                                          MODBUS_RTU_RESP_TIMEOUT_MS);
-  apply_ok = apply_ok && gh_modbus_write_single_retry(slave_id,
-                                                       GH_RTU_CTRL_SP_WATER_RAIL_REG,
-                                                       req->setpoints[1],
-                                                       MODBUS_RETRY_COUNT,
-                                                       MODBUS_RTU_RESP_TIMEOUT_MS);
-  apply_ok = apply_ok && gh_modbus_write_single_retry(slave_id,
-                                                       GH_RTU_CTRL_SP_WATER_GROW_REG,
-                                                       req->setpoints[2],
-                                                       MODBUS_RETRY_COUNT,
-                                                       MODBUS_RTU_RESP_TIMEOUT_MS);
-  apply_ok = apply_ok && gh_modbus_write_single_retry(slave_id,
-                                                       GH_RTU_CTRL_SP_WATER_UPPER_REG,
-                                                       req->setpoints[3],
-                                                       MODBUS_RETRY_COUNT,
-                                                       MODBUS_RTU_RESP_TIMEOUT_MS);
-  apply_ok = apply_ok && gh_modbus_write_single_retry(slave_id,
-                                                       GH_RTU_CTRL_SP_WATER_UNDER_REG,
-                                                       req->setpoints[4],
-                                                       MODBUS_RETRY_COUNT,
-                                                       MODBUS_RTU_RESP_TIMEOUT_MS);
-  apply_ok = apply_ok && gh_modbus_write_single_retry(slave_id,
-                                                       GH_RTU_APPLY_TRIGGER_REG,
-                                                       req->trigger,
-                                                       MODBUS_RETRY_COUNT,
-                                                       MODBUS_RTU_RESP_TIMEOUT_MS);
-
-  return apply_ok;
-}
-
-static bool gh_apply_request_topology_execute(uint8_t slave_id,
-                                              const gh_slave_apply_request_t *req,
-                                              const gh_topology_cmd_binding_t *cmds,
-                                              uint16_t cmd_count,
-                                              const gh_topology_point_binding_t *points,
-                                              uint16_t point_count,
-                                              bool *out_used_topology)
-{
-  uint16_t payload[GH_MB_CMD_PAYLOAD_WORDS];
   uint16_t i;
-  bool apply_ok = true;
-  bool used = false;
-  bool cmd_ok;
-  uint32_t timeout_ms;
-  uint16_t reg_count;
 
-  if ((req == NULL) || (out_used_topology == NULL))
+  if ((cmds == NULL) || (req == NULL) || (cmd_count == 0U))
   {
-    return false;
+    return NULL;
   }
-
-  payload[0] = req->setpoints[0];
-  payload[1] = req->setpoints[1];
-  payload[2] = req->setpoints[2];
-  payload[3] = req->setpoints[3];
-  payload[4] = req->setpoints[4];
-  payload[5] = req->setpoints[5];
-  payload[6] = req->setpoints[6];
-  payload[7] = req->out_cmd_mask;
 
   for (i = 0U; i < cmd_count; i++)
   {
-    if ((cmds[i].slave_id != slave_id) || (cmds[i].module_id == 0U))
+    if ((cmds[i].cmd_id == req->cmd_profile_id) &&
+        (cmds[i].slave_id == req->slave_id) &&
+        (cmds[i].module_id == req->module_id))
+    {
+      return &cmds[i];
+    }
+  }
+
+  return NULL;
+}
+
+static bool gh_hhmm_is_valid(uint16_t hhmm)
+{
+  uint16_t hh = (uint16_t)(hhmm / 100U);
+  uint16_t mm = (uint16_t)(hhmm % 100U);
+
+  return (hh < 24U) && (mm < 60U);
+}
+
+static uint8_t gh_command_kind(const gh_topology_cmd_binding_t *cmd)
+{
+  if (cmd == NULL)
+  {
+    return GH_TOPOLOGY_CMD_KIND_GENERIC;
+  }
+
+  return GH_TOPOLOGY_CMD_KIND_FROM_FLAGS(cmd->flags);
+}
+
+static const gh_topology_cmd_binding_t *gh_find_next_schedule_step(const gh_topology_cmd_binding_t *cmds,
+                                                                   uint16_t cmd_count,
+                                                                   const gh_topology_cmd_binding_t *current)
+{
+  const gh_topology_cmd_binding_t *best = NULL;
+  uint16_t i;
+  uint16_t next_offset;
+
+  if ((cmds == NULL) || (current == NULL) || (cmd_count == 0U))
+  {
+    return NULL;
+  }
+  if (((uint32_t)current->payload_offset + (uint32_t)current->reg_count) > 0xFFFFU)
+  {
+    return NULL;
+  }
+
+  next_offset = (uint16_t)((uint32_t)current->payload_offset + (uint32_t)current->reg_count);
+  for (i = 0U; i < cmd_count; i++)
+  {
+    if ((cmds[i].slave_id != current->slave_id) ||
+        (cmds[i].module_id != current->module_id) ||
+        (gh_command_kind(&cmds[i]) != GH_TOPOLOGY_CMD_KIND_SCHEDULE) ||
+        (cmds[i].payload_offset != next_offset))
     {
       continue;
     }
-
-    used = true;
-    timeout_ms = (cmds[i].timeout_ms == 0U) ? MODBUS_RTU_RESP_TIMEOUT_MS : cmds[i].timeout_ms;
-    cmd_ok = false;
-
-    if (cmds[i].fc == GH_CMD_FC_WRITE_SINGLE)
+    if ((best == NULL) ||
+        (cmds[i].cmd_id < best->cmd_id) ||
+        ((cmds[i].cmd_id == best->cmd_id) && (cmds[i].start_reg < best->start_reg)))
     {
-      cmd_ok = gh_modbus_write_single_retry(slave_id,
-                                            cmds[i].start_reg,
-                                            payload[0],
-                                            cmds[i].retries,
-                                            timeout_ms);
+      best = &cmds[i];
     }
-    else if (cmds[i].fc == GH_CMD_FC_WRITE_MULTI)
+  }
+
+  return best;
+}
+
+static bool gh_validate_schedule_step(const gh_data_driven_command_request_t *req,
+                                      const gh_topology_cmd_binding_t *cmd)
+{
+  uint16_t slot;
+  uint16_t base;
+
+  if ((req == NULL) || (cmd == NULL))
+  {
+    return false;
+  }
+  if ((req->payload_len < GH_SCHEDULE_PAYLOAD_REQUIRED_WORDS) ||
+      (req->payload_len > TOPOLOGY_CMD_PAYLOAD_BUDGET_WORDS) ||
+      (req->payload[GH_SCHEDULE_PAYLOAD_OFF_CMD_KIND] != GH_MB_SCHED_CMD_KIND_REMOTE_SCHEDULE))
+  {
+    return false;
+  }
+  if (gh_command_kind(cmd) != GH_TOPOLOGY_CMD_KIND_SCHEDULE)
+  {
+    return false;
+  }
+  if (((uint32_t)cmd->payload_offset + (uint32_t)cmd->reg_count) > req->payload_len)
+  {
+    return false;
+  }
+  if ((cmd->fc == GH_CMD_FC_WRITE_MULTI) && (cmd->reg_count == GH_SCHEDULE_PAYLOAD_REG_COUNT))
+  {
+    for (slot = 0U; slot < GH_SCHEDULE_SLOT_COUNT; slot++)
     {
-      reg_count = cmds[i].reg_count;
-      if ((reg_count > 0U) && (reg_count <= GH_MB_CMD_PAYLOAD_WORDS))
+      base = (uint16_t)((uint16_t)cmd->payload_offset + (uint16_t)(slot * GH_SCHEDULE_SLOT_WORDS));
+      if ((req->payload[base + 0U] > 1U) ||
+          !gh_hhmm_is_valid(req->payload[base + 1U]) ||
+          !gh_hhmm_is_valid(req->payload[base + 2U]))
       {
-        cmd_ok = gh_modbus_write_multi_retry(slave_id,
-                                             cmds[i].start_reg,
-                                             reg_count,
-                                             payload,
-                                             cmds[i].retries,
-                                             timeout_ms);
+        return false;
       }
     }
-
-    if (cmd_ok && (cmds[i].ack_point_id != 0U))
-    {
-      cmd_ok = gh_command_ack_probe(slave_id, &cmds[i], points, point_count);
-    }
-
-    apply_ok = apply_ok && cmd_ok;
+    return true;
+  }
+  if ((cmd->fc == GH_CMD_FC_WRITE_SINGLE) && (cmd->reg_count == 1U))
+  {
+    return true;
   }
 
-  *out_used_topology = used;
-  return apply_ok;
+  return false;
 }
 
-static void gh_apply_request_for_slave(uint8_t slave_id,
-                                       const gh_topology_cmd_binding_t *cmds,
-                                       uint16_t cmd_count,
-                                       const gh_topology_point_binding_t *points,
-                                       uint16_t point_count)
+static bool gh_execute_data_driven_step(const gh_data_driven_command_request_t *req,
+                                        const gh_topology_cmd_binding_t *cmd,
+                                        const gh_topology_point_binding_t *points,
+                                        uint16_t point_count,
+                                        bool exact_len,
+                                        gh_data_driven_command_result_t *out_result)
 {
-  bool apply_ok = false;
-  bool used_topology = false;
-  schedule_apply_request_t sched_req = {0};
-  schedule_apply_result_t sched_result = {0};
-  gh_slave_apply_request_t req = {0};
+  uint32_t timeout_ms;
+  bool ok = false;
+  uint16_t cmd_data_len;
 
-  if (GH_ModbusMap_GetScheduleApplyRequest(slave_id, &sched_req))
+  if ((req == NULL) || (cmd == NULL) || (out_result == NULL))
   {
-    sched_result.trigger = sched_req.trigger;
-    sched_result.result = GH_MB_SCHED_RESULT_APPLIED;
-    sched_result.io_error = MODBUS_IO_ERR_NONE;
-    (void)gh_apply_schedule_request_execute(slave_id, &sched_req, &sched_result);
-    GH_ModbusMap_MarkScheduleApplyResult(slave_id, &sched_result);
+    return false;
+  }
+  if ((req->payload_len == 0U) || (req->payload_len > TOPOLOGY_CMD_PAYLOAD_BUDGET_WORDS))
+  {
+    out_result->result = GH_MB_DCMD_RESULT_REJECT_BOUNDS;
+    return false;
+  }
+  if ((cmd->reg_count == 0U) ||
+      (cmd->payload_offset >= TOPOLOGY_CMD_PAYLOAD_BUDGET_WORDS) ||
+      (((uint32_t)cmd->payload_offset + (uint32_t)cmd->reg_count) > TOPOLOGY_CMD_PAYLOAD_BUDGET_WORDS))
+  {
+    out_result->result = GH_MB_DCMD_RESULT_REJECT_BOUNDS;
+    return false;
+  }
+  if (cmd->payload_offset >= req->payload_len)
+  {
+    out_result->result = GH_MB_DCMD_RESULT_REJECT_BOUNDS;
+    return false;
+  }
+
+  if (exact_len)
+  {
+    if (((uint32_t)cmd->payload_offset + (uint32_t)cmd->reg_count) > req->payload_len)
+    {
+      out_result->result = GH_MB_DCMD_RESULT_REJECT_BOUNDS;
+      return false;
+    }
+    cmd_data_len = cmd->reg_count;
+  }
+  else
+  {
+    cmd_data_len = (uint16_t)(req->payload_len - cmd->payload_offset);
+    if ((cmd_data_len == 0U) || (cmd_data_len > cmd->reg_count))
+    {
+      out_result->result = GH_MB_DCMD_RESULT_REJECT_BOUNDS;
+      return false;
+    }
+  }
+
+  if ((cmd->fc != GH_CMD_FC_WRITE_SINGLE) && (cmd->fc != GH_CMD_FC_WRITE_MULTI))
+  {
+    out_result->result = GH_MB_DCMD_RESULT_REJECT_FC;
+    return false;
+  }
+
+  timeout_ms = (cmd->timeout_ms == 0U) ? MODBUS_RTU_RESP_TIMEOUT_MS : cmd->timeout_ms;
+  if (cmd->fc == GH_CMD_FC_WRITE_SINGLE)
+  {
+    if ((cmd_data_len != 1U) || (cmd->reg_count != 1U))
+    {
+      out_result->result = GH_MB_DCMD_RESULT_REJECT_BOUNDS;
+      return false;
+    }
+    ok = gh_modbus_write_single_retry(req->slave_id,
+                                      cmd->start_reg,
+                                      req->payload[cmd->payload_offset],
+                                      cmd->retries,
+                                      timeout_ms);
+  }
+  else
+  {
+    ok = gh_modbus_write_multi_retry(req->slave_id,
+                                     cmd->start_reg,
+                                     cmd_data_len,
+                                     &req->payload[cmd->payload_offset],
+                                     cmd->retries,
+                                     timeout_ms);
+  }
+
+  if (!ok)
+  {
+    out_result->result = GH_MB_DCMD_RESULT_TRANSPORT_FAIL;
+    out_result->io_error = modbus_get_last_error();
+    return false;
+  }
+
+  if ((cmd->ack_point_id != 0U) &&
+      !gh_command_ack_probe(req->slave_id, cmd, points, point_count))
+  {
+    out_result->result = GH_MB_DCMD_RESULT_ACK_FAIL;
+    out_result->io_error = MODBUS_IO_ERR_NONE;
+    return false;
+  }
+
+  out_result->result = GH_MB_DCMD_RESULT_APPLIED;
+  out_result->io_error = MODBUS_IO_ERR_NONE;
+  return true;
+}
+
+static bool gh_schedule_verify_apply_status(const gh_data_driven_command_request_t *req,
+                                            const gh_topology_cmd_binding_t *cmd,
+                                            gh_data_driven_command_result_t *out_result)
+{
+  uint16_t apply_regs[GH_RTU_APPLY_STATUS_REG_COUNT] = {0U};
+  uint32_t expected_ver;
+  uint32_t active_ver;
+  modbus_io_error_t read_err = MODBUS_IO_ERR_NONE;
+
+  if ((req == NULL) || (cmd == NULL) || (out_result == NULL))
+  {
+    return false;
+  }
+  if ((cmd->fc != GH_CMD_FC_WRITE_SINGLE) || (cmd->start_reg != GH_RTU_APPLY_TRIGGER_REG))
+  {
+    return true;
+  }
+
+  if (!gh_modbus_read_holding_retry(req->slave_id,
+                                    GH_RTU_APPLY_STATUS_REG,
+                                    GH_RTU_APPLY_STATUS_REG_COUNT,
+                                    apply_regs,
+                                    cmd->timeout_ms,
+                                    cmd->retries,
+                                    MODBUS_RETRY_BACKOFF_MS,
+                                    &read_err))
+  {
+    out_result->result = GH_MB_DCMD_RESULT_TRANSPORT_FAIL;
+    out_result->io_error = read_err;
+    return false;
+  }
+
+  g_status.last_apply_status = (uint8_t)(apply_regs[0] & 0x00FFU);
+  if (apply_regs[0] != APPLY_APPLIED)
+  {
+    out_result->result = GH_MB_DCMD_RESULT_ACK_FAIL;
+    out_result->io_error = MODBUS_IO_ERR_NONE;
+    return false;
+  }
+
+  expected_ver = ((uint32_t)req->payload[GH_SCHEDULE_PAYLOAD_OFF_EXPECTED_VER_HI] << 16U) |
+                 (uint32_t)req->payload[GH_SCHEDULE_PAYLOAD_OFF_EXPECTED_VER_LO];
+  active_ver = ((uint32_t)apply_regs[1] << 16U) | (uint32_t)apply_regs[2];
+#if (GH_SCHEDULE_VERSION_CHECK_ALLOW_DISABLED == 1U)
+  if ((expected_ver != 0U) && (active_ver != expected_ver))
+#else
+  if (active_ver != expected_ver)
+#endif
+  {
+    out_result->result = GH_MB_DCMD_RESULT_ACK_FAIL;
+    out_result->io_error = MODBUS_IO_ERR_NONE;
+    return false;
+  }
+
+  return true;
+}
+
+static bool gh_execute_data_driven_command(const gh_data_driven_command_request_t *req,
+                                           const gh_topology_cmd_binding_t *cmds,
+                                           uint16_t cmd_count,
+                                           const gh_topology_point_binding_t *points,
+                                           uint16_t point_count,
+                                           gh_data_driven_command_result_t *out_result)
+{
+  const gh_topology_cmd_binding_t *cmd;
+  const gh_topology_cmd_binding_t *apply_step;
+  uint8_t cmd_kind;
+
+  if ((req == NULL) || (out_result == NULL))
+  {
+    return false;
+  }
+
+  memset(out_result, 0, sizeof(*out_result));
+  out_result->trigger = req->trigger;
+  out_result->result = GH_MB_DCMD_RESULT_REJECT_TOPOLOGY;
+  out_result->io_error = MODBUS_IO_ERR_NONE;
+
+  cmd = gh_find_command_profile(cmds, cmd_count, req);
+  if (cmd == NULL)
+  {
+    return false;
+  }
+  cmd_kind = gh_command_kind(cmd);
+  if (cmd_kind > GH_TOPOLOGY_CMD_KIND_MAX)
+  {
+    return false;
+  }
+  if (cmd_kind != GH_TOPOLOGY_CMD_KIND_SCHEDULE)
+  {
+    return gh_execute_data_driven_step(req, cmd, points, point_count, false, out_result);
+  }
+
+  if ((cmd->fc != GH_CMD_FC_WRITE_MULTI) ||
+      (cmd->payload_offset != 0U) ||
+      (cmd->reg_count != GH_SCHEDULE_PAYLOAD_REG_COUNT))
+  {
+    out_result->result = GH_MB_DCMD_RESULT_REJECT_TOPOLOGY;
+    out_result->io_error = MODBUS_IO_ERR_NONE;
+    return false;
+  }
+  apply_step = gh_find_next_schedule_step(cmds, cmd_count, cmd);
+  if ((apply_step == NULL) ||
+      (apply_step->fc != GH_CMD_FC_WRITE_SINGLE) ||
+      (apply_step->payload_offset != GH_SCHEDULE_PAYLOAD_OFF_APPLY_VALUE) ||
+      (apply_step->reg_count != 1U) ||
+      (apply_step->start_reg != GH_RTU_APPLY_TRIGGER_REG))
+  {
+    out_result->result = GH_MB_DCMD_RESULT_REJECT_TOPOLOGY;
+    out_result->io_error = MODBUS_IO_ERR_NONE;
+    return false;
+  }
+  if (!gh_validate_schedule_step(req, cmd) || !gh_validate_schedule_step(req, apply_step))
+  {
+    out_result->result = GH_MB_DCMD_RESULT_REJECT_BOUNDS;
+    out_result->io_error = MODBUS_IO_ERR_NONE;
+    return false;
+  }
+  if (!gh_execute_data_driven_step(req, cmd, points, point_count, true, out_result))
+  {
+    return false;
+  }
+  if (!gh_execute_data_driven_step(req, apply_step, points, point_count, true, out_result))
+  {
+    return false;
+  }
+  if (!gh_schedule_verify_apply_status(req, apply_step, out_result))
+  {
+    return false;
+  }
+
+  out_result->result = GH_MB_DCMD_RESULT_APPLIED;
+  out_result->io_error = MODBUS_IO_ERR_NONE;
+  return true;
+}
+
+static void gh_process_data_driven_command(const gh_topology_cmd_binding_t *cmds,
+                                           uint16_t cmd_count,
+                                           const gh_topology_point_binding_t *points,
+                                           uint16_t point_count,
+                                           bool topology_ready)
+{
+  gh_data_driven_command_request_t req = {0};
+  gh_data_driven_command_result_t result = {0};
+  bool ok = false;
+  uint16_t event_code = EVENT_CODE_CTRL_SYNC_FAIL;
+
+  if (!GH_ModbusMap_GetDataDrivenCommandRequest(&req))
+  {
     return;
   }
 
-  if (!GH_ModbusMap_GetApplyRequest(slave_id, &req))
+  result.trigger = req.trigger;
+  result.result = GH_MB_DCMD_RESULT_REJECT_TOPOLOGY;
+  result.io_error = MODBUS_IO_ERR_NONE;
+  if (topology_ready && (cmds != NULL) && (cmd_count > 0U))
+  {
+    ok = gh_execute_data_driven_command(&req, cmds, cmd_count, points, point_count, &result);
+  }
+  else
+  {
+    ok = false;
+    result.result = GH_MB_DCMD_RESULT_REJECT_TOPOLOGY;
+  }
+
+  GH_ModbusMap_MarkDataDrivenCommandResult(&result);
+  if (ok)
   {
     return;
   }
 
-  if ((cmds != NULL) && (cmd_count > 0U))
+  if ((result.result == GH_MB_DCMD_RESULT_REJECT_TOPOLOGY) ||
+      (result.result == GH_MB_DCMD_RESULT_REJECT_FC) ||
+      (result.result == GH_MB_DCMD_RESULT_REJECT_BOUNDS) ||
+      (result.result == GH_MB_DCMD_RESULT_REJECT_PARTIAL))
   {
-    apply_ok = gh_apply_request_topology_execute(slave_id,
-                                                 &req,
-                                                 cmds,
-                                                 cmd_count,
-                                                 points,
-                                                 point_count,
-                                                 &used_topology);
+    event_code = EVENT_CODE_CTRL_SYNC_TOPOLOGY_CONTRACT;
   }
-
-  if (!used_topology)
-  {
-    apply_ok = gh_apply_request_legacy_execute(slave_id, &req);
-  }
-
-  GH_ModbusMap_MarkApplyResult(slave_id, req.trigger, apply_ok);
-  if (!apply_ok)
-  {
-    g_status.last_error_code = EVENT_CODE_CTRL_SYNC_FAIL;
-  }
+  publish_event(EVENT_SEV_WARN, event_code, req.slave_id, (float)result.result);
+  g_status.last_error_code = event_code;
 }
 
-static void gh_apply_requests_for_mask(uint32_t slave_mask,
-                                       const gh_topology_cmd_binding_t *cmds,
-                                       uint16_t cmd_count,
-                                       const gh_topology_point_binding_t *points,
-                                       uint16_t point_count)
-{
-  uint8_t slave_id;
-  uint32_t bit;
-
-  for (slave_id = GH_RTU_SLAVE_FIRST; slave_id <= GH_RTU_SLAVE_LAST; slave_id++)
-  {
-    bit = (1UL << (uint32_t)(slave_id - 1U));
-    if ((slave_mask & bit) != 0U)
-    {
-      gh_apply_request_for_slave(slave_id, cmds, cmd_count, points, point_count);
-    }
-  }
-}
-
-static bool gh_run_topology_cycle(uint8_t *comm_fail_streak,
-                                  uint8_t *comm_ok_streak,
-                                  uint8_t fail_offline_cycles)
+static gh_topology_cycle_state_t gh_run_topology_cycle(uint8_t *comm_fail_streak,
+                                                       uint8_t *comm_ok_streak,
+                                                       uint8_t fail_offline_cycles)
 {
   bool slave_attempted[MODBUS_MAX_SLAVES] = {false};
   bool slave_success[MODBUS_MAX_SLAVES] = {false};
@@ -1247,28 +1302,28 @@ static bool gh_run_topology_cycle(uint8_t *comm_fail_streak,
                                        &plan_generation,
                                        &plan_slave_mask))
   {
-    return false;
+    return GH_TOPOLOGY_CYCLE_INVALID;
   }
   if (!GH_TopologyRuntime_CopyPointBindings(s_topology_point_cache,
                                             GH_TOPOLOGY_V2_MAX_POINTS,
                                             &point_count,
                                             &point_generation))
   {
-    return false;
+    return GH_TOPOLOGY_CYCLE_INVALID;
   }
   if (!GH_TopologyRuntime_CopyCommandBindings(s_topology_cmd_cache,
                                               GH_TOPOLOGY_V2_MAX_COMMANDS,
                                               &cmd_count,
                                               &cmd_generation))
   {
-    return false;
+    return GH_TOPOLOGY_CYCLE_INVALID;
   }
   if (!GH_TopologyRuntime_CopyPolicyBindings(s_topology_policy_cache,
                                              GH_TOPOLOGY_V2_MAX_POLICIES,
                                              &policy_count,
                                              &policy_generation))
   {
-    return false;
+    return GH_TOPOLOGY_CYCLE_INVALID;
   }
   if ((point_generation != plan_generation) ||
       (cmd_generation != plan_generation) ||
@@ -1280,41 +1335,45 @@ static bool gh_run_topology_cycle(uint8_t *comm_fail_streak,
                                          &plan_generation,
                                          &plan_slave_mask))
     {
-      return false;
+      return GH_TOPOLOGY_CYCLE_INVALID;
     }
     if (!GH_TopologyRuntime_CopyPointBindings(s_topology_point_cache,
                                               GH_TOPOLOGY_V2_MAX_POINTS,
                                               &point_count,
                                               &point_generation))
     {
-      return false;
+      return GH_TOPOLOGY_CYCLE_INVALID;
     }
     if (!GH_TopologyRuntime_CopyCommandBindings(s_topology_cmd_cache,
                                                 GH_TOPOLOGY_V2_MAX_COMMANDS,
                                                 &cmd_count,
                                                 &cmd_generation))
     {
-      return false;
+      return GH_TOPOLOGY_CYCLE_INVALID;
     }
     if (!GH_TopologyRuntime_CopyPolicyBindings(s_topology_policy_cache,
                                                GH_TOPOLOGY_V2_MAX_POLICIES,
                                                &policy_count,
                                                &policy_generation))
     {
-      return false;
+      return GH_TOPOLOGY_CYCLE_INVALID;
     }
     if ((plan_count == 0U) ||
         (point_generation != plan_generation) ||
         (cmd_generation != plan_generation) ||
         (policy_generation != plan_generation))
     {
-      return false;
+      if (plan_count == 0U)
+      {
+        return GH_TOPOLOGY_CYCLE_EMPTY;
+      }
+      return GH_TOPOLOGY_CYCLE_INVALID;
     }
   }
 
   if (plan_count == 0U)
   {
-    return false;
+    return GH_TOPOLOGY_CYCLE_EMPTY;
   }
 
   if ((plan_generation != s_last_plan_generation) || (plan_count != s_last_plan_count))
@@ -1493,155 +1552,73 @@ static bool gh_run_topology_cycle(uint8_t *comm_fail_streak,
     }
   }
 
-  gh_apply_requests_for_mask(plan_slave_mask,
-                             s_topology_cmd_cache,
-                             cmd_count,
-                             s_topology_point_cache,
-                             point_count);
-  return true;
+  (void)plan_slave_mask;
+  gh_process_data_driven_command(s_topology_cmd_cache,
+                                 cmd_count,
+                                 s_topology_point_cache,
+                                 point_count,
+                                 true);
+  return GH_TOPOLOGY_CYCLE_OK;
 }
 
-static void gh_run_legacy_cycle(uint8_t *comm_fail_streak,
-                                uint8_t *comm_ok_streak,
-                                uint8_t fail_offline_cycles)
+static void gh_run_safe_mode(uint8_t *comm_fail_streak,
+                             uint8_t *comm_ok_streak,
+                             uint8_t fail_offline_cycles,
+                             gh_topology_cycle_state_t cycle_state,
+                             bool publish_diag_event)
 {
-  uint16_t regs[GH_RTU_READ_REG_COUNT];
-  uint16_t diag_regs[GH_RTU_DIAG_COUNT];
-  uint16_t sens[GH_RTU_SENSORS_PER_SLAVE];
-  uint16_t i;
-  uint16_t s;
-  uint16_t global_idx;
-  uint32_t now = 0U;
-  bool ok;
-  bool set_quality = false;
-  bool force_rtc_sync = false;
-  uint8_t target_quality = SENSOR_QUALITY_STALE;
   uint8_t slave_id;
-  uint8_t streak_idx = 0U;
+  uint8_t slave_idx;
+  uint8_t quality = SENSOR_QUALITY_STALE;
+  uint32_t now_ms = HAL_GetTick();
+  uint16_t point_count = 0U;
+  uint32_t point_generation = 0U;
+  const gh_topology_point_binding_t *points = NULL;
+  uint16_t diag_reason = (cycle_state == GH_TOPOLOGY_CYCLE_EMPTY) ? 2U : 1U;
 
-  for (s = GH_RTU_SLAVE_FIRST; s <= GH_RTU_SLAVE_LAST; s++)
+  (void)GH_TopologyRuntime_CopyPointBindings(s_topology_point_cache,
+                                             GH_TOPOLOGY_V2_MAX_POINTS,
+                                             &point_count,
+                                             &point_generation);
+  if (point_count > 0U)
+  {
+    points = s_topology_point_cache;
+  }
+
+  if (publish_diag_event)
+  {
+    publish_event(EVENT_SEV_ALARM, EVENT_CODE_CTRL_SYNC_TOPOLOGY_CONTRACT, 0U, (float)diag_reason);
+    g_status.last_error_code = EVENT_CODE_CTRL_SYNC_TOPOLOGY_CONTRACT;
+  }
+
+  for (slave_id = GH_RTU_SLAVE_FIRST; slave_id <= GH_RTU_SLAVE_LAST; slave_id++)
   {
     task_heartbeat_kick(TASK_BIT_MODBUS);
-    slave_id = (uint8_t)s;
-    now = HAL_GetTick();
-    streak_idx = (uint8_t)(slave_id - 1U);
-    set_quality = false;
-    target_quality = SENSOR_QUALITY_STALE;
-
-    if (!gh_slave_enabled(slave_id))
+    if (!gh_slave_id_valid(slave_id))
     {
-      osDelay(MODBUS_INTER_SLAVE_DELAY_MS);
-      task_heartbeat_kick(TASK_BIT_MODBUS);
       continue;
     }
-
-    ok = gh_modbus_read_holding_retry(slave_id,
-                                      GH_RTU_READ_START_REG,
-                                      GH_RTU_READ_REG_COUNT,
-                                      regs,
-                                      MODBUS_RTU_RESP_TIMEOUT_MS,
-                                      MODBUS_RETRY_COUNT,
-                                      MODBUS_RETRY_BACKOFF_MS,
-                                      NULL);
-    if (ok)
+    slave_idx = gh_slave_to_index(slave_id);
+    comm_ok_streak[slave_idx] = 0U;
+    if (comm_fail_streak[slave_idx] < 0xFFU)
     {
-      force_rtc_sync = ((!s_slave_comm_up[streak_idx]) || (comm_fail_streak[streak_idx] > 0U));
-      comm_fail_streak[streak_idx] = 0U;
-      if (comm_ok_streak[streak_idx] < 0xFFU)
-      {
-        comm_ok_streak[streak_idx]++;
-      }
+      comm_fail_streak[slave_idx]++;
+    }
 
-      if (comm_ok_streak[streak_idx] >= GH_QUALITY_RECOVER_OK_CYCLES)
-      {
-        set_quality = true;
-        target_quality = SENSOR_QUALITY_OK;
-      }
-      else
-      {
-        set_quality = true;
-        target_quality = SENSOR_QUALITY_STALE;
-      }
-
-      for (i = 0U; i < GH_RTU_SENSORS_PER_SLAVE; i++)
-      {
-        sens[i] = regs[i];
-        global_idx = (uint16_t)(((s - 1U) * GH_RTU_SENSORS_PER_SLAVE) + i);
-        if (global_idx < SENSOR_COUNT)
-        {
-          g_sensors[global_idx].value = ((float)(int16_t)sens[i]) / 10.0f;
-          if (set_quality)
-          {
-            g_sensors[global_idx].quality = target_quality;
-          }
-          g_sensors[global_idx].timestamp_ms = now;
-        }
-      }
-      GH_ModbusMap_UpdateTelemetry(slave_id, sens, 0x01FFU, 0U, now);
-      gh_maybe_sync_slave_rtc(slave_id, now, force_rtc_sync);
-      s_slave_comm_up[streak_idx] = true;
+    if (comm_fail_streak[slave_idx] >= fail_offline_cycles)
+    {
+      quality = SENSOR_QUALITY_OFFLINE;
     }
     else
     {
-      comm_ok_streak[streak_idx] = 0U;
-      if (comm_fail_streak[streak_idx] < 0xFFU)
-      {
-        comm_fail_streak[streak_idx]++;
-      }
-
-      if (comm_fail_streak[streak_idx] >= fail_offline_cycles)
-      {
-        set_quality = true;
-        target_quality = SENSOR_QUALITY_OFFLINE;
-      }
-      else if (comm_fail_streak[streak_idx] >= GH_QUALITY_FAIL_STALE_CYCLES)
-      {
-        set_quality = true;
-        target_quality = SENSOR_QUALITY_STALE;
-      }
-
-      if (s <= (sizeof(g_status.modbus_timeouts) / sizeof(g_status.modbus_timeouts[0])))
-      {
-        g_status.modbus_timeouts[s - 1U]++;
-      }
-      GH_ModbusMap_ReportTimeout(slave_id, now);
-      s_slave_comm_up[streak_idx] = false;
-      if (set_quality)
-      {
-        for (i = 0U; i < GH_RTU_SENSORS_PER_SLAVE; i++)
-        {
-          global_idx = (uint16_t)(((s - 1U) * GH_RTU_SENSORS_PER_SLAVE) + i);
-          if (global_idx < SENSOR_COUNT)
-          {
-            g_sensors[global_idx].quality = target_quality;
-          }
-        }
-      }
+      quality = SENSOR_QUALITY_STALE;
     }
-
-    if (ok &&
-        gh_modbus_read_holding_retry(slave_id,
-                                     GH_RTU_DIAG_BASE_REG,
-                                     GH_RTU_DIAG_COUNT,
-                                     diag_regs,
-                                     MODBUS_RTU_RESP_TIMEOUT_MS,
-                                     MODBUS_RETRY_COUNT,
-                                     MODBUS_RETRY_BACKOFF_MS,
-                                     NULL))
-    {
-      GH_ModbusMap_UpdateDiag(slave_id, diag_regs[0], diag_regs[1], diag_regs[2]);
-      g_status.control_mode = (uint8_t)(diag_regs[0] & 0x00FFU);
-      g_status.autonomous_reason = (uint8_t)(diag_regs[1] & 0x00FFU);
-      g_status.last_master_seen_ms = ((uint32_t)diag_regs[3] << 16U) | (uint32_t)diag_regs[2];
-      g_status.good_cycle_streak = diag_regs[4];
-      g_status.last_apply_status = (uint8_t)(diag_regs[5] & 0x00FFU);
-    }
-
-    gh_apply_request_for_slave(slave_id, NULL, 0U, NULL, 0U);
-
-    osDelay(MODBUS_INTER_SLAVE_DELAY_MS);
-    task_heartbeat_kick(TASK_BIT_MODBUS);
+    gh_set_quality_for_slave(slave_id, quality, points, point_count);
+    GH_ModbusMap_ReportTimeout(slave_id, now_ms);
+    s_slave_comm_up[slave_idx] = false;
   }
+
+  task_heartbeat_kick(TASK_BIT_MODBUS);
 }
 
 void GH_ModbusMasterTask_Run(void *argument)
@@ -1651,7 +1628,9 @@ void GH_ModbusMasterTask_Run(void *argument)
   uint32_t cycle_start_ms = 0U;
   uint32_t cycle_elapsed_ms = 0U;
   uint8_t fail_offline_cycles = 0U;
-  bool topology_mode = false;
+  bool safe_mode_active = false;
+  gh_topology_cycle_state_t safe_mode_reason = GH_TOPOLOGY_CYCLE_INVALID;
+  gh_topology_cycle_state_t cycle_state = GH_TOPOLOGY_CYCLE_INVALID;
   (void)argument;
 
   fail_offline_cycles = gh_quality_fail_offline_cycles();
@@ -1665,10 +1644,21 @@ void GH_ModbusMasterTask_Run(void *argument)
     gh_apply_rtc_set_request();
     gh_refresh_rtc_clock_registers();
 
-    topology_mode = gh_run_topology_cycle(s_comm_fail_streak, s_comm_ok_streak, fail_offline_cycles);
-    if (!topology_mode)
+    cycle_state = gh_run_topology_cycle(s_comm_fail_streak, s_comm_ok_streak, fail_offline_cycles);
+    if (cycle_state == GH_TOPOLOGY_CYCLE_OK)
     {
-      gh_run_legacy_cycle(s_comm_fail_streak, s_comm_ok_streak, fail_offline_cycles);
+      safe_mode_active = false;
+    }
+    else
+    {
+      gh_run_safe_mode(s_comm_fail_streak,
+                       s_comm_ok_streak,
+                       fail_offline_cycles,
+                       cycle_state,
+                       (!safe_mode_active || (safe_mode_reason != cycle_state)));
+      gh_process_data_driven_command(NULL, 0U, NULL, 0U, false);
+      safe_mode_active = true;
+      safe_mode_reason = cycle_state;
     }
 
     task_heartbeat_kick(TASK_BIT_MODBUS);

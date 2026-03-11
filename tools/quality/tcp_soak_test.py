@@ -216,7 +216,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--timeout-s", type=float, default=4.0, help="socket timeout in seconds")
     parser.add_argument("--points-base", type=int, default=0, help="points FC03 start address")
     parser.add_argument("--points-qty", type=int, default=72, help="points FC03 register count")
-    parser.add_argument("--diag-base", type=int, default=1552, help="diagnostics FC03 start address")
+    parser.add_argument("--diag-base", type=int, default=1376, help="diagnostics FC03 start address")
     parser.add_argument("--diag-qty", type=int, default=32, help="diagnostics FC03 register count")
     parser.add_argument("--diag-every-cycles", type=int, default=12, help="read diagnostics every N cycles")
     parser.add_argument("--reconnect-every-cycles", type=int, default=60, help="force reconnect every N cycles; 0=off")

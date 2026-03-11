@@ -1,6 +1,6 @@
 # greenhouseOS Project Documentation
 
-Date: `2026-03-07`
+Date: `2026-03-08`
 
 This document is a consolidated project overview built from:
 - current repository docs in `docs/`
@@ -60,12 +60,12 @@ System limits from runtime headers:
 Holding map windows (`GH_ModbusMap`):
 - points: `0..1079` (`1080` regs)
 - slave status: `1080..1239` (`160` regs)
-- command ingress: `1240..1599` (`360` regs)
-- directory: `1600..1631` (`32` regs)
-- legacy config pipeline: `1632..1711` (`80` regs)
-- diagnostics: `1712..1743` (`32` regs)
-- topology upload pipeline: `1744..1887` (`144` regs)
-- total map size: `1888` registers
+- command ingress: `1240..1263` (`24` regs)
+- directory: `1264..1295` (`32` regs)
+- config pipeline: `1296..1375` (`80` regs)
+- diagnostics: `1376..1407` (`32` regs)
+- topology upload pipeline: `1408..1551` (`144` regs)
+- total map size: `1552` registers
 
 Addressing supports both:
 - zero-based offsets (`0..1887`)
@@ -80,13 +80,13 @@ High-level flow:
 4. Config storage task consumes submit tokens from map, validates payloads, writes flash, reports result tokens/codes.
 5. Watchdog task supervises health telemetry and reset policy.
 
-Topology mode vs legacy mode:
-- when topology runtime is valid/active, polling and command behavior are driven by topology tables
-- if topology mode is unavailable, firmware falls back to legacy hardcoded cycle
+Topology mode contract:
+- runtime execution path is topology-driven (`poll/points/commands/policies`)
+- if topology runtime is invalid/empty, firmware enters deterministic safe mode (`STALE/OFFLINE` quality) and rejects command execution by topology contract result codes
 
 ## 6. Configuration and Topology Persistence
 
-Legacy config pipeline:
+Config pipeline:
 - client writes request fields into `GH_MB_CFG_BASE` window
 - `SUBMIT_TOKEN` change enqueues request
 - storage task validates version/CRC/ranges
@@ -101,7 +101,7 @@ Topology v2 chunked pipeline:
 - successful activation writes topology to flash A/B slots and updates runtime bindings atomically
 
 A/B behavior:
-- both legacy config and topology payload are persisted with slot fallback
+- both config and topology payload are persisted with slot fallback
 - active payload is loaded from the newest valid slot on boot
 
 ## 7. Tooling and Operations
@@ -113,9 +113,11 @@ Host tooling included in repository:
 Quality tooling:
 - `tools/quality/Run-QualityGate.ps1`
 - `tools/quality/Run-UnitTests.ps1`
+- `tools/quality/Run-PythonTests.ps1`
 - `tools/quality/Run-StaticAnalysis.ps1`
 - `tools/quality/Build-Firmware.ps1`
 - `tools/quality/Run-TcpSoakTest.ps1`
+- `tools/quality/Run-TcpIntegrationTest.ps1`
 
 CI:
 - `.github/workflows/quality-gate.yml` runs the PowerShell quality gate in GitHub Actions
@@ -138,6 +140,7 @@ Detailed references:
 - `docs/topology_module_contract_v1.md`
 - `docs/network_integration.md`
 - `docs/quality_gate.md`
+- `docs/soak_report_template.md`
 - `docs/error_codes.md`
 - `docs/event_codes.md`
 

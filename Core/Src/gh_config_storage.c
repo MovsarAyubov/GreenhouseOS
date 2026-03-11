@@ -59,7 +59,10 @@ static uint32_t s_topology_staging_chunks_mask = 0U;
 #define GH_TOPOLOGY_RUNTIME_DIAG_BASE_REG   128U
 #define GH_TOPOLOGY_RUNTIME_DIAG_REG_COUNT  6U
 #define GH_TOPOLOGY_RUNTIME_SENSOR_WORDS    9U
-#define GH_TOPOLOGY_RUNTIME_CMD_WORDS       GH_MB_CMD_PAYLOAD_WORDS
+#define GH_TOPOLOGY_RUNTIME_CMD_WORDS       TOPOLOGY_CMD_PAYLOAD_BUDGET_WORDS
+#define GH_TOPOLOGY_RUNTIME_SCHED_SLOT_WORDS 3U
+#define GH_TOPOLOGY_RUNTIME_SCHED_SLOT_COUNT 4U
+#define GH_TOPOLOGY_RUNTIME_SCHED_WORDS      (GH_TOPOLOGY_RUNTIME_SCHED_SLOT_WORDS * GH_TOPOLOGY_RUNTIME_SCHED_SLOT_COUNT)
 #define GH_TOPOLOGY_POLICY_ACTION_MAX       GH_TOPOLOGY_POLICY_ACTION_FORCE_OFFLINE
 
 #define GH_TOPOLOGY_BUS_RTU1                1U
@@ -368,6 +371,7 @@ bool GH_TopologyRuntime_RebuildFromPayload(const uint8_t *payload, uint32_t payl
       cmd_dst->fc = cmd.fc;
       cmd_dst->start_reg = cmd.start_reg;
       cmd_dst->reg_count = cmd.max_reg_count;
+      cmd_dst->payload_offset = cmd.payload_offset;
       cmd_dst->timeout_ms = (cmd.timeout_ms == 0U) ? MODBUS_RTU_RESP_TIMEOUT_MS : cmd.timeout_ms;
       cmd_dst->retries = (cmd.retries == 0U) ? MODBUS_RETRY_COUNT : cmd.retries;
       cmd_dst->ack_point_id = cmd.ack_point_id;
@@ -844,6 +848,7 @@ static bool topo_validate_semantics(const uint8_t *payload,
   gh_topology_v2_module_t owner_mod;
   gh_topology_v2_req_t owner_req;
   uint16_t owner_req_idx;
+  uint8_t cmd_kind;
 
   for (i = 0U; i < hdr->module_count; i++)
   {
@@ -1019,6 +1024,13 @@ static bool topo_validate_semantics(const uint8_t *payload,
   for (i = 0U; i < hdr->cmd_count; i++)
   {
     topo_read_cmd_row(payload, hdr, i, &cmd_i);
+    cmd_kind = GH_TOPOLOGY_CMD_KIND_FROM_FLAGS(cmd_i.flags);
+
+    if (cmd_kind > GH_TOPOLOGY_CMD_KIND_MAX)
+    {
+      *out_result = CFG_RESULT_REJECT_TOPOLOGY_SCHEMA;
+      return false;
+    }
 
     if ((cmd_i.fc != GH_TOPOLOGY_CMD_FC_WRITE_SINGLE) &&
         (cmd_i.fc != GH_TOPOLOGY_CMD_FC_WRITE_MULTI))
@@ -1036,6 +1048,13 @@ static bool topo_validate_semantics(const uint8_t *payload,
       *out_result = CFG_RESULT_REJECT_TOPOLOGY_SCHEMA;
       return false;
     }
+    if ((cmd_kind == GH_TOPOLOGY_CMD_KIND_SCHEDULE) &&
+        (cmd_i.fc == GH_TOPOLOGY_CMD_FC_WRITE_MULTI) &&
+        (cmd_i.max_reg_count != GH_TOPOLOGY_RUNTIME_SCHED_WORDS))
+    {
+      *out_result = CFG_RESULT_REJECT_TOPOLOGY_SCHEMA;
+      return false;
+    }
     if (!topo_find_module_by_id(payload, hdr, cmd_i.module_id, &owner_mod))
     {
       *out_result = CFG_RESULT_REJECT_TOPOLOGY_SCHEMA;
@@ -1047,7 +1066,7 @@ static bool topo_validate_semantics(const uint8_t *payload,
       return false;
     }
     if ((owner_mod.bus_type == GH_TOPOLOGY_BUS_RTU1) &&
-        (cmd_i.max_reg_count > GH_TOPOLOGY_RUNTIME_CMD_WORDS))
+        !topo_u16_span_fits(cmd_i.payload_offset, cmd_i.max_reg_count, GH_TOPOLOGY_RUNTIME_CMD_WORDS))
     {
       *out_result = CFG_RESULT_REJECT_TOPOLOGY_BOUNDS;
       return false;
@@ -1068,6 +1087,12 @@ static bool topo_validate_semantics(const uint8_t *payload,
     {
       topo_read_cmd_row(payload, hdr, j, &cmd_j);
       if (cmd_i.cmd_id == cmd_j.cmd_id)
+      {
+        *out_result = CFG_RESULT_REJECT_TOPOLOGY_COLLISION;
+        return false;
+      }
+      if ((cmd_i.module_id == cmd_j.module_id) &&
+          topo_reg_windows_overlap(cmd_i.start_reg, cmd_i.max_reg_count, cmd_j.start_reg, cmd_j.max_reg_count))
       {
         *out_result = CFG_RESULT_REJECT_TOPOLOGY_COLLISION;
         return false;

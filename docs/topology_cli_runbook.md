@@ -1,6 +1,6 @@
 # Topology CLI Runbook
 
-Date: `2026-02-26`
+Date: `2026-03-08`
 
 This runbook contains the exact PowerShell commands for:
 - packing topology JSON
@@ -83,7 +83,7 @@ Interpretation:
 ```powershell
 @'
 from tools.topology.topology_uploader import ModbusTcpClient, GH_MB_TOPO_BASE
-GH_MB_DIAG_BASE = 1552
+GH_MB_DIAG_BASE = 1376
 with ModbusTcpClient("192.168.50.20", 502, 1, 5.0) as c:
     rc = c.read_holding_registers(GH_MB_TOPO_BASE + 1, 1)[0]
     rt = c.read_holding_registers(GH_MB_TOPO_BASE + 2, 1)[0]

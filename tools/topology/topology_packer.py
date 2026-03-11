@@ -24,6 +24,15 @@ BUS_RTU1 = 1
 BUS_RTU2 = 2
 BUS_TCP = 3
 POLICY_ACTION_MAX = 2
+TOPOLOGY_CMD_PAYLOAD_BUDGET_WORDS = 16
+TOPOLOGY_CMD_KIND_GENERIC = 0
+TOPOLOGY_CMD_KIND_SCHEDULE = 1
+TOPOLOGY_CMD_KIND_MAX = TOPOLOGY_CMD_KIND_SCHEDULE
+TOPOLOGY_CMD_FLAG_KIND_SHIFT = 14
+TOPOLOGY_CMD_FLAG_KIND_MASK = 0x3 << TOPOLOGY_CMD_FLAG_KIND_SHIFT
+SCHEDULE_SLOT_WORDS = 3
+SCHEDULE_SLOT_COUNT = 4
+SCHEDULE_PAYLOAD_WORDS = SCHEDULE_SLOT_WORDS * SCHEDULE_SLOT_COUNT
 
 TOPOLOGY_MAX_BLOB_SIZE = 4096
 TOPOLOGY_UPLOAD_CHUNK_WORDS = 120
@@ -36,7 +45,7 @@ HEADER_FMT = "<IHHIIIIIHHHHHHIIIIIII"
 MODULE_FMT = "<HBBBBHHHHHHHIII"
 REQUEST_FMT = "<HHBBHHHHBBHHH"
 POINT_FMT = "<HHHHBbBBHHhh"
-COMMAND_FMT = "<HHBBHHHHH"
+COMMAND_FMT = "<HHBBHHHHHH"
 POLICY_FMT = "<HBBBBHHHH"
 
 HEADER_SIZE = struct.calcsize(HEADER_FMT)
@@ -177,6 +186,16 @@ def _pack_commands(items: List[Dict[str, Any]]) -> bytes:
     rows = []
     for idx, item in enumerate(items):
         prefix = f"commands[{idx}]"
+        flags = _u16(item.get("flags", 0), f"{prefix}.flags")
+        cmd_kind = _parse_int(
+            item.get("cmd_kind", (flags & TOPOLOGY_CMD_FLAG_KIND_MASK) >> TOPOLOGY_CMD_FLAG_KIND_SHIFT),
+            f"{prefix}.cmd_kind",
+        )
+        if cmd_kind < 0 or cmd_kind > TOPOLOGY_CMD_KIND_MAX:
+            raise TopologyPackError(
+                f"{prefix}.cmd_kind={cmd_kind}: unsupported kind (allowed 0..{TOPOLOGY_CMD_KIND_MAX})"
+            )
+        flags = (flags & ~TOPOLOGY_CMD_FLAG_KIND_MASK) | (cmd_kind << TOPOLOGY_CMD_FLAG_KIND_SHIFT)
         rows.append(
             struct.pack(
                 COMMAND_FMT,
@@ -186,9 +205,10 @@ def _pack_commands(items: List[Dict[str, Any]]) -> bytes:
                 _u8(item["retries"], f"{prefix}.retries"),
                 _u16(item["start_reg"], f"{prefix}.start_reg"),
                 _u16(item["max_reg_count"], f"{prefix}.max_reg_count"),
+                _u16(item.get("payload_offset", 0), f"{prefix}.payload_offset"),
                 _u16(item["timeout_ms"], f"{prefix}.timeout_ms"),
                 _u16(item["ack_point_id"], f"{prefix}.ack_point_id"),
-                _u16(item["flags"], f"{prefix}.flags"),
+                _u16(flags, f"{prefix}.flags"),
             )
         )
     return b"".join(rows)
@@ -286,6 +306,40 @@ def _ensure_supported_policy_actions(policies: List[Dict[str, Any]]) -> None:
             )
 
 
+def _ensure_command_payload_budget(commands: List[Dict[str, Any]]) -> None:
+    for idx, item in enumerate(commands):
+        fc = _parse_int(item["fc"], f"commands[{idx}].fc")
+        max_reg_count = _parse_int(item["max_reg_count"], f"commands[{idx}].max_reg_count")
+        payload_offset = _parse_int(item.get("payload_offset", 0), f"commands[{idx}].payload_offset")
+        flags = _parse_int(item.get("flags", 0), f"commands[{idx}].flags")
+        cmd_kind = _parse_int(
+            item.get("cmd_kind", (flags & TOPOLOGY_CMD_FLAG_KIND_MASK) >> TOPOLOGY_CMD_FLAG_KIND_SHIFT),
+            f"commands[{idx}].cmd_kind",
+        )
+        if fc not in (6, 16):
+            continue
+        if cmd_kind < 0 or cmd_kind > TOPOLOGY_CMD_KIND_MAX:
+            raise TopologyPackError(
+                f"commands[{idx}].cmd_kind={cmd_kind}: unsupported kind (allowed 0..{TOPOLOGY_CMD_KIND_MAX})"
+            )
+        if max_reg_count <= 0:
+            raise TopologyPackError(f"commands[{idx}].max_reg_count={max_reg_count}: must be > 0")
+        if fc == 6 and max_reg_count != 1:
+            raise TopologyPackError(f"commands[{idx}].max_reg_count={max_reg_count}: FC6 requires 1")
+        if payload_offset < 0 or payload_offset >= TOPOLOGY_CMD_PAYLOAD_BUDGET_WORDS:
+            raise TopologyPackError(
+                f"commands[{idx}].payload_offset={payload_offset}: out of range [0..{TOPOLOGY_CMD_PAYLOAD_BUDGET_WORDS - 1}]"
+            )
+        if payload_offset + max_reg_count > TOPOLOGY_CMD_PAYLOAD_BUDGET_WORDS:
+            raise TopologyPackError(
+                f"commands[{idx}]: payload_offset + max_reg_count exceeds {TOPOLOGY_CMD_PAYLOAD_BUDGET_WORDS}"
+            )
+        if cmd_kind == TOPOLOGY_CMD_KIND_SCHEDULE and fc == 16 and max_reg_count != SCHEDULE_PAYLOAD_WORDS:
+            raise TopologyPackError(
+                f"commands[{idx}].max_reg_count={max_reg_count}: schedule FC16 requires {SCHEDULE_PAYLOAD_WORDS}"
+            )
+
+
 def build_topology_blob(config: Dict[str, Any]) -> bytes:
     modules = _expect_list(config, "modules")
     requests = _expect_list(config, "requests")
@@ -310,6 +364,7 @@ def build_topology_blob(config: Dict[str, Any]) -> bytes:
     _ensure_unique(commands, "cmd_id", "commands")
     _ensure_supported_bus_types(modules)
     _ensure_supported_policy_actions(policies)
+    _ensure_command_payload_budget(commands)
     _ensure_references(modules, requests, points, commands, policies)
 
     modules_blob = _pack_modules(modules)

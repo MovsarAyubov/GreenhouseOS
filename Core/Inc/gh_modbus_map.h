@@ -9,16 +9,17 @@
 #define GH_MB_MAX_SLAVES      20U
 #define GH_MB_POINT_MAX       SENSOR_COUNT
 #define GH_MB_POINT_STRIDE    6U
+#define GH_MB_MAP_VERSION     4U
 #define GH_MB_HOLDING_BASE    41000U
 #define GH_MB_POINTS_BASE     0U
 #define GH_MB_POINTS_REGS     (GH_MB_POINT_MAX * GH_MB_POINT_STRIDE)
 #define GH_MB_SLAVE_STATUS_BLOCK_SIZE 8U
 #define GH_MB_SLAVE_STATUS_BASE (GH_MB_POINTS_BASE + GH_MB_POINTS_REGS)
 #define GH_MB_SLAVE_STATUS_REGS (GH_MB_MAX_SLAVES * GH_MB_SLAVE_STATUS_BLOCK_SIZE)
-#define GH_MB_CMD_BLOCK_SIZE  10U
-#define GH_MB_CMD_PAYLOAD_WORDS 8U
+#define GH_MB_CMD_PAYLOAD_WORDS TOPOLOGY_CMD_PAYLOAD_BUDGET_WORDS
+#define GH_MB_CMD_BLOCK_SIZE  (4U + GH_MB_CMD_PAYLOAD_WORDS + 4U)
 #define GH_MB_CMD_BASE        (GH_MB_SLAVE_STATUS_BASE + GH_MB_SLAVE_STATUS_REGS)
-#define GH_MB_CMD_REGS        (GH_MB_MAX_SLAVES * GH_MB_CMD_BLOCK_SIZE)
+#define GH_MB_CMD_REGS        GH_MB_CMD_BLOCK_SIZE
 #define GH_MB_DIR_BASE        (GH_MB_CMD_BASE + GH_MB_CMD_REGS)
 #define GH_MB_DIR_REGS        32U
 #define GH_MB_DIR_OFF_RTC_HOUR   14U
@@ -48,25 +49,36 @@
 #define GH_MB_DIAG_REGS       32U
 #define GH_MB_TOPO_BASE       (GH_MB_DIAG_BASE + GH_MB_DIAG_REGS)
 #define GH_MB_TOPO_REGS       144U
-#define GH_MB_SCHED_BASE      (GH_MB_TOPO_BASE + GH_MB_TOPO_REGS)
-#define GH_MB_SCHED_BLOCK_SIZE 20U
-#define GH_MB_SCHED_REGS      (GH_MB_MAX_SLAVES * GH_MB_SCHED_BLOCK_SIZE)
 #define GH_MB_TOTAL_REGS      (GH_MB_POINTS_REGS + GH_MB_SLAVE_STATUS_REGS + GH_MB_CMD_REGS + \
-                               GH_MB_DIR_REGS + GH_MB_CFG_REGS + GH_MB_DIAG_REGS + GH_MB_TOPO_REGS + \
-                               GH_MB_SCHED_REGS)
-#define GH_MB_DIR_OFF_SCHED_BASE 30U
-#define GH_MB_DIR_OFF_SCHED_BLOCK_SIZE 31U
-#define GH_MB_SCHED_CMD_KIND_LEGACY   0U
+                               GH_MB_DIR_REGS + GH_MB_CFG_REGS + GH_MB_DIAG_REGS + GH_MB_TOPO_REGS)
 #define GH_MB_SCHED_CMD_KIND_REMOTE_SCHEDULE 1U
-#define GH_MB_SCHED_RESULT_IDLE    0U
-#define GH_MB_SCHED_RESULT_APPLIED 2U
+#define GH_MB_DCMD_RESULT_IDLE             0U
+#define GH_MB_DCMD_RESULT_QUEUED           1U
+#define GH_MB_DCMD_RESULT_APPLIED          2U
+#define GH_MB_DCMD_RESULT_REJECT_BOUNDS    10U
+#define GH_MB_DCMD_RESULT_REJECT_TOPOLOGY  11U
+#define GH_MB_DCMD_RESULT_REJECT_FC        12U
+#define GH_MB_DCMD_RESULT_REJECT_BUSY      13U
+#define GH_MB_DCMD_RESULT_REJECT_PARTIAL   14U
+#define GH_MB_DCMD_RESULT_TRANSPORT_FAIL   15U
+#define GH_MB_DCMD_RESULT_ACK_FAIL         16U
 
 typedef struct
 {
   uint16_t trigger;
-  uint16_t setpoints[7];
-  uint16_t out_cmd_mask;
-} gh_slave_apply_request_t;
+  uint8_t slave_id;
+  uint16_t module_id;
+  uint16_t cmd_profile_id;
+  uint16_t payload_len;
+  uint16_t payload[GH_MB_CMD_PAYLOAD_WORDS];
+} gh_data_driven_command_request_t;
+
+typedef struct
+{
+  uint16_t trigger;
+  uint16_t result;
+  modbus_io_error_t io_error;
+} gh_data_driven_command_result_t;
 
 typedef struct
 {
@@ -102,10 +114,8 @@ void GH_ModbusMap_UpdateDiag(uint8_t slave_id,
                              uint16_t err_crc,
                              uint16_t err_exception);
 
-bool GH_ModbusMap_GetApplyRequest(uint8_t slave_id, gh_slave_apply_request_t *out_req);
-void GH_ModbusMap_MarkApplyResult(uint8_t slave_id, uint16_t trigger, bool applied);
-bool GH_ModbusMap_GetScheduleApplyRequest(uint8_t slave_id, schedule_apply_request_t *out_req);
-void GH_ModbusMap_MarkScheduleApplyResult(uint8_t slave_id, const schedule_apply_result_t *result);
+bool GH_ModbusMap_GetDataDrivenCommandRequest(gh_data_driven_command_request_t *out_req);
+void GH_ModbusMap_MarkDataDrivenCommandResult(const gh_data_driven_command_result_t *result);
 void GH_ModbusMap_ReportConfigResult(uint16_t token,
                                      config_result_code_t result,
                                      uint32_t active_version);
