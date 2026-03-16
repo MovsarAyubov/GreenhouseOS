@@ -135,8 +135,8 @@ typedef struct __attribute__((packed)) {
 } topo_module_v2_t;
 ```
 
-Authoring contract for module fields:
-- `docs/topology_module_contract_v1.md`
+Authoring contract for module fields is defined inline in this document and in the
+runtime validator/loader implementation (`Core/Src/gh_config_storage.c`).
 
 Validation:
 

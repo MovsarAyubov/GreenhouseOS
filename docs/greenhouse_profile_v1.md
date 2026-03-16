@@ -94,6 +94,8 @@ Optional zone fields:
 - `point_id = module_id * 100 + channel_index`
 - `publish_index = (slave_id - 1) * 9 + channel_index`
 - channels are sorted by fixed channel order before compile
+- generated read request keeps `start_reg=0` and widens `reg_count` to at least `15`,
+  so one `FC=3` read covers telemetry `0..8` and diagnostic registers `9..14`
 
 ## Constraints mirrored from firmware/runtime
 
@@ -126,4 +128,3 @@ Optional zone fields:
   ]
 }
 ```
-

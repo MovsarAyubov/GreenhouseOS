@@ -50,7 +50,7 @@ class ProfileCompilerTests(unittest.TestCase):
         self.assertEqual((5 << 24) | (1 << 16) | 1, module["user_param0"])
 
         self.assertEqual(1010, request["req_id"])
-        self.assertEqual(3, request["reg_count"])
+        self.assertEqual(15, request["reg_count"])
         self.assertEqual(3, request["point_count"])
 
         self.assertEqual([0, 1, 2], [item["reg_offset"] for item in points])
@@ -76,6 +76,7 @@ class ProfileCompilerTests(unittest.TestCase):
         self.assertEqual([0, 1], [item["req_first"] for item in topology["modules"]])
         self.assertEqual(0, topology["requests"][0]["point_first"])
         self.assertEqual(1, topology["requests"][1]["point_first"])
+        self.assertEqual([15, 15], [item["reg_count"] for item in topology["requests"]])
         self.assertEqual([0, 10, 15], [item["publish_index"] for item in topology["points"]])
 
     def test_reject_duplicate_bus_slave_mapping(self) -> None:
@@ -102,4 +103,3 @@ class ProfileCompilerTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

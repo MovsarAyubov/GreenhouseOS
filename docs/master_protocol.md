@@ -140,7 +140,7 @@ Register map (`base + off`):
 - `+24..+25` `TCP_STALE_CLOSE_COUNT`.
 - `+26..+27` `TCP_MALFORMED_MBAP_COUNT`.
 - `+28..+29` `TCP_SEND_ERR_COUNT`.
-- `+30..+31` `TCP_LAST_ERR` (signed `int32`, `lastRecvErr` with fallback to `lastSendErr`).
+- `+30..+31` `TCP_LAST_ERR` (signed `int32`, `lastRecvErr` with fallback to `lastSendErr`; `-1001` means partial TCP write detected on response send).
 
 ## Topology upload window (`GH_MB_TOPO_BASE`)
 - Base index: `1408` (SCADA `42408`).
@@ -165,6 +165,38 @@ Register map (`base + off`):
 - `+20..+139` `REQ_CHUNK_DATA_WORDS[120]` (W), big-endian bytes inside each word.
 
 Upload logic details and client algorithm: `docs/topology_upload_protocol.md`.
+
+## TCP trace window (`GH_MB_TCP_TRACE_BASE`)
+- Base index: `1552` (SCADA `42552`).
+- Size: `121` registers.
+- Read-only debug window with the latest Modbus TCP server trace entries, newest first.
+- Intended for bench diagnostics of persistent-connection issues; not required for normal SCADA polling.
+
+Register map (`base + off`):
+- `+0` `ENTRY_COUNT` (`0..6` valid entries).
+- `+1..+20` `ENTRY[0]` (newest).
+- `+21..+40` `ENTRY[1]`.
+- `+41..+60` `ENTRY[2]`.
+- `+61..+80` `ENTRY[3]`.
+- `+81..+100` `ENTRY[4]`.
+- `+101..+120` `ENTRY[5]` (oldest retained).
+
+Each `ENTRY[n]` block (`20` registers):
+- `+0` `SEQ`.
+- `+1` `EVENT`: `1=accept`, `2=recv`, `3=frame`, `4=send`, `5=malformed`, `6=close`.
+- `+2` `CONN_INDEX`.
+- `+3` `TRANSACTION_ID`.
+- `+4` `RX_LEN_BEFORE`.
+- `+5` `RX_LEN_AFTER`.
+- `+6` `MBAP_LENGTH`.
+- `+7` `FC`.
+- `+8` `START_REG`.
+- `+9` `QTY`.
+- `+10..+11` `TICK_MS`.
+- `+12..+13` `CONN_PTR`.
+- `+14..+15` `RECV_ERR` (signed `int32`).
+- `+16..+17` `SEND_ERR` (signed `int32`).
+- `+18..+19` `IO_LEN`: bytes received in `recv` or bytes written in `send`.
 
 ## Result codes
 - `0` `IDLE`
@@ -191,7 +223,7 @@ Upload logic details and client algorithm: `docs/topology_upload_protocol.md`.
 - Config/topology result fields are written by backend tasks and read by TCP clients.
 
 ## Master to slave RS485/RTU cycle
-- Master polls slave IDs `1..20`.
+- Master executes topology-driven RTU1 `requests[]` and only polls slaves present in the active poll plan.
 - One full poll cycle runs every `5` seconds (cycle budget control).
 
 ## Important

@@ -117,7 +117,143 @@ static void  TCPinitserver(modbusHandler_t *modH);
 static mb_err_op_t TCPconnectserver(modbusHandler_t * modH, modbus_t *telegram);
 static mb_err_op_t TCPgetRxBuffer(modbusHandler_t * modH);
 static modbusTcpDiag_t s_tcpDiag = {0};
+static modbusTcpTraceEntry_t s_tcpTrace[MODBUS_TCP_TRACE_DEPTH];
+static uint16_t s_tcpTraceHead = 0U;
+static uint16_t s_tcpTraceCount = 0U;
+static uint16_t s_tcpTraceSeq = 0U;
 #define TCP_MBAP_HEADER_SIZE 6U
+#define MODBUS_TCP_SEND_ERR_PARTIAL_WRITE (-1001)
+
+static uint16_t TCPreadBeU16(const uint8_t *buf)
+{
+  if (buf == NULL)
+  {
+    return 0U;
+  }
+
+  return ((uint16_t)buf[0] << 8U) | (uint16_t)buf[1];
+}
+
+static uint16_t TCPpeekTransactionId(const tcpclients_t *clientconn)
+{
+  if ((clientconn == NULL) || (clientconn->rxLen < 2U))
+  {
+    return 0U;
+  }
+
+  return TCPreadBeU16(&clientconn->rxBuffer[0]);
+}
+
+static uint16_t TCPpeekMbapLength(const tcpclients_t *clientconn)
+{
+  if ((clientconn == NULL) || (clientconn->rxLen < TCP_MBAP_HEADER_SIZE))
+  {
+    return 0U;
+  }
+  if ((clientconn->rxBuffer[2] != 0U) || (clientconn->rxBuffer[3] != 0U))
+  {
+    return 0U;
+  }
+
+  return TCPreadBeU16(&clientconn->rxBuffer[4]);
+}
+
+static void TCPdecodeRequestFields(const uint8_t *adu,
+                                   uint16_t aduLen,
+                                   uint16_t *startReg,
+                                   uint16_t *qty)
+{
+  uint8_t func;
+
+  if (startReg != NULL)
+  {
+    *startReg = 0U;
+  }
+  if (qty != NULL)
+  {
+    *qty = 0U;
+  }
+  if ((adu == NULL) || (aduLen < 6U))
+  {
+    return;
+  }
+
+  func = adu[FUNC];
+  if (startReg != NULL)
+  {
+    *startReg = TCPreadBeU16(&adu[ADD_HI]);
+  }
+  if (qty == NULL)
+  {
+    return;
+  }
+
+  switch (func)
+  {
+    case MB_FC_READ_COILS:
+    case MB_FC_READ_DISCRETE_INPUT:
+    case MB_FC_READ_REGISTERS:
+    case MB_FC_READ_INPUT_REGISTER:
+    case MB_FC_WRITE_MULTIPLE_COILS:
+    case MB_FC_WRITE_MULTIPLE_REGISTERS:
+      *qty = TCPreadBeU16(&adu[NB_HI]);
+      break;
+    case MB_FC_WRITE_COIL:
+    case MB_FC_WRITE_REGISTER:
+      *qty = 1U;
+      break;
+    default:
+      *qty = 0U;
+      break;
+  }
+}
+
+static void TCPtraceRecord(uint16_t connIndex,
+                           const tcpclients_t *clientconn,
+                           modbusTcpTraceEvent_t event,
+                           uint16_t transactionId,
+                           uint16_t rxLenBefore,
+                           uint16_t rxLenAfter,
+                           uint16_t mbapLength,
+                           uint8_t functionCode,
+                           uint16_t startReg,
+                           uint16_t qty,
+                           int32_t recvErr,
+                           int32_t sendErr,
+                           uint32_t ioLen)
+{
+  modbusTcpTraceEntry_t *entry;
+
+  taskENTER_CRITICAL();
+  entry = &s_tcpTrace[s_tcpTraceHead];
+  memset(entry, 0, sizeof(*entry));
+  entry->tickMs = HAL_GetTick();
+  entry->connPtr = (uint32_t)(uintptr_t)((clientconn != NULL) ? clientconn->conn : NULL);
+  entry->recvErr = recvErr;
+  entry->sendErr = sendErr;
+  entry->ioLen = ioLen;
+  entry->seq = (uint16_t)(++s_tcpTraceSeq);
+  entry->event = (uint16_t)event;
+  entry->connIndex = connIndex;
+  entry->transactionId = transactionId;
+  entry->rxLenBefore = rxLenBefore;
+  entry->rxLenAfter = rxLenAfter;
+  entry->mbapLength = mbapLength;
+  entry->functionCode = functionCode;
+  entry->startReg = startReg;
+  entry->qty = qty;
+
+  s_tcpTraceHead++;
+  if (s_tcpTraceHead >= MODBUS_TCP_TRACE_DEPTH)
+  {
+    s_tcpTraceHead = 0U;
+  }
+  if (s_tcpTraceCount < MODBUS_TCP_TRACE_DEPTH)
+  {
+    s_tcpTraceCount++;
+  }
+  taskEXIT_CRITICAL();
+}
 
 static uint32_t TCPgetIdleCycleLimit(const modbusHandler_t *modH)
 {
@@ -144,6 +280,11 @@ static void TCPclearClientRx(tcpclients_t *clientconn)
   if (clientconn != NULL)
   {
     clientconn->rxLen = 0U;
+    clientconn->lastTransactionId = 0U;
+    clientconn->lastMbapLength = 0U;
+    clientconn->lastStartReg = 0U;
+    clientconn->lastQty = 0U;
+    clientconn->lastFunctionCode = 0U;
   }
 }
 
@@ -183,6 +324,9 @@ static bool TCPextractFrame(modbusHandler_t *modH, tcpclients_t *clientconn)
   uint16_t frameLen;
   uint16_t ad;
   uint16_t remaining;
+  uint16_t rxLenBefore;
+  uint16_t startReg;
+  uint16_t qty;
 
   if ((modH == NULL) || (clientconn == NULL))
   {
@@ -191,11 +335,25 @@ static bool TCPextractFrame(modbusHandler_t *modH, tcpclients_t *clientconn)
 
   while (clientconn->rxLen >= TCP_MBAP_HEADER_SIZE)
   {
+    rxLenBefore = clientconn->rxLen;
     if ((clientconn->rxBuffer[2] != 0U) || (clientconn->rxBuffer[3] != 0U))
     {
       s_tcpDiag.malformedMbapCount++;
       memmove(&clientconn->rxBuffer[0], &clientconn->rxBuffer[1], (size_t)(clientconn->rxLen - 1U));
       clientconn->rxLen--;
+      TCPtraceRecord(modH->newconnIndex,
+                     clientconn,
+                     MODBUS_TCP_TRACE_EV_MALFORMED,
+                     TCPpeekTransactionId(clientconn),
+                     rxLenBefore,
+                     clientconn->rxLen,
+                     0U,
+                     0U,
+                     0U,
+                     0U,
+                     0,
+                     0,
+                     0U);
       continue;
     }
 
@@ -205,6 +363,19 @@ static bool TCPextractFrame(modbusHandler_t *modH, tcpclients_t *clientconn)
       s_tcpDiag.malformedMbapCount++;
       memmove(&clientconn->rxBuffer[0], &clientconn->rxBuffer[1], (size_t)(clientconn->rxLen - 1U));
       clientconn->rxLen--;
+      TCPtraceRecord(modH->newconnIndex,
+                     clientconn,
+                     MODBUS_TCP_TRACE_EV_MALFORMED,
+                     TCPpeekTransactionId(clientconn),
+                     rxLenBefore,
+                     clientconn->rxLen,
+                     uLength,
+                     0U,
+                     0U,
+                     0U,
+                     0,
+                     0,
+                     0U);
       continue;
     }
 
@@ -232,6 +403,14 @@ static bool TCPextractFrame(modbusHandler_t *modH, tcpclients_t *clientconn)
 
     modH->u16TransactionID = ((uint16_t)clientconn->rxBuffer[0] << 8U) | (uint16_t)clientconn->rxBuffer[1];
     modH->u8BufferSize = (uint8_t)(uLength + 2U); // add 2 dummy bytes for CRC
+    startReg = 0U;
+    qty = 0U;
+    TCPdecodeRequestFields(modH->u8Buffer, uLength, &startReg, &qty);
+    clientconn->lastTransactionId = modH->u16TransactionID;
+    clientconn->lastMbapLength = uLength;
+    clientconn->lastFunctionCode = modH->u8Buffer[FUNC];
+    clientconn->lastStartReg = startReg;
+    clientconn->lastQty = qty;
 
     remaining = (uint16_t)(clientconn->rxLen - frameLen);
     if (remaining > 0U)
@@ -239,6 +418,21 @@ static bool TCPextractFrame(modbusHandler_t *modH, tcpclients_t *clientconn)
       memmove(clientconn->rxBuffer, &clientconn->rxBuffer[frameLen], remaining);
     }
     clientconn->rxLen = remaining;
+
+    TCPtraceRecord(modH->newconnIndex,
+                   clientconn,
+                   MODBUS_TCP_TRACE_EV_FRAME,
+                   clientconn->lastTransactionId,
+                   rxLenBefore,
+                   clientconn->rxLen,
+                   clientconn->lastMbapLength,
+                   clientconn->lastFunctionCode,
+                   clientconn->lastStartReg,
+                   clientconn->lastQty,
+                   0,
+                   0,
+                   0U);
+
     return true;
   }
 
@@ -666,6 +860,9 @@ bool TCPwaitConnData(modbusHandler_t *modH)
   bool xTCPvalid = false;
   uint32_t idleCycleLimit;
   tcpclients_t *clientconn;
+  uint16_t rxLenBefore;
+  uint16_t recvLen;
+  uint16_t mbapLength;
 
   //select the next connection slot to work with using round-robin
   modH->newconnIndex++;
@@ -704,6 +901,19 @@ bool TCPwaitConnData(modbusHandler_t *modH)
 		  {
 			  clientconn->aging=0;
 			  TCPclearClientRx(clientconn);
+			  TCPtraceRecord(modH->newconnIndex,
+			                 clientconn,
+			                 MODBUS_TCP_TRACE_EV_ACCEPT,
+			                 0U,
+			                 0U,
+			                 0U,
+			                 0U,
+			                 0U,
+			                 0U,
+			                 0U,
+			                 (int32_t)accept_err,
+			                 0,
+			                 0U);
 		  }
 
 	  }
@@ -715,12 +925,41 @@ bool TCPwaitConnData(modbusHandler_t *modH)
 	  }
 
 	  netconn_set_recvtimeout(clientconn->conn ,  modH->u16timeOut);
+	  rxLenBefore = clientconn->rxLen;
 	  recv_err = netconn_recv(clientconn->conn, &inbuf);
+	  recvLen = (inbuf != NULL) ? (uint16_t)netbuf_len(inbuf) : 0U;
+	  mbapLength = TCPpeekMbapLength(clientconn);
 
   if (recv_err == ERR_CLSD) //the connection was closed
 	  {
 		  s_tcpDiag.recvClosedCount++;
 		  s_tcpDiag.lastRecvErr = (int32_t)recv_err;
+		  TCPtraceRecord(modH->newconnIndex,
+		                 clientconn,
+		                 MODBUS_TCP_TRACE_EV_RECV,
+		                 clientconn->lastTransactionId,
+		                 rxLenBefore,
+		                 clientconn->rxLen,
+		                 mbapLength,
+		                 clientconn->lastFunctionCode,
+		                 clientconn->lastStartReg,
+		                 clientconn->lastQty,
+		                 (int32_t)recv_err,
+		                 0,
+		                 recvLen);
+		  TCPtraceRecord(modH->newconnIndex,
+		                 clientconn,
+		                 MODBUS_TCP_TRACE_EV_CLOSE,
+		                 clientconn->lastTransactionId,
+		                 clientconn->rxLen,
+		                 0U,
+		                 clientconn->lastMbapLength,
+		                 clientconn->lastFunctionCode,
+		                 clientconn->lastStartReg,
+		                 clientconn->lastQty,
+		                 (int32_t)recv_err,
+		                 0,
+		                 0U);
 		  ModbusCloseConnNull(modH);
 		  TCPclearClientRx(clientconn);
 		  clientconn->aging = 0U;
@@ -728,9 +967,22 @@ bool TCPwaitConnData(modbusHandler_t *modH)
 
 	  }
 
-	  if (recv_err == ERR_TIMEOUT) //No new data
+  if (recv_err == ERR_TIMEOUT) //No new data
 	   {
 		  s_tcpDiag.recvTimeoutCount++;
+		  TCPtraceRecord(modH->newconnIndex,
+		                 clientconn,
+		                 MODBUS_TCP_TRACE_EV_RECV,
+		                 clientconn->lastTransactionId,
+		                 rxLenBefore,
+		                 clientconn->rxLen,
+		                 mbapLength,
+		                 clientconn->lastFunctionCode,
+		                 clientconn->lastStartReg,
+		                 clientconn->lastQty,
+		                 (int32_t)recv_err,
+		                 0,
+		                 0U);
 	 	  //continue the aging process
 		  clientconn->aging++;
 		  idleCycleLimit = TCPgetIdleCycleLimit(modH);
@@ -739,6 +991,19 @@ bool TCPwaitConnData(modbusHandler_t *modH)
 		  if (clientconn->aging >= idleCycleLimit)
 		  {
 			  s_tcpDiag.staleCloseCount++;
+			  TCPtraceRecord(modH->newconnIndex,
+			                 clientconn,
+			                 MODBUS_TCP_TRACE_EV_CLOSE,
+			                 clientconn->lastTransactionId,
+			                 clientconn->rxLen,
+			                 0U,
+			                 clientconn->lastMbapLength,
+			                 clientconn->lastFunctionCode,
+			                 clientconn->lastStartReg,
+			                 clientconn->lastQty,
+			                 (int32_t)recv_err,
+			                 0,
+			                 0U);
 			  ModbusCloseConnNull(modH);
 			  TCPclearClientRx(clientconn);
 			  clientconn->aging = 0U;
@@ -752,6 +1017,32 @@ bool TCPwaitConnData(modbusHandler_t *modH)
 	  {
 		  s_tcpDiag.recvOtherErrCount++;
 		  s_tcpDiag.lastRecvErr = (int32_t)recv_err;
+		  TCPtraceRecord(modH->newconnIndex,
+		                 clientconn,
+		                 MODBUS_TCP_TRACE_EV_RECV,
+		                 clientconn->lastTransactionId,
+		                 rxLenBefore,
+		                 clientconn->rxLen,
+		                 mbapLength,
+		                 clientconn->lastFunctionCode,
+		                 clientconn->lastStartReg,
+		                 clientconn->lastQty,
+		                 (int32_t)recv_err,
+		                 0,
+		                 recvLen);
+		  TCPtraceRecord(modH->newconnIndex,
+		                 clientconn,
+		                 MODBUS_TCP_TRACE_EV_CLOSE,
+		                 clientconn->lastTransactionId,
+		                 clientconn->rxLen,
+		                 0U,
+		                 clientconn->lastMbapLength,
+		                 clientconn->lastFunctionCode,
+		                 clientconn->lastStartReg,
+		                 clientconn->lastQty,
+		                 (int32_t)recv_err,
+		                 0,
+		                 0U);
 		  ModbusCloseConnNull(modH);
 		  TCPclearClientRx(clientconn);
 		  clientconn->aging = 0U;
@@ -765,10 +1056,36 @@ bool TCPwaitConnData(modbusHandler_t *modH)
 	    	  if (!TCPappendNetbufData(clientconn, inbuf))
 	    	  {
 	    		  s_tcpDiag.malformedMbapCount++;
+	    		  TCPtraceRecord(modH->newconnIndex,
+	    	  		             clientconn,
+	    	  		             MODBUS_TCP_TRACE_EV_MALFORMED,
+	    	  		             TCPpeekTransactionId(clientconn),
+	    	  		             rxLenBefore,
+	    	  		             0U,
+	    	  		             mbapLength,
+	    	  		             0U,
+	    	  		             0U,
+	    	  		             0U,
+	    	  		             0,
+	    	  		             0,
+	    	  		             recvLen);
 	    		  TCPclearClientRx(clientconn);
 	    	  }
 	    	  else
 	    	  {
+	    		  TCPtraceRecord(modH->newconnIndex,
+	    		                 clientconn,
+	    		                 MODBUS_TCP_TRACE_EV_RECV,
+	    		                 TCPpeekTransactionId(clientconn),
+	    		                 rxLenBefore,
+	    		                 clientconn->rxLen,
+	    		                 TCPpeekMbapLength(clientconn),
+	    		                 0U,
+	    		                 0U,
+	    		                 0U,
+	    		                 0,
+	    		                 0,
+	    		                 recvLen);
 	    		  xTCPvalid = TCPextractFrame(modH, clientconn);
 	    	  }
 		   }
@@ -776,6 +1093,19 @@ bool TCPwaitConnData(modbusHandler_t *modH)
 	      {
 	    	  s_tcpDiag.recvOtherErrCount++;
 	    	  s_tcpDiag.lastRecvErr = (int32_t)netconn_err(clientconn->conn);
+	    	  TCPtraceRecord(modH->newconnIndex,
+	    	                 clientconn,
+	    	                 MODBUS_TCP_TRACE_EV_RECV,
+	    	                 clientconn->lastTransactionId,
+	    	                 rxLenBefore,
+	    	                 clientconn->rxLen,
+	    	                 mbapLength,
+	    	                 clientconn->lastFunctionCode,
+	    	                 clientconn->lastStartReg,
+	    	                 clientconn->lastQty,
+	    	                 (int32_t)netconn_err(clientconn->conn),
+	    	                 0,
+	    	                 recvLen);
 	      }
 		  netbuf_delete(inbuf); // delete buffer on all ERR_OK paths
 		  clientconn->aging = 0U; // reset the aging counter
@@ -1066,6 +1396,43 @@ void ModbusTcpClearDiag(void)
 	s_tcpDiag.sendErrCount = 0U;
 	s_tcpDiag.lastRecvErr = 0;
 	s_tcpDiag.lastSendErr = 0;
+	ModbusTcpClearTrace();
+}
+
+void ModbusTcpGetTrace(modbusTcpTraceSnapshot_t *traceOut)
+{
+	uint16_t srcIdx;
+	uint16_t i;
+
+	if (traceOut == NULL)
+	{
+		return;
+	}
+
+	taskENTER_CRITICAL();
+	memset(traceOut, 0, sizeof(*traceOut));
+	traceOut->entryCount = s_tcpTraceCount;
+	srcIdx = s_tcpTraceHead;
+	for (i = 0U; i < s_tcpTraceCount; i++)
+	{
+		if (srcIdx == 0U)
+		{
+			srcIdx = MODBUS_TCP_TRACE_DEPTH;
+		}
+		srcIdx--;
+		traceOut->entries[i] = s_tcpTrace[srcIdx];
+	}
+	taskEXIT_CRITICAL();
+}
+
+void ModbusTcpClearTrace(void)
+{
+	taskENTER_CRITICAL();
+	memset(s_tcpTrace, 0, sizeof(s_tcpTrace));
+	s_tcpTraceHead = 0U;
+	s_tcpTraceCount = 0U;
+	s_tcpTraceSeq = 0U;
+	taskEXIT_CRITICAL();
 }
 
 #endif
@@ -1895,6 +2262,9 @@ if(modH->xTypeHW != TCP_HW)
     	  struct netvector  xNetVectors[2];
     	  uint8_t u8MBAPheader[6];
     	  size_t uBytesWritten;
+    	  uint32_t expectedBytes;
+    	  int32_t sendErr;
+    	  tcpclients_t *clientconn;
 
 
     	  u8MBAPheader[0] = highByte(modH->u16TransactionID); // this might need improvement the transaction ID could be validated
@@ -1909,22 +2279,67 @@ if(modH->xTypeHW != TCP_HW)
 
     	  xNetVectors[1].len = modH->u8BufferSize;
     	  xNetVectors[1].ptr = (void *) modH->u8Buffer;
+    	  clientconn = &modH->newconns[modH->newconnIndex];
+    	  expectedBytes = 6U + (uint32_t)modH->u8BufferSize;
+    	  uBytesWritten = 0U;
+    	  sendErr = 0;
 
 
 #if defined(LWIP_SO_SNDTIMEO) && (LWIP_SO_SNDTIMEO != 0)
-    	  netconn_set_sendtimeout(modH->newconns[modH->newconnIndex].conn, modH->u16timeOut);
+    	  if (clientconn->conn != NULL)
+    	  {
+    	    netconn_set_sendtimeout(clientconn->conn, modH->u16timeOut);
+    	  }
 #endif
     	  err_enum_t err;
 
-    	  err = netconn_write_vectors_partly(modH->newconns[modH->newconnIndex].conn, xNetVectors, 2, NETCONN_COPY, &uBytesWritten);
+    	  err = (clientconn->conn != NULL) ? netconn_write_vectors_partly(clientconn->conn, xNetVectors, 2, NETCONN_COPY, &uBytesWritten)
+    	                                   : ERR_CONN;
     	  if (err != ERR_OK )
     	  {
+    		 sendErr = (int32_t)err;
+    	  }
+    	  else if ((uint32_t)uBytesWritten != expectedBytes)
+    	  {
+    		 sendErr = MODBUS_TCP_SEND_ERR_PARTIAL_WRITE;
+    	  }
+
+    	  if (sendErr != 0)
+    	  {
     		 s_tcpDiag.sendErrCount++;
-    		 s_tcpDiag.lastSendErr = (int32_t)err;
+    		 s_tcpDiag.lastSendErr = sendErr;
+    	  }
 
-    		 // ModbusCloseConn(modH->newconns[modH->newconnIndex].conn);
+    	  TCPtraceRecord(modH->newconnIndex,
+    	                 clientconn,
+    	                 MODBUS_TCP_TRACE_EV_SEND,
+    	                 clientconn->lastTransactionId,
+    	                 clientconn->rxLen,
+    	                 clientconn->rxLen,
+    	                 clientconn->lastMbapLength,
+    	                 clientconn->lastFunctionCode,
+    	                 clientconn->lastStartReg,
+    	                 clientconn->lastQty,
+    	                 0,
+    	                 sendErr,
+    	                 (uint32_t)uBytesWritten);
+
+    	  if (sendErr != 0)
+    	  {
+    		 TCPtraceRecord(modH->newconnIndex,
+    		                clientconn,
+    		                MODBUS_TCP_TRACE_EV_CLOSE,
+    		                clientconn->lastTransactionId,
+    		                clientconn->rxLen,
+    		                0U,
+    		                clientconn->lastMbapLength,
+    		                clientconn->lastFunctionCode,
+    		                clientconn->lastStartReg,
+    		                clientconn->lastQty,
+    		                0,
+    		                sendErr,
+    		                (uint32_t)uBytesWritten);
     		 ModbusCloseConnNull(modH);
-
     	  }
 
 

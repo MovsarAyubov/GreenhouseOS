@@ -137,7 +137,6 @@ Detailed references:
 - `docs/master_protocol.md`
 - `docs/topology_config_v2.md`
 - `docs/topology_upload_protocol.md`
-- `docs/topology_module_contract_v1.md`
 - `docs/network_integration.md`
 - `docs/quality_gate.md`
 - `docs/soak_report_template.md`

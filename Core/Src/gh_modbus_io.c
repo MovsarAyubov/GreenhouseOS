@@ -146,38 +146,13 @@ static void modbus_frame_gap_delay(void)
   }
 }
 
-static bool modbus_uart_tx_it(const uint8_t *data, uint16_t len)
+static bool modbus_uart_tx_blocking(const uint8_t *data, uint16_t len)
 {
-  uint32_t flags;
   uint32_t tc_wait_start_ms;
 
-  (void)osEventFlagsClear(s_modbus_io_events,
-                          GH_MODBUS_IO_EVT_TX_DONE | GH_MODBUS_IO_EVT_ERROR);
-
   rs485_set_tx(true);
-  if (HAL_UART_Transmit_IT(&huart2, (uint8_t *)data, len) != HAL_OK)
+  if (HAL_UART_Transmit(&huart2, (uint8_t *)data, len, MODBUS_UART_TX_TIMEOUT_MS) != HAL_OK)
   {
-    rs485_set_tx(false);
-    modbus_count_tx_error();
-    modbus_set_last_error(MODBUS_IO_ERR_UART);
-    return false;
-  }
-
-  flags = osEventFlagsWait(s_modbus_io_events,
-                           GH_MODBUS_IO_EVT_TX_DONE | GH_MODBUS_IO_EVT_ERROR,
-                           osFlagsWaitAny,
-                           MODBUS_UART_TX_TIMEOUT_MS);
-  if ((flags & osFlagsError) != 0U)
-  {
-    (void)HAL_UART_AbortTransmit(&huart2);
-    rs485_set_tx(false);
-    modbus_count_tx_error();
-    modbus_set_last_error(MODBUS_IO_ERR_TIMEOUT);
-    return false;
-  }
-  if ((flags & GH_MODBUS_IO_EVT_ERROR) != 0U)
-  {
-    (void)HAL_UART_AbortTransmit(&huart2);
     rs485_set_tx(false);
     modbus_count_tx_error();
     modbus_set_last_error(MODBUS_IO_ERR_UART);
@@ -276,7 +251,7 @@ static bool modbus_read_holding_registers_impl(uint8_t slave_id,
   req[7] = (uint8_t)(req_crc >> 8U);
 
   uart_drain_rx(&huart2);
-  if (!modbus_uart_tx_it(req, (uint16_t)sizeof(req)))
+  if (!modbus_uart_tx_blocking(req, (uint16_t)sizeof(req)))
   {
     (void)osMutexRelease(s_modbus_io_mutex);
     return false;
@@ -375,7 +350,7 @@ static bool modbus_write_single_holding_register_impl(uint8_t slave_id,
   }
 
   uart_drain_rx(&huart2);
-  if (!modbus_uart_tx_it(req, (uint16_t)sizeof(req)))
+  if (!modbus_uart_tx_blocking(req, (uint16_t)sizeof(req)))
   {
     (void)osMutexRelease(s_modbus_io_mutex);
     return false;
@@ -474,7 +449,7 @@ static bool modbus_write_multiple_holding_registers_impl(uint8_t slave_id,
   req[req_len + 1U] = (uint8_t)(crc >> 8U);
 
   uart_drain_rx(&huart2);
-  if (!modbus_uart_tx_it(req, (uint16_t)(req_len + 2U)))
+  if (!modbus_uart_tx_blocking(req, (uint16_t)(req_len + 2U)))
   {
     (void)osMutexRelease(s_modbus_io_mutex);
     return false;

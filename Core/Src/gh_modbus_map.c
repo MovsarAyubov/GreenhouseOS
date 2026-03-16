@@ -4,19 +4,7 @@
 #include <string.h>
 
 #ifdef GH_USE_LWIP_NETCONN
-typedef struct
-{
-  uint32_t acceptErrCount;
-  uint32_t recvTimeoutCount;
-  uint32_t recvClosedCount;
-  uint32_t recvOtherErrCount;
-  uint32_t staleCloseCount;
-  uint32_t malformedMbapCount;
-  uint32_t sendErrCount;
-  int32_t lastRecvErr;
-  int32_t lastSendErr;
-} modbusTcpDiag_t;
-void ModbusTcpGetDiag(modbusTcpDiag_t *diagOut);
+#include "Modbus.h"
 #endif
 
 enum
@@ -295,6 +283,11 @@ static uint16_t topo_index(uint16_t off)
   return (uint16_t)(GH_MB_TOPO_BASE + off);
 }
 
+static uint16_t trace_index(uint16_t off)
+{
+  return (uint16_t)(GH_MB_TCP_TRACE_BASE + off);
+}
+
 static uint16_t dir_index(uint16_t off)
 {
   return (uint16_t)(GH_MB_DIR_BASE + off);
@@ -334,6 +327,51 @@ static uint32_t topo_get_u32(uint16_t off_hi, uint16_t off_lo)
 {
   return ((uint32_t)s_holding[topo_index(off_hi)] << 16U) |
          (uint32_t)s_holding[topo_index(off_lo)];
+}
+
+static void trace_set_u32(uint16_t base, uint16_t off, uint32_t value)
+{
+  s_holding[base + off] = (uint16_t)((value >> 16U) & 0xFFFFU);
+  s_holding[base + off + 1U] = (uint16_t)(value & 0xFFFFU);
+}
+
+static void map_refresh_tcp_trace_nolock(void)
+{
+  uint16_t base = trace_index(1U);
+  uint16_t i;
+
+#ifdef GH_USE_LWIP_NETCONN
+  modbusTcpTraceSnapshot_t snapshot = {0};
+  ModbusTcpGetTrace(&snapshot);
+  s_holding[trace_index(0U)] = snapshot.entryCount;
+
+  for (i = 0U; i < MODBUS_TCP_TRACE_DEPTH; i++)
+  {
+    const modbusTcpTraceEntry_t *entry = &snapshot.entries[i];
+    s_holding[base + 0U] = entry->seq;
+    s_holding[base + 1U] = entry->event;
+    s_holding[base + 2U] = entry->connIndex;
+    s_holding[base + 3U] = entry->transactionId;
+    s_holding[base + 4U] = entry->rxLenBefore;
+    s_holding[base + 5U] = entry->rxLenAfter;
+    s_holding[base + 6U] = entry->mbapLength;
+    s_holding[base + 7U] = entry->functionCode;
+    s_holding[base + 8U] = entry->startReg;
+    s_holding[base + 9U] = entry->qty;
+    trace_set_u32(base, 10U, entry->tickMs);
+    trace_set_u32(base, 12U, entry->connPtr);
+    trace_set_u32(base, 14U, (uint32_t)entry->recvErr);
+    trace_set_u32(base, 16U, (uint32_t)entry->sendErr);
+    trace_set_u32(base, 18U, entry->ioLen);
+    base = (uint16_t)(base + GH_MB_TCP_TRACE_ENTRY_REGS);
+  }
+#else
+  s_holding[trace_index(0U)] = 0U;
+  for (i = 1U; i < GH_MB_TCP_TRACE_REGS; i++)
+  {
+    s_holding[trace_index(i)] = 0U;
+  }
+#endif
 }
 
 static void map_refresh_point_modules_nolock(void)
@@ -492,6 +530,7 @@ static void map_refresh_runtime_diag_nolock(void)
   dbg_set_u32(DBG_OFF_TCP_MALFORMED_MBAP_HI, DBG_OFF_TCP_MALFORMED_MBAP_LO, tcp_malformed);
   dbg_set_u32(DBG_OFF_TCP_SEND_ERR_HI, DBG_OFF_TCP_SEND_ERR_LO, tcp_send_err);
   dbg_set_u32(DBG_OFF_TCP_LAST_ERR_HI, DBG_OFF_TCP_LAST_ERR_LO, (uint32_t)tcp_last_err);
+  map_refresh_tcp_trace_nolock();
 
   s_holding[topo_index(TOPO_OFF_ACTIVE_FLAGS)] = ((g_topology_v2_active != 0U) ? 0x0001U : 0U) |
                                                  ((g_topology_commit_in_progress != 0U) ? 0x0002U : 0U);

@@ -16,7 +16,7 @@
 ../Core/Src/Modbus.c:691:6:ModbusStart	24	static
 ../Core/Src/Modbus.c:817:6:vTimerCallbackT35	32	static
 ../Core/Src/Modbus.c:836:6:vTimerCallbackTimeout	24	static
-../Core/Src/Modbus.c:855:6:TCPwaitConnData	112	static
+../Core/Src/Modbus.c:855:6:TCPwaitConnData	104	static
 ../Core/Src/Modbus.c:1119:7:TCPinitserver	24	static
 ../Core/Src/Modbus.c:1155:6:StartTaskModbusSlave	24	static
 ../Core/Src/Modbus.c:1311:6:ModbusQuery	16	static

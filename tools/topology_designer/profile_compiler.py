@@ -21,6 +21,8 @@ MODBUS_MAX_SLAVES = 20
 
 MODBUS_UART_TX_TIMEOUT_MS = 100
 MODBUS_INTER_SLAVE_DELAY_MS = 1
+MODBUS_DIAG_BASE_REG = 9
+MODBUS_DIAG_REG_COUNT = 6
 
 MOD_TYPE_ZONE_CTRL = 1
 BUS_RTU1 = 1
@@ -56,6 +58,8 @@ CHANNEL_POINT_META = {
     "WINDOWS_POS_B": {"point_type": POINT_TYPE_U16, "scale_pow10": 0, "alarm_low": 0, "alarm_high": 100},
     "CURTAIN_POS": {"point_type": POINT_TYPE_U16, "scale_pow10": 0, "alarm_low": 0, "alarm_high": 100},
 }
+
+MIN_READ_SPAN_WORDS = MODBUS_DIAG_BASE_REG + MODBUS_DIAG_REG_COUNT
 
 
 class ProfileError(ValueError):
@@ -321,6 +325,7 @@ def compile_profile(profile: Dict[str, Any]) -> Dict[str, Any]:
         req_id = module_id * 10
         channels = zone["channels"]
         highest_channel = CHANNEL_TO_INDEX[channels[-1]]
+        req_reg_count = max(highest_channel + 1, MIN_READ_SPAN_WORDS)
 
         modules.append(
             {
@@ -358,7 +363,7 @@ def compile_profile(profile: Dict[str, Any]) -> Dict[str, Any]:
                 "fc": REQ_FC_READ_HOLDING,
                 "priority": zone["priority"],
                 "start_reg": zone["start_reg"],
-                "reg_count": highest_channel + 1,
+                "reg_count": req_reg_count,
                 "period_ms": zone["poll_period_ms"],
                 "timeout_ms": zone["timeout_ms"],
                 "retries": zone["retries"],
@@ -447,4 +452,3 @@ def compile_profile_file(input_path: Path, output_path: Path, indent: int = 2) -
     topology = compile_profile(profile)
     write_json(output_path, topology, indent=indent)
     return topology, profile_summary(profile)
-

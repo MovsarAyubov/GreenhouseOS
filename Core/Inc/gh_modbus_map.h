@@ -49,8 +49,12 @@
 #define GH_MB_DIAG_REGS       32U
 #define GH_MB_TOPO_BASE       (GH_MB_DIAG_BASE + GH_MB_DIAG_REGS)
 #define GH_MB_TOPO_REGS       144U
+#define GH_MB_TCP_TRACE_BASE  (GH_MB_TOPO_BASE + GH_MB_TOPO_REGS)
+#define GH_MB_TCP_TRACE_ENTRY_REGS 20U
+#define GH_MB_TCP_TRACE_REGS  121U
 #define GH_MB_TOTAL_REGS      (GH_MB_POINTS_REGS + GH_MB_SLAVE_STATUS_REGS + GH_MB_CMD_REGS + \
-                               GH_MB_DIR_REGS + GH_MB_CFG_REGS + GH_MB_DIAG_REGS + GH_MB_TOPO_REGS)
+                               GH_MB_DIR_REGS + GH_MB_CFG_REGS + GH_MB_DIAG_REGS + GH_MB_TOPO_REGS + \
+                               GH_MB_TCP_TRACE_REGS)
 #define GH_MB_SCHED_CMD_KIND_REMOTE_SCHEDULE 1U
 #define GH_MB_DCMD_RESULT_IDLE             0U
 #define GH_MB_DCMD_RESULT_QUEUED           1U

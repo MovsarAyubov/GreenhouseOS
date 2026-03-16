@@ -1,8 +1,8 @@
 {
   "ver_minor": 0,
-  "generation": 101,
+  "generation": 102,
   "topology_id": 1001,
-  "created_unix_s": 1773187200,
+  "created_unix_s": 1773673200,
   "flags": 0,
   "modules": [
     {
@@ -47,7 +47,7 @@
       "fc": 3,
       "priority": 1,
       "start_reg": 0,
-      "reg_count": 9,
+      "reg_count": 15,
       "period_ms": 5000,
       "timeout_ms": 300,
       "retries": 2,
@@ -62,7 +62,7 @@
       "fc": 3,
       "priority": 1,
       "start_reg": 0,
-      "reg_count": 9,
+      "reg_count": 15,
       "period_ms": 5000,
       "timeout_ms": 300,
       "retries": 2,
