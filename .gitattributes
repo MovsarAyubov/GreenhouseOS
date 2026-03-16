@@ -1,0 +1,50 @@
+* text=auto
+
+# Source and project text files stay normalized to LF.
+*.c text eol=lf
+*.h text eol=lf
+*.cpp text eol=lf
+*.hpp text eol=lf
+*.ld text eol=lf
+*.s text eol=lf
+*.mk text eol=lf
+makefile text eol=lf
+*.cmake text eol=lf
+*.txt text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.xml text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.py text eol=lf
+*.sh text eol=lf
+
+# Windows tooling and IDE metadata use CRLF.
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.launch text eol=crlf
+*.ioc text eol=crlf
+*.prefs text eol=crlf
+/.project text eol=crlf
+/.cproject text eol=crlf
+/.mxproject text eol=crlf
+/.settings/** text eol=crlf
+
+# Binary build artifacts and generated outputs.
+*.bin binary
+*.elf binary
+*.o binary
+*.a binary
+*.so binary
+*.dll binary
+*.exe binary
+*.pyc binary
+*.pyd binary
+*.map -text
+*.list -text
+*.su -text
+*.cyclo -text
+*.d -text
+*.rsp -text
+*.lnk binary

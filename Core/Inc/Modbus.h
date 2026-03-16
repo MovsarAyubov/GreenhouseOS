@@ -169,12 +169,19 @@ modbus_t;
 
 
 #if ENABLE_TCP == 1
+#define MODBUS_TCP_TRACE_DEPTH 6U
+
 typedef struct
 {
 	struct netconn *conn;
 	uint32_t aging;
 	uint16_t rxLen;
 	uint8_t rxBuffer[MAX_BUFFER + 6U];
+	uint16_t lastTransactionId;
+	uint16_t lastMbapLength;
+	uint16_t lastStartReg;
+	uint16_t lastQty;
+	uint8_t lastFunctionCode;
 }
 tcpclients_t;
 
@@ -191,6 +198,45 @@ typedef struct
 	int32_t lastSendErr;
 }
 modbusTcpDiag_t;
+
+typedef enum
+{
+	MODBUS_TCP_TRACE_EV_NONE = 0,
+	MODBUS_TCP_TRACE_EV_ACCEPT = 1,
+	MODBUS_TCP_TRACE_EV_RECV = 2,
+	MODBUS_TCP_TRACE_EV_FRAME = 3,
+	MODBUS_TCP_TRACE_EV_SEND = 4,
+	MODBUS_TCP_TRACE_EV_MALFORMED = 5,
+	MODBUS_TCP_TRACE_EV_CLOSE = 6
+}
+modbusTcpTraceEvent_t;
+
+typedef struct
+{
+	uint32_t tickMs;
+	uint32_t connPtr;
+	int32_t recvErr;
+	int32_t sendErr;
+	uint32_t ioLen;
+	uint16_t seq;
+	uint16_t event;
+	uint16_t connIndex;
+	uint16_t transactionId;
+	uint16_t rxLenBefore;
+	uint16_t rxLenAfter;
+	uint16_t mbapLength;
+	uint16_t functionCode;
+	uint16_t startReg;
+	uint16_t qty;
+}
+modbusTcpTraceEntry_t;
+
+typedef struct
+{
+	uint16_t entryCount;
+	modbusTcpTraceEntry_t entries[MODBUS_TCP_TRACE_DEPTH];
+}
+modbusTcpTraceSnapshot_t;
 
 #endif
 
@@ -289,6 +335,8 @@ void ModbusCloseConn(struct netconn *conn); //close the TCP connection
 void ModbusCloseConnNull(modbusHandler_t * modH); //close the TCP connection and cleans the modbus handler
 void ModbusTcpGetDiag(modbusTcpDiag_t *diagOut);
 void ModbusTcpClearDiag(void);
+void ModbusTcpGetTrace(modbusTcpTraceSnapshot_t *traceOut);
+void ModbusTcpClearTrace(void);
 #endif
 
 
