@@ -1,23 +1,8 @@
 #include "gh_modbus_map.h"
+#include "gh_modbus_tcp_server.h"
 #include "gh_topology_runtime.h"
 
 #include <string.h>
-
-#ifdef GH_USE_LWIP_NETCONN
-typedef struct
-{
-  uint32_t acceptErrCount;
-  uint32_t recvTimeoutCount;
-  uint32_t recvClosedCount;
-  uint32_t recvOtherErrCount;
-  uint32_t staleCloseCount;
-  uint32_t malformedMbapCount;
-  uint32_t sendErrCount;
-  int32_t lastRecvErr;
-  int32_t lastSendErr;
-} modbusTcpDiag_t;
-void ModbusTcpGetDiag(modbusTcpDiag_t *diagOut);
-#endif
 
 enum
 {
@@ -477,8 +462,8 @@ static void map_refresh_runtime_diag_nolock(void)
   dbg_set_u32(DBG_OFF_MODBUS_TIMEOUT1_HI, DBG_OFF_MODBUS_TIMEOUT1_LO, g_status.modbus_timeouts[1]);
 
 #ifdef GH_USE_LWIP_NETCONN
-  modbusTcpDiag_t tcp_diag = {0};
-  ModbusTcpGetDiag(&tcp_diag);
+  gh_modbus_tcp_diag_t tcp_diag = {0};
+  GH_ModbusTcpServer_GetDiag(&tcp_diag);
   tcp_accept_err = tcp_diag.acceptErrCount;
   tcp_recv_timeout = tcp_diag.recvTimeoutCount;
   tcp_stale_close = tcp_diag.staleCloseCount;

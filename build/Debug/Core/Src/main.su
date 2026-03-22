@@ -27,6 +27,6 @@ C:\Users\AUTcomp\STM32CubeIDE\workspace_1.17.0\greenhouseOS\Core\Src\main.c:821:
 C:\Users\AUTcomp\STM32CubeIDE\workspace_1.17.0\greenhouseOS\Core\Src\main.c:826:6:StartModbusTcpServerTask	16	static
 C:\Users\AUTcomp\STM32CubeIDE\workspace_1.17.0\greenhouseOS\Core\Src\main.c:831:6:StartConfigStorageTask	16	static
 C:\Users\AUTcomp\STM32CubeIDE\workspace_1.17.0\greenhouseOS\Core\Src\main.c:836:6:StartHealthWatchdogTask	56	static
-C:\Users\AUTcomp\STM32CubeIDE\workspace_1.17.0\greenhouseOS\Core\Src\main.c:940:6:StartDefaultTask	16	static
-C:\Users\AUTcomp\STM32CubeIDE\workspace_1.17.0\greenhouseOS\Core\Src\main.c:963:6:HAL_TIM_PeriodElapsedCallback	16	static
-C:\Users\AUTcomp\STM32CubeIDE\workspace_1.17.0\greenhouseOS\Core\Src\main.c:980:6:Error_Handler	8	static
+C:\Users\AUTcomp\STM32CubeIDE\workspace_1.17.0\greenhouseOS\Core\Src\main.c:945:6:StartDefaultTask	16	static
+C:\Users\AUTcomp\STM32CubeIDE\workspace_1.17.0\greenhouseOS\Core\Src\main.c:968:6:HAL_TIM_PeriodElapsedCallback	16	static
+C:\Users\AUTcomp\STM32CubeIDE\workspace_1.17.0\greenhouseOS\Core\Src\main.c:985:6:Error_Handler	8	static

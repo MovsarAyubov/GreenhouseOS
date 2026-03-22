@@ -42,7 +42,7 @@ Core/Src/gh_modbus_map.o: ../Core/Src/gh_modbus_map.c \
  ../Middlewares/Third_Party/FreeRTOS/Source/include/task.h \
  ../Middlewares/Third_Party/FreeRTOS/Source/include/list.h \
  ../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2/cmsis_os2.h \
- ../Core/Inc/gh_topology_runtime.h
+ ../Core/Inc/gh_modbus_tcp_server.h ../Core/Inc/gh_topology_runtime.h
 ../Core/Inc/gh_modbus_map.h:
 ../Core/Inc/gh_runtime_state.h:
 ../Core/Inc/main.h:
@@ -88,4 +88,5 @@ Core/Src/gh_modbus_map.o: ../Core/Src/gh_modbus_map.c \
 ../Middlewares/Third_Party/FreeRTOS/Source/include/task.h:
 ../Middlewares/Third_Party/FreeRTOS/Source/include/list.h:
 ../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2/cmsis_os2.h:
+../Core/Inc/gh_modbus_tcp_server.h:
 ../Core/Inc/gh_topology_runtime.h:

@@ -173,6 +173,7 @@ typedef struct
 {
 	struct netconn *conn;
 	uint32_t aging;
+	uint32_t requestStartTickMs;
 	uint16_t rxLen;
 	uint8_t rxBuffer[MAX_BUFFER + 6U];
 }
@@ -243,6 +244,7 @@ typedef struct
 #if ENABLE_TCP == 1
 
 	tcpclients_t newconns[NUMBERTCPCONN];
+	uint16_t tcpRegScratch[125];
 	struct netconn *conn;
 	uint32_t xIpAddress;
 	uint16_t u16TransactionID;

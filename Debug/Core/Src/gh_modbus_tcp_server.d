@@ -1,6 +1,7 @@
 Core/Src/gh_modbus_tcp_server.o: ../Core/Src/gh_modbus_tcp_server.c \
- ../Core/Inc/gh_modbus_tcp_server.h ../Core/Inc/gh_runtime_state.h \
- ../Core/Inc/main.h ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal.h \
+ ../Core/Inc/gh_modbus_tcp_server.h ../Core/Inc/gh_modbus_map.h \
+ ../Core/Inc/gh_runtime_state.h ../Core/Inc/main.h \
+ ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal.h \
  ../Core/Inc/stm32f4xx_hal_conf.h \
  ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_rcc.h \
  ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_def.h \
@@ -42,12 +43,7 @@ Core/Src/gh_modbus_tcp_server.o: ../Core/Src/gh_modbus_tcp_server.c \
  ../Middlewares/Third_Party/FreeRTOS/Source/include/task.h \
  ../Middlewares/Third_Party/FreeRTOS/Source/include/list.h \
  ../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2/cmsis_os2.h \
- ../Core/Inc/gh_modbus_map.h ../Core/Inc/gh_runtime_state.h \
- ../Core/Inc/Modbus.h ../Core/Inc/ModbusConfig.h \
- ../Middlewares/Third_Party/FreeRTOS/Source/include/queue.h \
- ../Middlewares/Third_Party/FreeRTOS/Source/include/task.h \
- ../Middlewares/Third_Party/FreeRTOS/Source/include/timers.h \
- ../LWIP/App/lwip.h \
+ ../Core/Inc/gh_runtime_state.h ../LWIP/App/lwip.h \
  ../Middlewares/Third_Party/LwIP/src/include/lwip/opt.h \
  ../LWIP/Target/lwipopts.h ../Core/Inc/main.h \
  ../Middlewares/Third_Party/LwIP/src/include/lwip/debug.h \
@@ -81,8 +77,11 @@ Core/Src/gh_modbus_tcp_server.o: ../Core/Src/gh_modbus_tcp_server.c \
  ../Middlewares/Third_Party/LwIP/src/include/lwip/sys.h \
  ../Middlewares/Third_Party/LwIP/system/arch/sys_arch.h \
  ../LWIP/Target/ethernetif.h \
- ../Middlewares/Third_Party/LwIP/src/include/lwip/tcpip.h
+ ../Middlewares/Third_Party/LwIP/src/include/lwip/tcpip.h \
+ ../Middlewares/Third_Party/LwIP/src/include/lwip/api.h \
+ ../Middlewares/Third_Party/LwIP/src/include/lwip/netbuf.h
 ../Core/Inc/gh_modbus_tcp_server.h:
+../Core/Inc/gh_modbus_map.h:
 ../Core/Inc/gh_runtime_state.h:
 ../Core/Inc/main.h:
 ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal.h:
@@ -127,13 +126,7 @@ Core/Src/gh_modbus_tcp_server.o: ../Core/Src/gh_modbus_tcp_server.c \
 ../Middlewares/Third_Party/FreeRTOS/Source/include/task.h:
 ../Middlewares/Third_Party/FreeRTOS/Source/include/list.h:
 ../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2/cmsis_os2.h:
-../Core/Inc/gh_modbus_map.h:
 ../Core/Inc/gh_runtime_state.h:
-../Core/Inc/Modbus.h:
-../Core/Inc/ModbusConfig.h:
-../Middlewares/Third_Party/FreeRTOS/Source/include/queue.h:
-../Middlewares/Third_Party/FreeRTOS/Source/include/task.h:
-../Middlewares/Third_Party/FreeRTOS/Source/include/timers.h:
 ../LWIP/App/lwip.h:
 ../Middlewares/Third_Party/LwIP/src/include/lwip/opt.h:
 ../LWIP/Target/lwipopts.h:
@@ -170,3 +163,5 @@ Core/Src/gh_modbus_tcp_server.o: ../Core/Src/gh_modbus_tcp_server.c \
 ../Middlewares/Third_Party/LwIP/system/arch/sys_arch.h:
 ../LWIP/Target/ethernetif.h:
 ../Middlewares/Third_Party/LwIP/src/include/lwip/tcpip.h:
+../Middlewares/Third_Party/LwIP/src/include/lwip/api.h:
+../Middlewares/Third_Party/LwIP/src/include/lwip/netbuf.h:

@@ -26,7 +26,7 @@
 ../Core/Src/main.c:821:6:StartModbusMasterTask	1
 ../Core/Src/main.c:826:6:StartModbusTcpServerTask	1
 ../Core/Src/main.c:831:6:StartConfigStorageTask	1
-../Core/Src/main.c:836:6:StartHealthWatchdogTask	10
-../Core/Src/main.c:940:6:StartDefaultTask	1
-../Core/Src/main.c:963:6:HAL_TIM_PeriodElapsedCallback	2
-../Core/Src/main.c:980:6:Error_Handler	0
+../Core/Src/main.c:836:6:StartHealthWatchdogTask	11
+../Core/Src/main.c:945:6:StartDefaultTask	1
+../Core/Src/main.c:968:6:HAL_TIM_PeriodElapsedCallback	2
+../Core/Src/main.c:985:6:Error_Handler	0

@@ -35,6 +35,7 @@
 #define GH_RTU_RTC_SYNC_MAX_RETRIES         3U
 #define GH_RTU_RTC_SYNC_ACK_POLL_ATTEMPTS   3U
 #define GH_RTU_RTC_SYNC_ACK_POLL_DELAY_MS   100U
+#define GH_CMD_IDLE_SERVICE_SLICE_MS        20U
 #define GH_QUALITY_RECOVER_OK_CYCLES  2U
 #define GH_QUALITY_FAIL_STALE_CYCLES  2U
 
@@ -74,6 +75,9 @@ static uint32_t s_rtc_sync_fail_count = 0U;
 static uint16_t s_rtc_sync_last_slave_id = 0U;
 static uint16_t s_rtc_sync_last_token = 0U;
 static uint16_t s_rtc_sync_last_result = 0U;
+static uint16_t s_runtime_cmd_count = 0U;
+static uint16_t s_runtime_point_count = 0U;
+static bool s_runtime_topology_ready = false;
 
 extern RTC_HandleTypeDef hrtc;
 
@@ -94,6 +98,7 @@ static bool gh_modbus_write_multi_retry(uint8_t slave_id,
                                         uint8_t retries,
                                         uint32_t timeout_ms);
 static void gh_rtc_sync_publish_diag(void);
+static void gh_rtc_sync_invalidate_all(void);
 static void gh_run_safe_mode(uint8_t *comm_fail_streak,
                              uint8_t *comm_ok_streak,
                              uint8_t fail_offline_cycles,
@@ -196,6 +201,13 @@ static void gh_rtc_sync_publish_diag(void)
                                  s_rtc_sync_last_slave_id,
                                  s_rtc_sync_last_token,
                                  s_rtc_sync_last_result);
+}
+
+static void gh_rtc_sync_invalidate_all(void)
+{
+  memset(s_rtc_sync_last_ok_ms, 0, sizeof(s_rtc_sync_last_ok_ms));
+  memset(s_rtc_sync_last_attempt_ms, 0, sizeof(s_rtc_sync_last_attempt_ms));
+  memset(s_rtc_sync_retry_count, 0, sizeof(s_rtc_sync_retry_count));
 }
 
 static void gh_maybe_sync_slave_rtc(uint8_t slave_id, uint32_t now_ms, bool force_sync)
@@ -310,6 +322,7 @@ static void gh_apply_rtc_set_request(void)
   if (HAL_RTC_SetTime(&hrtc, &rtc_time, RTC_FORMAT_BIN) == HAL_OK)
   {
     applied = true;
+    gh_rtc_sync_invalidate_all();
   }
 
   GH_ModbusMap_MarkRtcSetResult(req.token, applied, req.hour, req.minute);
@@ -1257,6 +1270,25 @@ static void gh_process_data_driven_command(const gh_topology_cmd_binding_t *cmds
   g_status.last_error_code = event_code;
 }
 
+static void gh_service_pending_commands_during_idle(uint32_t idle_ms)
+{
+  uint32_t slice_ms;
+
+  while (idle_ms > 0U)
+  {
+    task_heartbeat_kick(TASK_BIT_MODBUS);
+    gh_process_data_driven_command(s_runtime_topology_ready ? s_topology_cmd_cache : NULL,
+                                   s_runtime_cmd_count,
+                                   s_runtime_topology_ready ? s_topology_point_cache : NULL,
+                                   s_runtime_point_count,
+                                   s_runtime_topology_ready);
+
+    slice_ms = (idle_ms > GH_CMD_IDLE_SERVICE_SLICE_MS) ? GH_CMD_IDLE_SERVICE_SLICE_MS : idle_ms;
+    osDelay(slice_ms);
+    idle_ms -= slice_ms;
+  }
+}
+
 static gh_topology_cycle_state_t gh_run_topology_cycle(uint8_t *comm_fail_streak,
                                                        uint8_t *comm_ok_streak,
                                                        uint8_t fail_offline_cycles)
@@ -1385,9 +1417,23 @@ static gh_topology_cycle_state_t gh_run_topology_cycle(uint8_t *comm_fail_streak
     s_last_plan_count = plan_count;
   }
 
+  s_runtime_cmd_count = cmd_count;
+  s_runtime_point_count = point_count;
+  s_runtime_topology_ready = true;
+  gh_process_data_driven_command(s_topology_cmd_cache,
+                                 cmd_count,
+                                 s_topology_point_cache,
+                                 point_count,
+                                 true);
+
   for (i = 0U; i < plan_count; i++)
   {
     task_heartbeat_kick(TASK_BIT_MODBUS);
+    gh_process_data_driven_command(s_topology_cmd_cache,
+                                   cmd_count,
+                                   s_topology_point_cache,
+                                   point_count,
+                                   true);
     now_ms = HAL_GetTick();
 
     if ((s_next_due_ms[i] != 0U) && ((int32_t)(now_ms - s_next_due_ms[i]) < 0))
@@ -1656,6 +1702,9 @@ void GH_ModbusMasterTask_Run(void *argument)
                        fail_offline_cycles,
                        cycle_state,
                        (!safe_mode_active || (safe_mode_reason != cycle_state)));
+      s_runtime_cmd_count = 0U;
+      s_runtime_point_count = 0U;
+      s_runtime_topology_ready = false;
       gh_process_data_driven_command(NULL, 0U, NULL, 0U, false);
       safe_mode_active = true;
       safe_mode_reason = cycle_state;
@@ -1665,7 +1714,7 @@ void GH_ModbusMasterTask_Run(void *argument)
     cycle_elapsed_ms = HAL_GetTick() - cycle_start_ms;
     if (cycle_elapsed_ms < MODBUS_POLL_PERIOD_MS)
     {
-      osDelay(MODBUS_POLL_PERIOD_MS - cycle_elapsed_ms);
+      gh_service_pending_commands_during_idle(MODBUS_POLL_PERIOD_MS - cycle_elapsed_ms);
     }
     else
     {

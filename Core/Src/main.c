@@ -851,7 +851,12 @@ void StartHealthWatchdogTask(void *argument)
     g_status.stack_hwm_control_words = task_stack_hwm_words(controlTaskHandle);
     g_status.stack_hwm_modbus_words = task_stack_hwm_words(modbusMasterTaskHandle);
     g_status.stack_hwm_config_words = task_stack_hwm_words(configStorageTaskHandle);
-    g_status.stack_hwm_tcp_words = task_stack_hwm_words(modbusTcpServerTaskHandle);
+    {
+      uint16_t tcp_worker_hwm = GH_ModbusTcpServer_GetWorkerStackHwmWords();
+      g_status.stack_hwm_tcp_words = (tcp_worker_hwm != 0U) ?
+                                     tcp_worker_hwm :
+                                     task_stack_hwm_words(modbusTcpServerTaskHandle);
+    }
     g_status.stack_hwm_wdg_words = task_stack_hwm_words(healthWatchdogTaskHandle);
     g_status.heap_free_bytes = xPortGetFreeHeapSize();
     g_status.heap_min_ever_bytes = xPortGetMinimumEverFreeHeapSize();

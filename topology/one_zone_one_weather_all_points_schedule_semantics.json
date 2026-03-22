@@ -1,0 +1,203 @@
+{
+  "schema": "scada_semantic_mapping_v1",
+  "topology_id": 1001,
+  "topology_generation": 103,
+  "topology_ver_major": 2,
+  "topology_ver_minor": 0,
+  "modules": {
+    "zone_1": {
+      "module_id": 101,
+      "module_type": 1,
+      "slave_id": 1,
+      "zone_id": 1,
+      "title": "Zone 1"
+    },
+    "weather_1": {
+      "module_id": 201,
+      "module_type": 2,
+      "slave_id": 20,
+      "zone_id": 65535,
+      "title": "Weather Station"
+    }
+  },
+  "points": {
+    "zone_1.air_temp": {
+      "module_id": 101,
+      "point_id": 10100,
+      "publish_index": 0,
+      "req_id": 1010,
+      "label": "Air temperature",
+      "unit": "degC",
+      "scale_pow10": -1
+    },
+    "zone_1.air_hum": {
+      "module_id": 101,
+      "point_id": 10101,
+      "publish_index": 1,
+      "req_id": 1010,
+      "label": "Air humidity",
+      "unit": "%RH",
+      "scale_pow10": -1
+    },
+    "zone_1.water_rail": {
+      "module_id": 101,
+      "point_id": 10102,
+      "publish_index": 2,
+      "req_id": 1010,
+      "label": "Water rail temperature",
+      "unit": "degC",
+      "scale_pow10": -1
+    },
+    "zone_1.water_grow": {
+      "module_id": 101,
+      "point_id": 10103,
+      "publish_index": 3,
+      "req_id": 1010,
+      "label": "Water grow temperature",
+      "unit": "degC",
+      "scale_pow10": -1
+    },
+    "zone_1.water_undertray": {
+      "module_id": 101,
+      "point_id": 10104,
+      "publish_index": 4,
+      "req_id": 1010,
+      "label": "Water undertray temperature",
+      "unit": "degC",
+      "scale_pow10": -1
+    },
+    "zone_1.water_upper_heat": {
+      "module_id": 101,
+      "point_id": 10105,
+      "publish_index": 5,
+      "req_id": 1010,
+      "label": "Water upper heat temperature",
+      "unit": "degC",
+      "scale_pow10": -1
+    },
+    "zone_1.windows_pos_a": {
+      "module_id": 101,
+      "point_id": 10106,
+      "publish_index": 6,
+      "req_id": 1010,
+      "label": "Windows position A",
+      "unit": "%",
+      "scale_pow10": -1
+    },
+    "zone_1.windows_pos_b": {
+      "module_id": 101,
+      "point_id": 10107,
+      "publish_index": 7,
+      "req_id": 1010,
+      "label": "Windows position B",
+      "unit": "%",
+      "scale_pow10": -1
+    },
+    "zone_1.curtain_pos": {
+      "module_id": 101,
+      "point_id": 10108,
+      "publish_index": 8,
+      "req_id": 1010,
+      "label": "Curtain position",
+      "unit": "%",
+      "scale_pow10": -1
+    },
+    "weather_1.out_temp": {
+      "module_id": 201,
+      "point_id": 20100,
+      "publish_index": 9,
+      "req_id": 2010,
+      "label": "Outdoor temperature",
+      "unit": "degC",
+      "scale_pow10": -1
+    },
+    "weather_1.out_hum": {
+      "module_id": 201,
+      "point_id": 20101,
+      "publish_index": 10,
+      "req_id": 2010,
+      "label": "Outdoor humidity",
+      "unit": "%RH",
+      "scale_pow10": -1
+    },
+    "weather_1.wind_speed": {
+      "module_id": 201,
+      "point_id": 20102,
+      "publish_index": 11,
+      "req_id": 2010,
+      "label": "Wind speed",
+      "unit": "m/s",
+      "scale_pow10": -1
+    },
+    "weather_1.wind_dir": {
+      "module_id": 201,
+      "point_id": 20103,
+      "publish_index": 12,
+      "req_id": 2010,
+      "label": "Wind direction",
+      "unit": "deg",
+      "scale_pow10": 0
+    },
+    "weather_1.solar_rad": {
+      "module_id": 201,
+      "point_id": 20105,
+      "publish_index": 13,
+      "req_id": 2010,
+      "label": "Solar radiation",
+      "unit": "W/m2",
+      "scale_pow10": 0
+    },
+    "weather_1.baro_press": {
+      "module_id": 201,
+      "point_id": 20106,
+      "publish_index": 14,
+      "req_id": 2010,
+      "label": "Barometric pressure",
+      "unit": "hPa",
+      "scale_pow10": -1
+    },
+    "weather_1.rain_flag": {
+      "module_id": 201,
+      "point_id": 20104,
+      "publish_index": 15,
+      "req_id": 2010,
+      "label": "Rain flag",
+      "unit": "flag",
+      "scale_pow10": 0
+    },
+    "weather_1.dew_point": {
+      "module_id": 201,
+      "point_id": 20107,
+      "publish_index": 16,
+      "req_id": 2010,
+      "label": "Dew point",
+      "unit": "degC",
+      "scale_pow10": -1
+    },
+    "weather_1.status_bits": {
+      "module_id": 201,
+      "point_id": 20108,
+      "publish_index": 17,
+      "req_id": 2010,
+      "label": "Status bits",
+      "unit": "mask",
+      "scale_pow10": 0
+    }
+  },
+  "commands": {
+    "zone_1.schedule": {
+      "module_id": 101,
+      "slave_id": 1,
+      "cmd_profile_id": 5001,
+      "apply_step_cmd_id": 5002,
+      "cmd_kind": "schedule",
+      "payload_words": 16,
+      "schedule_words": 12,
+      "apply_value_word": 12,
+      "expected_version_hi_word": 13,
+      "expected_version_lo_word": 14,
+      "cmd_kind_word": 15,
+      "cmd_kind_value": 1
+    }
+  }
+}

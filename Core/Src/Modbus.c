@@ -59,7 +59,7 @@ const osThreadAttr_t myTaskModbusA_attributes = {
 const osThreadAttr_t myTaskModbusA_attributesTCP = {
     .name = "TaskModbusSlave",
     .priority = (osPriority_t) osPriorityAboveNormal,
-    .stack_size = 256 * 6
+    .stack_size = 1024U * 4U
 };
 
 
@@ -76,7 +76,7 @@ const osThreadAttr_t myTaskModbusB_attributes = {
 const osThreadAttr_t myTaskModbusB_attributesTCP = {
     .name = "TaskModbusMaster",
     .priority = (osPriority_t) osPriorityNormal,
-    .stack_size = 256 * 4
+    .stack_size = 768U * 4U
 };
 
 
@@ -118,6 +118,7 @@ static mb_err_op_t TCPconnectserver(modbusHandler_t * modH, modbus_t *telegram);
 static mb_err_op_t TCPgetRxBuffer(modbusHandler_t * modH);
 static modbusTcpDiag_t s_tcpDiag = {0};
 #define TCP_MBAP_HEADER_SIZE 6U
+#define MODBUS_TCP_SEND_ERR_PARTIAL_WRITE (-1001)
 
 static uint32_t TCPgetIdleCycleLimit(const modbusHandler_t *modH)
 {
@@ -144,6 +145,7 @@ static void TCPclearClientRx(tcpclients_t *clientconn)
   if (clientconn != NULL)
   {
     clientconn->rxLen = 0U;
+    clientconn->requestStartTickMs = 0U;
   }
 }
 
@@ -232,6 +234,7 @@ static bool TCPextractFrame(modbusHandler_t *modH, tcpclients_t *clientconn)
 
     modH->u16TransactionID = ((uint16_t)clientconn->rxBuffer[0] << 8U) | (uint16_t)clientconn->rxBuffer[1];
     modH->u8BufferSize = (uint8_t)(uLength + 2U); // add 2 dummy bytes for CRC
+    clientconn->requestStartTickMs = HAL_GetTick();
 
     remaining = (uint16_t)(clientconn->rxLen - frameLen);
     if (remaining > 0U)
@@ -698,6 +701,7 @@ bool TCPwaitConnData(modbusHandler_t *modH)
 		  {
 			  s_tcpDiag.acceptErrCount++;
 			  s_tcpDiag.lastRecvErr = (int32_t)accept_err;
+			  s_tcpDiag.lastSendErr = 0;
 			  return xTCPvalid;
 	      }
 		  else
@@ -721,6 +725,7 @@ bool TCPwaitConnData(modbusHandler_t *modH)
 	  {
 		  s_tcpDiag.recvClosedCount++;
 		  s_tcpDiag.lastRecvErr = (int32_t)recv_err;
+		  s_tcpDiag.lastSendErr = 0;
 		  ModbusCloseConnNull(modH);
 		  TCPclearClientRx(clientconn);
 		  clientconn->aging = 0U;
@@ -752,6 +757,7 @@ bool TCPwaitConnData(modbusHandler_t *modH)
 	  {
 		  s_tcpDiag.recvOtherErrCount++;
 		  s_tcpDiag.lastRecvErr = (int32_t)recv_err;
+		  s_tcpDiag.lastSendErr = 0;
 		  ModbusCloseConnNull(modH);
 		  TCPclearClientRx(clientconn);
 		  clientconn->aging = 0U;
@@ -776,6 +782,7 @@ bool TCPwaitConnData(modbusHandler_t *modH)
 	      {
 	    	  s_tcpDiag.recvOtherErrCount++;
 	    	  s_tcpDiag.lastRecvErr = (int32_t)netconn_err(clientconn->conn);
+	    	  s_tcpDiag.lastSendErr = 0;
 	      }
 		  netbuf_delete(inbuf); // delete buffer on all ERR_OK paths
 		  clientconn->aging = 0U; // reset the aging counter
@@ -1037,6 +1044,7 @@ void ModbusCloseConnNull(modbusHandler_t * modH)
 {
 
 	modH->newconns[modH->newconnIndex].rxLen = 0U;
+	modH->newconns[modH->newconnIndex].requestStartTickMs = 0U;
 	if(modH->newconns[modH->newconnIndex].conn  != NULL)
 	{
 
@@ -1895,7 +1903,10 @@ if(modH->xTypeHW != TCP_HW)
     	  struct netvector  xNetVectors[2];
     	  uint8_t u8MBAPheader[6];
     	  size_t uBytesWritten;
+    	  size_t totalWriteLen;
+    	  tcpclients_t *clientconn;
 
+    	  clientconn = &modH->newconns[modH->newconnIndex];
 
     	  u8MBAPheader[0] = highByte(modH->u16TransactionID); // this might need improvement the transaction ID could be validated
     	  u8MBAPheader[1] = lowByte(modH->u16TransactionID);
@@ -1909,6 +1920,7 @@ if(modH->xTypeHW != TCP_HW)
 
     	  xNetVectors[1].len = modH->u8BufferSize;
     	  xNetVectors[1].ptr = (void *) modH->u8Buffer;
+    	  totalWriteLen = xNetVectors[0].len + xNetVectors[1].len;
 
 
 #if defined(LWIP_SO_SNDTIMEO) && (LWIP_SO_SNDTIMEO != 0)
@@ -1916,15 +1928,24 @@ if(modH->xTypeHW != TCP_HW)
 #endif
     	  err_enum_t err;
 
-    	  err = netconn_write_vectors_partly(modH->newconns[modH->newconnIndex].conn, xNetVectors, 2, NETCONN_COPY, &uBytesWritten);
-    	  if (err != ERR_OK )
+    	  err = netconn_write_vectors_partly(modH->newconns[modH->newconnIndex].conn,
+    	                                    xNetVectors,
+    	                                    2,
+    	                                    NETCONN_COPY,
+    	                                    &uBytesWritten);
+    	  if ((err != ERR_OK) || (uBytesWritten != totalWriteLen))
     	  {
     		 s_tcpDiag.sendErrCount++;
-    		 s_tcpDiag.lastSendErr = (int32_t)err;
+    		 s_tcpDiag.lastSendErr = (err != ERR_OK) ? (int32_t)err : MODBUS_TCP_SEND_ERR_PARTIAL_WRITE;
+    		 s_tcpDiag.lastRecvErr = 0;
 
     		 // ModbusCloseConn(modH->newconns[modH->newconnIndex].conn);
     		 ModbusCloseConnNull(modH);
 
+    	  }
+    	  else
+    	  {
+    		  clientconn->requestStartTickMs = 0U;
     	  }
 
 
@@ -2017,9 +2038,6 @@ int8_t process_FC3(modbusHandler_t *modH)
     uint8_t u8regsno = word( modH->u8Buffer[ NB_HI ], modH->u8Buffer[ NB_LO ] );
     uint8_t u8CopyBufferSize;
     uint16_t i;
-#ifdef GH_USE_LWIP_NETCONN
-    uint16_t regs_local[125];
-#endif
 
     modH->u8Buffer[ 2 ]       = u8regsno * 2;
     modH->u8BufferSize         = 3;
@@ -2027,7 +2045,7 @@ int8_t process_FC3(modbusHandler_t *modH)
 #ifdef GH_USE_LWIP_NETCONN
     if (modH->xTypeHW == TCP_HW)
     {
-      if (!GH_ModbusMap_ReadRange(u16StartAdd, u8regsno, regs_local))
+      if (!GH_ModbusMap_ReadRange(u16StartAdd, u8regsno, modH->tcpRegScratch))
       {
         buildException(EXC_ADDR_RANGE, modH);
         u8CopyBufferSize = modH->u8BufferSize + 2;
@@ -2037,9 +2055,9 @@ int8_t process_FC3(modbusHandler_t *modH)
 
       for (i = 0; i < u8regsno; i++)
       {
-        modH->u8Buffer[modH->u8BufferSize] = highByte(regs_local[i]);
+        modH->u8Buffer[modH->u8BufferSize] = highByte(modH->tcpRegScratch[i]);
         modH->u8BufferSize++;
-        modH->u8Buffer[modH->u8BufferSize] = lowByte(regs_local[i]);
+        modH->u8Buffer[modH->u8BufferSize] = lowByte(modH->tcpRegScratch[i]);
         modH->u8BufferSize++;
       }
     }
@@ -2203,9 +2221,6 @@ int8_t process_FC16(modbusHandler_t *modH )
     uint8_t u8CopyBufferSize;
     uint16_t i;
     uint16_t temp;
-#ifdef GH_USE_LWIP_NETCONN
-    uint16_t regs_local[125];
-#endif
 
     // build header
     modH->u8Buffer[ NB_HI ]   = 0;
@@ -2217,12 +2232,12 @@ int8_t process_FC16(modbusHandler_t *modH )
     {
       for (i = 0; i < u16regsno; i++)
       {
-        regs_local[i] = word(
+        modH->tcpRegScratch[i] = word(
             modH->u8Buffer[(BYTE_CNT + 1) + i * 2],
             modH->u8Buffer[(BYTE_CNT + 2) + i * 2]);
       }
 
-      if (!GH_ModbusMap_WriteRange(u16StartAdd, u16regsno, regs_local))
+      if (!GH_ModbusMap_WriteRange(u16StartAdd, u16regsno, modH->tcpRegScratch))
       {
         buildException(EXC_ADDR_RANGE, modH);
         u8CopyBufferSize = modH->u8BufferSize + 2;
