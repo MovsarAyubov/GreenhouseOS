@@ -35,6 +35,25 @@
 #define GH_RTU_RTC_SYNC_MAX_RETRIES         3U
 #define GH_RTU_RTC_SYNC_ACK_POLL_ATTEMPTS   3U
 #define GH_RTU_RTC_SYNC_ACK_POLL_DELAY_MS   100U
+#define GH_MODULE_ID_ZONE_FIRST             100U
+#define GH_MODULE_ID_ZONE_LAST              199U
+#define GH_MODULE_ID_WEATHER_FIRST          200U
+#define GH_MODULE_ID_WEATHER_LAST           299U
+#define GH_RTU_WEATHER_REG_COUNT           9U
+#define GH_RTU_WEATHER_SYNC_BASE_REG       158U
+#define GH_RTU_WEATHER_SYNC_AGE_REG        (GH_RTU_WEATHER_SYNC_BASE_REG + GH_RTU_WEATHER_REG_COUNT)
+#define GH_RTU_WEATHER_SYNC_TOKEN_REG      (GH_RTU_WEATHER_SYNC_AGE_REG + 1U)
+#define GH_RTU_WEATHER_APPLIED_TOKEN_REG   (GH_RTU_WEATHER_SYNC_TOKEN_REG + 1U)
+#define GH_RTU_WEATHER_RESULT_REG          (GH_RTU_WEATHER_APPLIED_TOKEN_REG + 1U)
+#define GH_RTU_WEATHER_SYNC_WRITE_REG_COUNT (GH_RTU_WEATHER_REG_COUNT + 2U)
+#define GH_RTU_WEATHER_SYNC_RESULT_APPLIED 2U
+#define GH_RTU_WEATHER_SYNC_RESULT_NOOP    5U
+#define GH_RTU_WEATHER_SYNC_PERIOD_MS      CTRL_SYNC_PERIOD_MS
+#define GH_RTU_WEATHER_SYNC_SOURCE_STALE_MS 30000UL
+#define GH_RTU_WEATHER_SYNC_RETRY_BACKOFF_MS 1000UL
+#define GH_RTU_WEATHER_SYNC_MAX_RETRIES    2U
+#define GH_RTU_WEATHER_SYNC_ACK_POLL_ATTEMPTS 2U
+#define GH_RTU_WEATHER_SYNC_ACK_POLL_DELAY_MS 50U
 #define GH_CMD_IDLE_SERVICE_SLICE_MS        20U
 #define GH_QUALITY_RECOVER_OK_CYCLES  2U
 #define GH_QUALITY_FAIL_STALE_CYCLES  2U
@@ -75,6 +94,14 @@ static uint32_t s_rtc_sync_fail_count = 0U;
 static uint16_t s_rtc_sync_last_slave_id = 0U;
 static uint16_t s_rtc_sync_last_token = 0U;
 static uint16_t s_rtc_sync_last_result = 0U;
+static uint32_t s_weather_sync_last_ok_ms[MODBUS_MAX_SLAVES] = {0U};
+static uint32_t s_weather_sync_last_attempt_ms[MODBUS_MAX_SLAVES] = {0U};
+static uint8_t s_weather_sync_retry_count[MODBUS_MAX_SLAVES] = {0U};
+static uint16_t s_weather_sync_token_seq = 1U;
+static uint16_t s_weather_sync_snapshot[GH_RTU_WEATHER_REG_COUNT] = {0U};
+static uint32_t s_weather_sync_snapshot_updated_ms = 0U;
+static uint8_t s_weather_sync_source_slave_id = 0U;
+static bool s_weather_sync_snapshot_valid = false;
 static uint16_t s_runtime_cmd_count = 0U;
 static uint16_t s_runtime_point_count = 0U;
 static bool s_runtime_topology_ready = false;
@@ -99,6 +126,7 @@ static bool gh_modbus_write_multi_retry(uint8_t slave_id,
                                         uint32_t timeout_ms);
 static void gh_rtc_sync_publish_diag(void);
 static void gh_rtc_sync_invalidate_all(void);
+static void gh_weather_sync_invalidate_all(void);
 static void gh_run_safe_mode(uint8_t *comm_fail_streak,
                              uint8_t *comm_ok_streak,
                              uint8_t fail_offline_cycles,
@@ -208,6 +236,174 @@ static void gh_rtc_sync_invalidate_all(void)
   memset(s_rtc_sync_last_ok_ms, 0, sizeof(s_rtc_sync_last_ok_ms));
   memset(s_rtc_sync_last_attempt_ms, 0, sizeof(s_rtc_sync_last_attempt_ms));
   memset(s_rtc_sync_retry_count, 0, sizeof(s_rtc_sync_retry_count));
+}
+
+static bool gh_module_id_is_zone(uint16_t module_id)
+{
+  return (module_id >= GH_MODULE_ID_ZONE_FIRST) && (module_id <= GH_MODULE_ID_ZONE_LAST);
+}
+
+static bool gh_module_id_is_weather(uint16_t module_id)
+{
+  return (module_id >= GH_MODULE_ID_WEATHER_FIRST) && (module_id <= GH_MODULE_ID_WEATHER_LAST);
+}
+
+static void gh_weather_sync_invalidate_all(void)
+{
+  memset(s_weather_sync_last_ok_ms, 0, sizeof(s_weather_sync_last_ok_ms));
+  memset(s_weather_sync_last_attempt_ms, 0, sizeof(s_weather_sync_last_attempt_ms));
+  memset(s_weather_sync_retry_count, 0, sizeof(s_weather_sync_retry_count));
+}
+
+static void gh_update_weather_sync_snapshot(uint8_t slave_id, const uint16_t *regs, uint32_t now_ms)
+{
+  if (!gh_slave_id_valid(slave_id) || (regs == NULL))
+  {
+    return;
+  }
+
+  memcpy(s_weather_sync_snapshot, regs, sizeof(s_weather_sync_snapshot));
+  s_weather_sync_snapshot_updated_ms = now_ms;
+  s_weather_sync_source_slave_id = slave_id;
+  s_weather_sync_snapshot_valid = true;
+}
+
+static uint16_t gh_weather_sync_next_token(void)
+{
+  uint16_t token = s_weather_sync_token_seq;
+
+  s_weather_sync_token_seq++;
+  if (s_weather_sync_token_seq == 0U)
+  {
+    s_weather_sync_token_seq = 1U;
+  }
+  return token;
+}
+
+static bool gh_weather_sync_wait_ack(uint8_t slave_id, uint16_t token)
+{
+  uint8_t attempt;
+  uint16_t ack_regs[2] = {0U, 0U};
+
+  for (attempt = 0U; attempt < GH_RTU_WEATHER_SYNC_ACK_POLL_ATTEMPTS; attempt++)
+  {
+    if (gh_modbus_read_holding_retry(slave_id,
+                                     GH_RTU_WEATHER_APPLIED_TOKEN_REG,
+                                     2U,
+                                     ack_regs,
+                                     MODBUS_RTU_RESP_TIMEOUT_MS,
+                                     1U,
+                                     MODBUS_RETRY_BACKOFF_MS,
+                                     NULL))
+    {
+      if (ack_regs[0] == token)
+      {
+        return ((ack_regs[1] == GH_RTU_WEATHER_SYNC_RESULT_APPLIED) ||
+                (ack_regs[1] == GH_RTU_WEATHER_SYNC_RESULT_NOOP));
+      }
+    }
+
+    if ((attempt + 1U) < GH_RTU_WEATHER_SYNC_ACK_POLL_ATTEMPTS)
+    {
+      osDelay(GH_RTU_WEATHER_SYNC_ACK_POLL_DELAY_MS);
+    }
+  }
+
+  return false;
+}
+
+static bool gh_weather_sync_send(uint8_t slave_id, uint32_t now_ms, uint16_t token)
+{
+  uint16_t write_regs[GH_RTU_WEATHER_SYNC_WRITE_REG_COUNT];
+  uint32_t age_ms;
+  uint32_t age_s;
+
+  if (!s_weather_sync_snapshot_valid || (s_weather_sync_snapshot_updated_ms == 0U))
+  {
+    return false;
+  }
+
+  memcpy(write_regs, s_weather_sync_snapshot, sizeof(s_weather_sync_snapshot));
+  age_ms = now_ms - s_weather_sync_snapshot_updated_ms;
+  age_s = age_ms / 1000U;
+  if (age_s > 0xFFFFUL)
+  {
+    age_s = 0xFFFFUL;
+  }
+  write_regs[GH_RTU_WEATHER_REG_COUNT] = (uint16_t)age_s;
+  write_regs[GH_RTU_WEATHER_REG_COUNT + 1U] = token;
+
+  if (!gh_modbus_write_multi_retry(slave_id,
+                                   GH_RTU_WEATHER_SYNC_BASE_REG,
+                                   GH_RTU_WEATHER_SYNC_WRITE_REG_COUNT,
+                                   write_regs,
+                                   1U,
+                                   MODBUS_RTU_RESP_TIMEOUT_MS))
+  {
+    return false;
+  }
+
+  return gh_weather_sync_wait_ack(slave_id, token);
+}
+
+static void gh_maybe_sync_slave_weather(uint8_t slave_id, uint32_t now_ms, bool force_sync)
+{
+  uint8_t slave_idx;
+  uint16_t token;
+  bool sync_ok;
+
+  if (!gh_slave_id_valid(slave_id) ||
+      !s_weather_sync_snapshot_valid ||
+      (s_weather_sync_source_slave_id == 0U) ||
+      (slave_id == s_weather_sync_source_slave_id))
+  {
+    return;
+  }
+
+  if ((uint32_t)(now_ms - s_weather_sync_snapshot_updated_ms) > GH_RTU_WEATHER_SYNC_SOURCE_STALE_MS)
+  {
+    return;
+  }
+
+  slave_idx = gh_slave_to_index(slave_id);
+  if (!force_sync)
+  {
+    if (s_weather_sync_retry_count[slave_idx] > 0U)
+    {
+      if (s_weather_sync_retry_count[slave_idx] >= GH_RTU_WEATHER_SYNC_MAX_RETRIES)
+      {
+        if ((uint32_t)(now_ms - s_weather_sync_last_attempt_ms[slave_idx]) < GH_RTU_WEATHER_SYNC_PERIOD_MS)
+        {
+          return;
+        }
+        s_weather_sync_retry_count[slave_idx] = 0U;
+      }
+      else if ((uint32_t)(now_ms - s_weather_sync_last_attempt_ms[slave_idx]) < GH_RTU_WEATHER_SYNC_RETRY_BACKOFF_MS)
+      {
+        return;
+      }
+    }
+    else if ((s_weather_sync_last_ok_ms[slave_idx] != 0U) &&
+             ((uint32_t)(now_ms - s_weather_sync_last_ok_ms[slave_idx]) < GH_RTU_WEATHER_SYNC_PERIOD_MS))
+    {
+      return;
+    }
+  }
+
+  token = gh_weather_sync_next_token();
+  sync_ok = gh_weather_sync_send(slave_id, now_ms, token);
+  s_weather_sync_last_attempt_ms[slave_idx] = now_ms;
+  if (sync_ok)
+  {
+    s_weather_sync_last_ok_ms[slave_idx] = now_ms;
+    s_weather_sync_retry_count[slave_idx] = 0U;
+    return;
+  }
+
+  if (s_weather_sync_retry_count[slave_idx] < 0xFFU)
+  {
+    s_weather_sync_retry_count[slave_idx]++;
+  }
 }
 
 static void gh_maybe_sync_slave_rtc(uint8_t slave_id, uint32_t now_ms, bool force_sync)
@@ -1313,6 +1509,7 @@ static gh_topology_cycle_state_t gh_run_topology_cycle(uint8_t *comm_fail_streak
   uint32_t cmd_generation = 0U;
   uint32_t policy_generation = 0U;
   uint32_t plan_slave_mask = 0U;
+  uint32_t zone_slave_mask = 0U;
   uint16_t i;
   uint16_t recover_cycles;
   uint16_t link_loss_threshold;
@@ -1321,6 +1518,7 @@ static gh_topology_cycle_state_t gh_run_topology_cycle(uint8_t *comm_fail_streak
   uint32_t now_ms = HAL_GetTick();
   uint8_t slave_id;
   uint8_t slave_idx;
+  uint8_t weather_source_slave_id = 0U;
   bool ok;
   uint8_t quality;
   uint8_t reason;
@@ -1413,8 +1611,35 @@ static gh_topology_cycle_state_t gh_run_topology_cycle(uint8_t *comm_fail_streak
     memset(s_next_due_ms, 0, sizeof(s_next_due_ms));
     memset(s_last_policy_reason, GH_POLICY_REASON_NONE, sizeof(s_last_policy_reason));
     memset(s_last_policy_action, GH_TOPOLOGY_POLICY_ACTION_KEEP_LAST, sizeof(s_last_policy_action));
+    gh_weather_sync_invalidate_all();
     s_last_plan_generation = plan_generation;
     s_last_plan_count = plan_count;
+  }
+
+  for (i = 0U; i < plan_count; i++)
+  {
+    slave_id = s_topology_plan_cache[i].slave_id;
+    if (!gh_slave_id_valid(slave_id))
+    {
+      continue;
+    }
+    if (gh_module_id_is_zone(s_topology_plan_cache[i].module_id))
+    {
+      zone_slave_mask |= (1UL << (uint32_t)(slave_id - 1U));
+    }
+    else if ((weather_source_slave_id == 0U) &&
+             gh_module_id_is_weather(s_topology_plan_cache[i].module_id))
+    {
+      weather_source_slave_id = slave_id;
+    }
+  }
+  if ((weather_source_slave_id == 0U) ||
+      ((s_weather_sync_source_slave_id != 0U) &&
+       (weather_source_slave_id != s_weather_sync_source_slave_id)))
+  {
+    s_weather_sync_snapshot_valid = false;
+    s_weather_sync_snapshot_updated_ms = 0U;
+    s_weather_sync_source_slave_id = 0U;
   }
 
   s_runtime_cmd_count = cmd_count;
@@ -1488,6 +1713,12 @@ static gh_topology_cycle_state_t gh_run_topology_cycle(uint8_t *comm_fail_streak
 
       GH_ModbusMap_UpdateTelemetry(slave_id, sens, valid_mask, 0U, now_ms);
     }
+    if ((slave_id == weather_source_slave_id) &&
+        gh_module_id_is_weather(s_topology_plan_cache[i].module_id) &&
+        (s_topology_plan_cache[i].telemetry_word_count >= GH_RTU_WEATHER_REG_COUNT))
+    {
+      gh_update_weather_sync_snapshot(slave_id, regs, now_ms);
+    }
     gh_publish_points_from_request(&s_topology_plan_cache[i], regs, now_ms, s_topology_point_cache, point_count);
 
     if ((s_topology_plan_cache[i].diag_offset != GH_TOPOLOGY_DIAG_OFFSET_NONE) &&
@@ -1541,6 +1772,10 @@ static gh_topology_cycle_state_t gh_run_topology_cycle(uint8_t *comm_fail_streak
         s_last_policy_action[slave_idx] = GH_TOPOLOGY_POLICY_ACTION_KEEP_LAST;
       }
       gh_maybe_sync_slave_rtc(slave_id, HAL_GetTick(), force_rtc_sync);
+      if ((zone_slave_mask & bit) != 0U)
+      {
+        gh_maybe_sync_slave_weather(slave_id, HAL_GetTick(), force_rtc_sync);
+      }
       s_slave_comm_up[slave_idx] = true;
     }
     else

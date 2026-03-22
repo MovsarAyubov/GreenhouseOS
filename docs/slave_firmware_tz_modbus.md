@@ -131,6 +131,28 @@ RTC sync (master -> slave):
   - 5: NOOP (drift below threshold, update skipped)
   - any other value: treated as failed sync on master side
 
+Weather sync (master -> zone slave):
+- 158: WEATHER_OUT_TEMP (`int16`, x0.1 degC)
+- 159: WEATHER_OUT_HUM (`uint16`, x0.1 %RH)
+- 160: WEATHER_WIND_SPEED (`uint16`, x0.1 m/s)
+- 161: WEATHER_WIND_DIR (`uint16`, deg)
+- 162: WEATHER_RAIN_FLAG (`uint16`, 0/1)
+- 163: WEATHER_SOLAR_RAD (`uint16`, W/m^2)
+- 164: WEATHER_BARO_PRESS (`uint16`, x0.1 hPa)
+- 165: WEATHER_DEW_POINT (`int16`, x0.1 degC)
+- 166: WEATHER_STATUS_BITS (`uint16`, bit mask)
+- 167: WEATHER_AGE_S (age of source snapshot on master, seconds)
+- 168: WEATHER_SET_TOKEN (new non-zero token triggers processing)
+- 169: WEATHER_SET_APPLIED_TOKEN (echo token after processing)
+- 170: WEATHER_SET_RESULT
+  - 2: APPLIED (weather snapshot accepted)
+  - 5: NOOP (snapshot equivalent to active one)
+  - any other value: treated as failed sync on master side
+
+Ожидаемая частота:
+- мастер рассылает weather snapshot примерно раз в 5-10 секунд
+- slave должен считать данные weather stale при длительном отсутствии новых подтвержденных обновлений
+
 ## 10. Приемка
 1. Мастер стабильно читает reg+0..8
 2. Масштаб x10 корректен
