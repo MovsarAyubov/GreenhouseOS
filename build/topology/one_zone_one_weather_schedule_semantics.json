@@ -1,7 +1,7 @@
 {
   "schema": "scada_semantic_mapping_v1",
   "topology_id": 1001,
-  "topology_generation": 101,
+  "topology_generation": 107,
   "topology_ver_major": 2,
   "topology_ver_minor": 0,
   "modules": {
@@ -155,22 +155,91 @@
       "label": "Barometric pressure",
       "unit": "hPa",
       "scale_pow10": -1
+    },
+    "weather_1.rain_flag": {
+      "module_id": 201,
+      "point_id": 20104,
+      "publish_index": 15,
+      "req_id": 2010,
+      "label": "Rain flag",
+      "unit": "flag",
+      "scale_pow10": 0
+    },
+    "weather_1.dew_point": {
+      "module_id": 201,
+      "point_id": 20107,
+      "publish_index": 16,
+      "req_id": 2010,
+      "label": "Dew point",
+      "unit": "degC",
+      "scale_pow10": -1
+    },
+    "weather_1.status_bits": {
+      "module_id": 201,
+      "point_id": 20108,
+      "publish_index": 17,
+      "req_id": 2010,
+      "label": "Status bits",
+      "unit": "mask",
+      "scale_pow10": 0
+    },
+    "zone_1.current_dli": {
+      "module_id": 101,
+      "point_id": 10134,
+      "publish_index": 18,
+      "req_id": 1011,
+      "label": "Current DLI",
+      "unit": "raw",
+      "scale_pow10": 0
+    },
+    "zone_1.light_output": {
+      "module_id": 101,
+      "point_id": 10135,
+      "publish_index": 19,
+      "req_id": 1011,
+      "label": "Light output",
+      "unit": "%",
+      "scale_pow10": 0
+    },
+    "zone_1.light_status_bits": {
+      "module_id": 101,
+      "point_id": 10136,
+      "publish_index": 20,
+      "req_id": 1011,
+      "label": "Light status bits",
+      "unit": "mask",
+      "scale_pow10": 0
     }
   },
   "commands": {
-    "zone_1.schedule": {
+    "zone_1.light_setpoints": {
       "module_id": 101,
       "slave_id": 1,
       "cmd_profile_id": 5001,
-      "apply_step_cmd_id": 5002,
-      "cmd_kind": "schedule",
-      "payload_words": 16,
-      "schedule_words": 12,
-      "apply_value_word": 12,
-      "expected_version_hi_word": 13,
-      "expected_version_lo_word": 14,
-      "cmd_kind_word": 15,
-      "cmd_kind_value": 1
+      "cmd_kind": "generic",
+      "payload_words": 13,
+      "start_reg": 110,
+      "reg_count": 13,
+      "relay_1_enable_word": 0,
+      "relay_1_on_hhmm_word": 1,
+      "relay_1_off_hhmm_word": 2,
+      "relay_1_threshold_wm2_word": 3,
+      "relay_1_reserved_word": 4,
+      "relay_1_dli_limit_word": 5,
+      "relay_2_enable_word": 6,
+      "relay_2_on_hhmm_word": 7,
+      "relay_2_off_hhmm_word": 8,
+      "relay_2_threshold_wm2_word": 9,
+      "relay_2_reserved_word": 10,
+      "relay_2_dli_limit_word": 11,
+      "light_hyst_sec_word": 12,
+      "recommended_full_write_words": 13,
+      "partial_apply_debounce_ms": 250,
+      "reserved_words_must_be_zero": [4, 10],
+      "slave_current_dli_reg": 134,
+      "slave_light_output_reg": 135,
+      "slave_status_bits_reg": 136,
+      "weather_solar_rad_reg": 163
     }
   }
 }

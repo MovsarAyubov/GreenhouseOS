@@ -1,7 +1,7 @@
 {
   "schema": "scada_semantic_mapping_v1",
   "topology_id": 1002,
-  "topology_generation": 104,
+  "topology_generation": 108,
   "topology_ver_major": 2,
   "topology_ver_minor": 0,
   "modules": {
@@ -270,36 +270,120 @@
       "label": "Status bits",
       "unit": "mask",
       "scale_pow10": 0
+    },
+    "zone_1.current_dli": {
+      "module_id": 101,
+      "point_id": 10134,
+      "publish_index": 27,
+      "req_id": 1011,
+      "label": "Current DLI",
+      "unit": "raw",
+      "scale_pow10": 0
+    },
+    "zone_1.light_output": {
+      "module_id": 101,
+      "point_id": 10135,
+      "publish_index": 28,
+      "req_id": 1011,
+      "label": "Light output",
+      "unit": "%",
+      "scale_pow10": 0
+    },
+    "zone_1.light_status_bits": {
+      "module_id": 101,
+      "point_id": 10136,
+      "publish_index": 29,
+      "req_id": 1011,
+      "label": "Light status bits",
+      "unit": "mask",
+      "scale_pow10": 0
+    },
+    "zone_2.current_dli": {
+      "module_id": 102,
+      "point_id": 10234,
+      "publish_index": 30,
+      "req_id": 1021,
+      "label": "Current DLI",
+      "unit": "raw",
+      "scale_pow10": 0
+    },
+    "zone_2.light_output": {
+      "module_id": 102,
+      "point_id": 10235,
+      "publish_index": 31,
+      "req_id": 1021,
+      "label": "Light output",
+      "unit": "%",
+      "scale_pow10": 0
+    },
+    "zone_2.light_status_bits": {
+      "module_id": 102,
+      "point_id": 10236,
+      "publish_index": 32,
+      "req_id": 1021,
+      "label": "Light status bits",
+      "unit": "mask",
+      "scale_pow10": 0
     }
   },
   "commands": {
-    "zone_1.schedule": {
+    "zone_1.light_setpoints": {
       "module_id": 101,
       "slave_id": 1,
       "cmd_profile_id": 5001,
-      "apply_step_cmd_id": 5002,
-      "cmd_kind": "schedule",
-      "payload_words": 16,
-      "schedule_words": 12,
-      "apply_value_word": 12,
-      "expected_version_hi_word": 13,
-      "expected_version_lo_word": 14,
-      "cmd_kind_word": 15,
-      "cmd_kind_value": 1
+      "cmd_kind": "generic",
+      "payload_words": 13,
+      "start_reg": 110,
+      "reg_count": 13,
+      "relay_1_enable_word": 0,
+      "relay_1_on_hhmm_word": 1,
+      "relay_1_off_hhmm_word": 2,
+      "relay_1_threshold_wm2_word": 3,
+      "relay_1_reserved_word": 4,
+      "relay_1_dli_limit_word": 5,
+      "relay_2_enable_word": 6,
+      "relay_2_on_hhmm_word": 7,
+      "relay_2_off_hhmm_word": 8,
+      "relay_2_threshold_wm2_word": 9,
+      "relay_2_reserved_word": 10,
+      "relay_2_dli_limit_word": 11,
+      "light_hyst_sec_word": 12,
+      "recommended_full_write_words": 13,
+      "partial_apply_debounce_ms": 250,
+      "reserved_words_must_be_zero": [4, 10],
+      "slave_current_dli_reg": 134,
+      "slave_light_output_reg": 135,
+      "slave_status_bits_reg": 136,
+      "weather_solar_rad_reg": 163
     },
-    "zone_2.schedule": {
+    "zone_2.light_setpoints": {
       "module_id": 102,
       "slave_id": 2,
       "cmd_profile_id": 5003,
-      "apply_step_cmd_id": 5004,
-      "cmd_kind": "schedule",
-      "payload_words": 16,
-      "schedule_words": 12,
-      "apply_value_word": 12,
-      "expected_version_hi_word": 13,
-      "expected_version_lo_word": 14,
-      "cmd_kind_word": 15,
-      "cmd_kind_value": 1
+      "cmd_kind": "generic",
+      "payload_words": 13,
+      "start_reg": 110,
+      "reg_count": 13,
+      "relay_1_enable_word": 0,
+      "relay_1_on_hhmm_word": 1,
+      "relay_1_off_hhmm_word": 2,
+      "relay_1_threshold_wm2_word": 3,
+      "relay_1_reserved_word": 4,
+      "relay_1_dli_limit_word": 5,
+      "relay_2_enable_word": 6,
+      "relay_2_on_hhmm_word": 7,
+      "relay_2_off_hhmm_word": 8,
+      "relay_2_threshold_wm2_word": 9,
+      "relay_2_reserved_word": 10,
+      "relay_2_dli_limit_word": 11,
+      "light_hyst_sec_word": 12,
+      "recommended_full_write_words": 13,
+      "partial_apply_debounce_ms": 250,
+      "reserved_words_must_be_zero": [4, 10],
+      "slave_current_dli_reg": 134,
+      "slave_light_output_reg": 135,
+      "slave_status_bits_reg": 136,
+      "weather_solar_rad_reg": 163
     }
   }
 }

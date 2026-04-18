@@ -1,54 +1,56 @@
 # SCADA Apply Runbook
 
-Date: `2026-03-08`.
+Date: `2026-03-24`.
 
 ## Scope
-- Safe client-side write sequence for `GH_MB_CMD_BASE` apply transactions.
-- Migration rules for `EXPECTED_ACTIVE_CTRL_VERSION`.
-- Rollout readiness checks for schedule apply.
+- Safe client-side write sequence for `GH_MB_CMD_BASE` command transactions.
+- Light-setpoints profile for current zone-slave contract with two independent relay channels.
 
 ## Preconditions
 - Slave command row is selected by `slave_id`.
-- `APPLY_TRIGGER` is treated as transaction commit and must be written last.
+- `TRIGGER` is treated as transaction commit and must be written last.
 - Generic command ingress payload budget is `16` words.
-- Topology contract for schedule is deployed on target slaves:
-- `cmd_kind=schedule`, step 1: `FC16(start_reg=110, reg_count=12, payload_offset=0)`.
-- `cmd_kind=schedule`, step 2: `FC6(start_reg=122, reg_count=1, payload_offset=12)`.
+- Topology contract for current light-setpoints profile:
+- `cmd_kind=generic`, one step: `FC16(start_reg=110, reg_count<=13, payload_offset=0)`.
+- Separate `APPLY` register for this profile is not used.
+- Recommended mode is a full `13`-word payload write.
 
-## Legacy algorithm (`CMD_KIND=0`)
-1. Write legacy payload fields (`PAYLOAD[0..7]` and optional extension fields if used).
-2. Optionally write `PAYLOAD[15]=0`.
-3. Write `APPLY_TRIGGER` (last write in transaction).
-4. Read back `LAST_APPLIED_TRIGGER` and diagnostics if needed.
+## Light-Setpoints Algorithm (`CMD_KIND=0`)
+1. Write `PAYLOAD[0]` (`LIGHT_RELAY_1_ENABLE`).
+2. Write `PAYLOAD[1]` (`LIGHT_RELAY_1_ON_HHMM`).
+3. Write `PAYLOAD[2]` (`LIGHT_RELAY_1_OFF_HHMM`).
+4. Write `PAYLOAD[3]` (`LIGHT_RELAY_1_THRESHOLD_WM2`).
+5. Write `PAYLOAD[4]` (`LIGHT_RELAY_1_RESERVED=0`).
+6. Write `PAYLOAD[5]` (`LIGHT_RELAY_1_DLI_LIMIT`).
+7. Write `PAYLOAD[6]` (`LIGHT_RELAY_2_ENABLE`).
+8. Write `PAYLOAD[7]` (`LIGHT_RELAY_2_ON_HHMM`).
+9. Write `PAYLOAD[8]` (`LIGHT_RELAY_2_OFF_HHMM`).
+10. Write `PAYLOAD[9]` (`LIGHT_RELAY_2_THRESHOLD_WM2`).
+11. Write `PAYLOAD[10]` (`LIGHT_RELAY_2_RESERVED=0`).
+12. Write `PAYLOAD[11]` (`LIGHT_RELAY_2_DLI_LIMIT`).
+13. Write `PAYLOAD[12]` (`LIGHT_HYST_SEC`).
+14. Set `PAYLOAD_LEN=13`.
+15. Write `TRIGGER` last.
+16. Read back `LAST_APPLIED_TRIGGER/RESULT/IO_ERR`.
 
-## Schedule algorithm (`CMD_KIND=1`)
-1. Write `PAYLOAD[0..11]` (`SCH0..SCH3`: `EN`, `ON_HHMM`, `OFF_HHMM`).
-2. Write `PAYLOAD[12]` (`APPLY_VALUE` for slave reg `122`).
-3. Write `PAYLOAD[13..14]` (`EXPECTED_ACTIVE_CTRL_VERSION` hi/lo).
-4. Write `PAYLOAD[15]=1`.
-5. Write `APPLY_TRIGGER` (last write in transaction).
-6. Monitor result via `LAST_APPLIED_TRIGGER` and diagnostics.
-
-## Migration mode for expected version
-- Temporary mode: `PAYLOAD[13..14] = 0x00000000` disables version check.
-- Firmware switch: `GH_SCHEDULE_VERSION_CHECK_ALLOW_DISABLED`.
-- Strict mode target: set switch to `0`, require exact `ACTIVE_CTRL_VERSION == EXPECTED_ACTIVE_CTRL_VERSION`.
+## Partial Update Mode
+- Partial writes are allowed while `PAYLOAD_LEN <= 13`.
+- Slave auto-applies a full `110..122` multi-write immediately.
+- Slave auto-applies partial updates only after `250 ms` without new writes.
+- Registers `114` and `120` are reserved; send `0` on full writes.
+- Because the command profile always starts at slave reg `110`, partial writes update only the leading prefix `110..(110+PAYLOAD_LEN-1)`.
+- If the client needs to change `relay_2` fields, use a full `13`-word write.
+- Master acknowledges successful delivery of the write, not the exact delayed apply moment on slave.
+- For deterministic behavior use full `13`-word writes.
 
 ## Diagnostics watchlist
-- `1301` `CTRL_SYNC_ACK_STATUS_FAIL`.
-- `1302` `CTRL_SYNC_VERSION_MISMATCH`.
-- `1303` `CTRL_SYNC_INVALID_CMD_KIND`.
-- `1304` `CTRL_SYNC_INVALID_SCHEDULE`.
-- `1305` `CTRL_SYNC_TOPOLOGY_CONTRACT`.
-- `1306` `CTRL_SYNC_TRANSPORT_TIMEOUT`.
+- `RESULT=10` `REJECT_BOUNDS`: client sent `PAYLOAD_LEN > 13`.
+- `RESULT=13` `REJECT_BUSY`: previous command still in flight on master.
+- `RESULT=15` `TRANSPORT_FAIL`: RTU write to slave failed.
+- `RESULT=16` `ACK_FAIL`: master did not finish command verification path.
 
 ## Readiness criteria
-- No `1302` caused by old clients during migration window.
-- No `1305` on target slaves (topology contract deployed correctly).
-- Equivalent schedule apply outcomes in topology and legacy environments under same payload and bus conditions.
-
-## Rollout gates
-1. Stand test: mixed old/new clients, verify zero false-positive applies.
-2. Pilot slave: check error-code trend for 24h.
-3. Group rollout: monitor `1301/1302/1305/1306` rates.
-4. Full rollout: disable migration mode (`GH_SCHEDULE_VERSION_CHECK_ALLOW_DISABLED=0`), keep strict version check.
+- No false-positive `REJECT_BOUNDS` for light-setpoints payload `LEN=13`.
+- Full writes of `110..122` complete without transport errors.
+- Partial writes apply on slave after the expected `250 ms` idle window.
+- Client does not use register `122` as a standalone `APPLY` command.
