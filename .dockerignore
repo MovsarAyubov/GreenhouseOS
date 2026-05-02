@@ -1,0 +1,15 @@
+.git
+.github
+.settings
+build
+Debug/*.o
+Debug/*.d
+Debug/*.su
+Debug/*.elf
+Debug/*.map
+Debug/*.list
+Debug/default.size.stdout
+Debug/objects.list
+Debug/objects.mk
+Debug/sources.mk
+**/__pycache__/
