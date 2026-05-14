@@ -1,0 +1,26 @@
+FROM python:3.12-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+COPY requirements-bridge.txt /tmp/requirements-bridge.txt
+RUN pip install --no-cache-dir -r /tmp/requirements-bridge.txt
+
+COPY tools/rs485_greenhouseos_bridge.py /app/tools/rs485_greenhouseos_bridge.py
+COPY topology /app/topology
+
+ENV SERIAL_PORT=/dev/ttyUSB0 \
+    TCP_HOST=0.0.0.0 \
+    TCP_PORT=1502 \
+    BAUD=19200 \
+    RTU_TIMEOUT_S=0.4 \
+    POLL_S=1.0 \
+    HEARTBEAT_SLAVE_ID=1 \
+    HEARTBEAT_LOG_S=10.0 \
+    MANIFEST=/app/topology/one_zone_one_weather_all_points_schedule_topology.json
+
+EXPOSE 1502
+
+CMD ["sh", "-c", "python /app/tools/rs485_greenhouseos_bridge.py --serial-port \"$SERIAL_PORT\" --baud \"$BAUD\" --rtu-timeout-s \"$RTU_TIMEOUT_S\" --tcp-host \"$TCP_HOST\" --tcp-port \"$TCP_PORT\" --poll-s \"$POLL_S\" --heartbeat-slave-id \"$HEARTBEAT_SLAVE_ID\" --heartbeat-log-s \"$HEARTBEAT_LOG_S\" --manifest \"$MANIFEST\""]

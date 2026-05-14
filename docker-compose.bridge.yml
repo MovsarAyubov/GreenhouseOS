@@ -1,0 +1,21 @@
+services:
+  rs485-bridge:
+    build:
+      context: .
+      dockerfile: Dockerfile.bridge
+    image: greenhouseos-rs485-bridge:local
+    restart: unless-stopped
+    environment:
+      SERIAL_PORT: ${SERIAL_PORT:-/dev/ttyUSB0}
+      TCP_HOST: 0.0.0.0
+      TCP_PORT: ${TCP_PORT:-1502}
+      BAUD: ${BAUD:-19200}
+      RTU_TIMEOUT_S: ${RTU_TIMEOUT_S:-0.4}
+      POLL_S: ${POLL_S:-1.0}
+      HEARTBEAT_SLAVE_ID: ${HEARTBEAT_SLAVE_ID:-1}
+      HEARTBEAT_LOG_S: ${HEARTBEAT_LOG_S:-10.0}
+      MANIFEST: ${MANIFEST:-/app/topology/one_zone_one_weather_all_points_schedule_topology.json}
+    ports:
+      - "${TCP_PORT:-1502}:1502"
+    devices:
+      - "${SERIAL_PORT:-/dev/ttyUSB0}:${SERIAL_PORT:-/dev/ttyUSB0}"
