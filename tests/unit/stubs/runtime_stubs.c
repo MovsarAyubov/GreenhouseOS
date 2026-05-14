@@ -1,4 +1,5 @@
 #include "gh_runtime_state.h"
+#include "gh_modbus_tcp_server.h"
 
 #include <string.h>
 
@@ -151,5 +152,22 @@ void ModbusTcpGetDiag(modbusTcpDiag_t *diagOut)
 }
 
 void ModbusTcpClearDiag(void)
+{
+}
+
+uint16_t GH_ModbusTcpServer_GetWorkerStackHwmWords(void)
+{
+  return 0U;
+}
+
+void GH_ModbusTcpServer_GetDiag(gh_modbus_tcp_diag_t *diagOut)
+{
+  if (diagOut != NULL)
+  {
+    memset(diagOut, 0, sizeof(*diagOut));
+  }
+}
+
+void GH_ModbusTcpServer_ClearDiag(void)
 {
 }

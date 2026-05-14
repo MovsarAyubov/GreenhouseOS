@@ -1,7 +1,7 @@
 {
   "schema": "scada_semantic_mapping_v1",
   "topology_id": 1002,
-  "topology_generation": 108,
+  "topology_generation": 111,
   "topology_ver_major": 2,
   "topology_ver_minor": 0,
   "modules": {
@@ -324,6 +324,168 @@
       "label": "Light status bits",
       "unit": "mask",
       "scale_pow10": 0
+    },
+    "zone_1.windows_status_bits": {
+      "module_id": 101,
+      "point_id": 10187,
+      "publish_index": 33,
+      "req_id": 1012,
+      "label": "Windows status bits",
+      "unit": "mask",
+      "scale_pow10": 0,
+      "slave_reg": 187,
+      "reaction_pending_bit": 13
+    },
+    "zone_2.windows_status_bits": {
+      "module_id": 102,
+      "point_id": 10287,
+      "publish_index": 34,
+      "req_id": 1022,
+      "label": "Windows status bits",
+      "unit": "mask",
+      "scale_pow10": 0,
+      "slave_reg": 187,
+      "reaction_pending_bit": 13
+    },
+    "zone_1.curtain_target": {
+      "module_id": 101,
+      "point_id": 10167,
+      "publish_index": 35,
+      "req_id": 1013,
+      "label": "Curtain target",
+      "unit": "x10 %",
+      "scale_pow10": -1,
+      "slave_reg": 267
+    },
+    "zone_1.curtain_base_target": {
+      "module_id": 101,
+      "point_id": 10168,
+      "publish_index": 36,
+      "req_id": 1013,
+      "label": "Curtain base target",
+      "unit": "x10 %",
+      "scale_pow10": -1,
+      "slave_reg": 268
+    },
+    "zone_1.curtain_current_ma": {
+      "module_id": 101,
+      "point_id": 10169,
+      "publish_index": 37,
+      "req_id": 1013,
+      "label": "Curtain current",
+      "unit": "x10 mA",
+      "scale_pow10": -1,
+      "slave_reg": 269
+    },
+    "zone_1.curtain_status_bits": {
+      "module_id": 101,
+      "point_id": 10170,
+      "publish_index": 38,
+      "req_id": 1013,
+      "label": "Curtain status bits",
+      "unit": "mask",
+      "scale_pow10": 0,
+      "slave_reg": 270
+    },
+    "zone_1.curtain_reason_bits": {
+      "module_id": 101,
+      "point_id": 10171,
+      "publish_index": 39,
+      "req_id": 1013,
+      "label": "Curtain reason bits",
+      "unit": "mask",
+      "scale_pow10": 0,
+      "slave_reg": 271
+    },
+    "zone_1.curtain_position_status_bits": {
+      "module_id": 101,
+      "point_id": 10172,
+      "publish_index": 40,
+      "req_id": 1013,
+      "label": "Curtain position status bits",
+      "unit": "mask",
+      "scale_pow10": 0,
+      "slave_reg": 272
+    },
+    "zone_1.curtain_fault_code": {
+      "module_id": 101,
+      "point_id": 10173,
+      "publish_index": 41,
+      "req_id": 1013,
+      "label": "Curtain fault code",
+      "unit": "enum",
+      "scale_pow10": 0,
+      "slave_reg": 273
+    },
+    "zone_2.curtain_target": {
+      "module_id": 102,
+      "point_id": 10267,
+      "publish_index": 42,
+      "req_id": 1023,
+      "label": "Curtain target",
+      "unit": "x10 %",
+      "scale_pow10": -1,
+      "slave_reg": 267
+    },
+    "zone_2.curtain_base_target": {
+      "module_id": 102,
+      "point_id": 10268,
+      "publish_index": 43,
+      "req_id": 1023,
+      "label": "Curtain base target",
+      "unit": "x10 %",
+      "scale_pow10": -1,
+      "slave_reg": 268
+    },
+    "zone_2.curtain_current_ma": {
+      "module_id": 102,
+      "point_id": 10269,
+      "publish_index": 44,
+      "req_id": 1023,
+      "label": "Curtain current",
+      "unit": "x10 mA",
+      "scale_pow10": -1,
+      "slave_reg": 269
+    },
+    "zone_2.curtain_status_bits": {
+      "module_id": 102,
+      "point_id": 10270,
+      "publish_index": 45,
+      "req_id": 1023,
+      "label": "Curtain status bits",
+      "unit": "mask",
+      "scale_pow10": 0,
+      "slave_reg": 270
+    },
+    "zone_2.curtain_reason_bits": {
+      "module_id": 102,
+      "point_id": 10271,
+      "publish_index": 46,
+      "req_id": 1023,
+      "label": "Curtain reason bits",
+      "unit": "mask",
+      "scale_pow10": 0,
+      "slave_reg": 271
+    },
+    "zone_2.curtain_position_status_bits": {
+      "module_id": 102,
+      "point_id": 10272,
+      "publish_index": 47,
+      "req_id": 1023,
+      "label": "Curtain position status bits",
+      "unit": "mask",
+      "scale_pow10": 0,
+      "slave_reg": 272
+    },
+    "zone_2.curtain_fault_code": {
+      "module_id": 102,
+      "point_id": 10273,
+      "publish_index": 48,
+      "req_id": 1023,
+      "label": "Curtain fault code",
+      "unit": "enum",
+      "scale_pow10": 0,
+      "slave_reg": 273
     }
   },
   "commands": {
@@ -350,7 +512,10 @@
       "light_hyst_sec_word": 12,
       "recommended_full_write_words": 13,
       "partial_apply_debounce_ms": 250,
-      "reserved_words_must_be_zero": [4, 10],
+      "reserved_words_must_be_zero": [
+        4,
+        10
+      ],
       "slave_current_dli_reg": 134,
       "slave_light_output_reg": 135,
       "slave_status_bits_reg": 136,
@@ -379,11 +544,998 @@
       "light_hyst_sec_word": 12,
       "recommended_full_write_words": 13,
       "partial_apply_debounce_ms": 250,
-      "reserved_words_must_be_zero": [4, 10],
+      "reserved_words_must_be_zero": [
+        4,
+        10
+      ],
       "slave_current_dli_reg": 134,
       "slave_light_output_reg": 135,
       "slave_status_bits_reg": 136,
       "weather_solar_rad_reg": 163
+    },
+    "zone_1.control_setpoints": {
+      "module_id": 101,
+      "slave_id": 1,
+      "cmd_profile_id": 5002,
+      "cmd_kind": "generic",
+      "payload_words": 7,
+      "start_reg": 103,
+      "reg_count": 7,
+      "recommended_full_write_words": 7,
+      "windows_pos_a_target_word": 0,
+      "windows_pos_b_target_word": 1,
+      "curtain_pos_target_word": 2,
+      "sp_water_rail_word": 3,
+      "sp_water_grow_word": 4,
+      "sp_water_upper_word": 5,
+      "sp_water_undertray_word": 6,
+      "slave_registers": {
+        "windows_pos_a_target": {
+          "payload_word": 0,
+          "slave_reg": 103
+        },
+        "windows_pos_b_target": {
+          "payload_word": 1,
+          "slave_reg": 104
+        },
+        "curtain_pos_target": {
+          "payload_word": 2,
+          "slave_reg": 105
+        },
+        "sp_water_rail": {
+          "payload_word": 3,
+          "slave_reg": 106
+        },
+        "sp_water_grow": {
+          "payload_word": 4,
+          "slave_reg": 107
+        },
+        "sp_water_upper": {
+          "payload_word": 5,
+          "slave_reg": 108
+        },
+        "sp_water_undertray": {
+          "payload_word": 6,
+          "slave_reg": 109
+        }
+      }
+    },
+    "zone_1.window_core_setpoints": {
+      "module_id": 101,
+      "slave_id": 1,
+      "cmd_profile_id": 5004,
+      "cmd_kind": "generic",
+      "payload_words": 16,
+      "start_reg": 171,
+      "reg_count": 16,
+      "recommended_full_write_words": 16,
+      "windows_ctrl_mode_word": 0,
+      "windows_force_safe_cmd_word": 1,
+      "windows_temp_setpoint_word": 2,
+      "windows_safe_min_percent_word": 3,
+      "windows_wind_limit_word": 4,
+      "windows_wind_storm_word": 5,
+      "windows_wind_recover_word": 6,
+      "window_a_azimuth_deg_word": 7,
+      "windows_wind_sector_half_width_deg_word": 8,
+      "windows_temp_step_c_word": 9,
+      "windows_temp_step_hyst_c_word": 10,
+      "rll400_target_hyst_percent_word": 11,
+      "rll400_motion_delta_percent_word": 12,
+      "rll400_no_motion_timeout_ms_word": 13,
+      "window_a_fault_reset_token_word": 14,
+      "window_b_fault_reset_token_word": 15,
+      "slave_registers": {
+        "windows_ctrl_mode": {
+          "payload_word": 0,
+          "slave_reg": 171
+        },
+        "windows_force_safe_cmd": {
+          "payload_word": 1,
+          "slave_reg": 172
+        },
+        "windows_temp_setpoint": {
+          "payload_word": 2,
+          "slave_reg": 173
+        },
+        "windows_safe_min_percent": {
+          "payload_word": 3,
+          "slave_reg": 174
+        },
+        "windows_wind_limit": {
+          "payload_word": 4,
+          "slave_reg": 175
+        },
+        "windows_wind_storm": {
+          "payload_word": 5,
+          "slave_reg": 176
+        },
+        "windows_wind_recover": {
+          "payload_word": 6,
+          "slave_reg": 177
+        },
+        "window_a_azimuth_deg": {
+          "payload_word": 7,
+          "slave_reg": 178
+        },
+        "windows_wind_sector_half_width_deg": {
+          "payload_word": 8,
+          "slave_reg": 179
+        },
+        "windows_temp_step_c": {
+          "payload_word": 9,
+          "slave_reg": 180
+        },
+        "windows_temp_step_hyst_c": {
+          "payload_word": 10,
+          "slave_reg": 181
+        },
+        "rll400_target_hyst_percent": {
+          "payload_word": 11,
+          "slave_reg": 182
+        },
+        "rll400_motion_delta_percent": {
+          "payload_word": 12,
+          "slave_reg": 183
+        },
+        "rll400_no_motion_timeout_ms": {
+          "payload_word": 13,
+          "slave_reg": 184
+        },
+        "window_a_fault_reset_token": {
+          "payload_word": 14,
+          "slave_reg": 185
+        },
+        "window_b_fault_reset_token": {
+          "payload_word": 15,
+          "slave_reg": 186
+        }
+      }
+    },
+    "zone_1.window_auto_setpoints": {
+      "module_id": 101,
+      "slave_id": 1,
+      "cmd_profile_id": 5005,
+      "cmd_kind": "generic",
+      "payload_words": 16,
+      "start_reg": 195,
+      "reg_count": 16,
+      "recommended_full_write_words": 16,
+      "windows_auto_algo_mode_word": 0,
+      "windows_hum_setpoint_word": 1,
+      "windows_hum_step_word": 2,
+      "windows_hum_step_hyst_word": 3,
+      "windows_cold_close_delta_word": 4,
+      "windows_cold_close_hyst_word": 5,
+      "windows_windward_min_percent_word": 6,
+      "windows_windward_max_percent_word": 7,
+      "windows_windward_speed_threshold_word": 8,
+      "windows_windward_reduction_percent_per_ms_word": 9,
+      "windows_leeward_min_percent_word": 10,
+      "windows_leeward_max_percent_word": 11,
+      "windows_leeward_speed_threshold_word": 12,
+      "windows_leeward_reduction_percent_per_ms_word": 13,
+      "windows_windward_lag_percent_word": 14,
+      "windows_rain_mode_word": 15,
+      "slave_registers": {
+        "windows_auto_algo_mode": {
+          "payload_word": 0,
+          "slave_reg": 195
+        },
+        "windows_hum_setpoint": {
+          "payload_word": 1,
+          "slave_reg": 196
+        },
+        "windows_hum_step": {
+          "payload_word": 2,
+          "slave_reg": 197
+        },
+        "windows_hum_step_hyst": {
+          "payload_word": 3,
+          "slave_reg": 198
+        },
+        "windows_cold_close_delta": {
+          "payload_word": 4,
+          "slave_reg": 199
+        },
+        "windows_cold_close_hyst": {
+          "payload_word": 5,
+          "slave_reg": 200
+        },
+        "windows_windward_min_percent": {
+          "payload_word": 6,
+          "slave_reg": 201
+        },
+        "windows_windward_max_percent": {
+          "payload_word": 7,
+          "slave_reg": 202
+        },
+        "windows_windward_speed_threshold": {
+          "payload_word": 8,
+          "slave_reg": 203
+        },
+        "windows_windward_reduction_percent_per_ms": {
+          "payload_word": 9,
+          "slave_reg": 204
+        },
+        "windows_leeward_min_percent": {
+          "payload_word": 10,
+          "slave_reg": 205
+        },
+        "windows_leeward_max_percent": {
+          "payload_word": 11,
+          "slave_reg": 206
+        },
+        "windows_leeward_speed_threshold": {
+          "payload_word": 12,
+          "slave_reg": 207
+        },
+        "windows_leeward_reduction_percent_per_ms": {
+          "payload_word": 13,
+          "slave_reg": 208
+        },
+        "windows_windward_lag_percent": {
+          "payload_word": 14,
+          "slave_reg": 209
+        },
+        "windows_rain_mode": {
+          "payload_word": 15,
+          "slave_reg": 210
+        }
+      }
+    },
+    "zone_1.window_weather_setpoints": {
+      "module_id": 101,
+      "slave_id": 1,
+      "cmd_profile_id": 5006,
+      "cmd_kind": "generic",
+      "payload_words": 2,
+      "start_reg": 211,
+      "reg_count": 2,
+      "recommended_full_write_words": 2,
+      "windows_rain_windward_percent_word": 0,
+      "windows_weather_stale_policy_word": 1,
+      "slave_registers": {
+        "windows_rain_windward_percent": {
+          "payload_word": 0,
+          "slave_reg": 211
+        },
+        "windows_weather_stale_policy": {
+          "payload_word": 1,
+          "slave_reg": 212
+        }
+      }
+    },
+    "zone_1.window_step_setpoints": {
+      "module_id": 101,
+      "slave_id": 1,
+      "cmd_profile_id": 5007,
+      "cmd_kind": "generic",
+      "payload_words": 6,
+      "start_reg": 219,
+      "reg_count": 6,
+      "recommended_full_write_words": 6,
+      "windows_temp_step_target_percent_word": 0,
+      "windows_temp_step_max_index_reserved_word": 1,
+      "windows_hum_step_target_percent_word": 2,
+      "windows_hum_step_max_index_reserved_word": 3,
+      "windows_weather_stale_timeout_ms_word": 4,
+      "windows_weather_source_age_s_word": 5,
+      "slave_registers": {
+        "windows_temp_step_target_percent": {
+          "payload_word": 0,
+          "slave_reg": 219
+        },
+        "windows_temp_step_max_index_reserved": {
+          "payload_word": 1,
+          "slave_reg": 220
+        },
+        "windows_hum_step_target_percent": {
+          "payload_word": 2,
+          "slave_reg": 221
+        },
+        "windows_hum_step_max_index_reserved": {
+          "payload_word": 3,
+          "slave_reg": 222
+        },
+        "windows_weather_stale_timeout_ms": {
+          "payload_word": 4,
+          "slave_reg": 223
+        },
+        "windows_weather_source_age_s": {
+          "payload_word": 5,
+          "slave_reg": 224
+        }
+      }
+    },
+    "zone_2.control_setpoints": {
+      "module_id": 102,
+      "slave_id": 2,
+      "cmd_profile_id": 5008,
+      "cmd_kind": "generic",
+      "payload_words": 7,
+      "start_reg": 103,
+      "reg_count": 7,
+      "recommended_full_write_words": 7,
+      "windows_pos_a_target_word": 0,
+      "windows_pos_b_target_word": 1,
+      "curtain_pos_target_word": 2,
+      "sp_water_rail_word": 3,
+      "sp_water_grow_word": 4,
+      "sp_water_upper_word": 5,
+      "sp_water_undertray_word": 6,
+      "slave_registers": {
+        "windows_pos_a_target": {
+          "payload_word": 0,
+          "slave_reg": 103
+        },
+        "windows_pos_b_target": {
+          "payload_word": 1,
+          "slave_reg": 104
+        },
+        "curtain_pos_target": {
+          "payload_word": 2,
+          "slave_reg": 105
+        },
+        "sp_water_rail": {
+          "payload_word": 3,
+          "slave_reg": 106
+        },
+        "sp_water_grow": {
+          "payload_word": 4,
+          "slave_reg": 107
+        },
+        "sp_water_upper": {
+          "payload_word": 5,
+          "slave_reg": 108
+        },
+        "sp_water_undertray": {
+          "payload_word": 6,
+          "slave_reg": 109
+        }
+      }
+    },
+    "zone_2.window_core_setpoints": {
+      "module_id": 102,
+      "slave_id": 2,
+      "cmd_profile_id": 5009,
+      "cmd_kind": "generic",
+      "payload_words": 16,
+      "start_reg": 171,
+      "reg_count": 16,
+      "recommended_full_write_words": 16,
+      "windows_ctrl_mode_word": 0,
+      "windows_force_safe_cmd_word": 1,
+      "windows_temp_setpoint_word": 2,
+      "windows_safe_min_percent_word": 3,
+      "windows_wind_limit_word": 4,
+      "windows_wind_storm_word": 5,
+      "windows_wind_recover_word": 6,
+      "window_a_azimuth_deg_word": 7,
+      "windows_wind_sector_half_width_deg_word": 8,
+      "windows_temp_step_c_word": 9,
+      "windows_temp_step_hyst_c_word": 10,
+      "rll400_target_hyst_percent_word": 11,
+      "rll400_motion_delta_percent_word": 12,
+      "rll400_no_motion_timeout_ms_word": 13,
+      "window_a_fault_reset_token_word": 14,
+      "window_b_fault_reset_token_word": 15,
+      "slave_registers": {
+        "windows_ctrl_mode": {
+          "payload_word": 0,
+          "slave_reg": 171
+        },
+        "windows_force_safe_cmd": {
+          "payload_word": 1,
+          "slave_reg": 172
+        },
+        "windows_temp_setpoint": {
+          "payload_word": 2,
+          "slave_reg": 173
+        },
+        "windows_safe_min_percent": {
+          "payload_word": 3,
+          "slave_reg": 174
+        },
+        "windows_wind_limit": {
+          "payload_word": 4,
+          "slave_reg": 175
+        },
+        "windows_wind_storm": {
+          "payload_word": 5,
+          "slave_reg": 176
+        },
+        "windows_wind_recover": {
+          "payload_word": 6,
+          "slave_reg": 177
+        },
+        "window_a_azimuth_deg": {
+          "payload_word": 7,
+          "slave_reg": 178
+        },
+        "windows_wind_sector_half_width_deg": {
+          "payload_word": 8,
+          "slave_reg": 179
+        },
+        "windows_temp_step_c": {
+          "payload_word": 9,
+          "slave_reg": 180
+        },
+        "windows_temp_step_hyst_c": {
+          "payload_word": 10,
+          "slave_reg": 181
+        },
+        "rll400_target_hyst_percent": {
+          "payload_word": 11,
+          "slave_reg": 182
+        },
+        "rll400_motion_delta_percent": {
+          "payload_word": 12,
+          "slave_reg": 183
+        },
+        "rll400_no_motion_timeout_ms": {
+          "payload_word": 13,
+          "slave_reg": 184
+        },
+        "window_a_fault_reset_token": {
+          "payload_word": 14,
+          "slave_reg": 185
+        },
+        "window_b_fault_reset_token": {
+          "payload_word": 15,
+          "slave_reg": 186
+        }
+      }
+    },
+    "zone_2.window_auto_setpoints": {
+      "module_id": 102,
+      "slave_id": 2,
+      "cmd_profile_id": 5010,
+      "cmd_kind": "generic",
+      "payload_words": 16,
+      "start_reg": 195,
+      "reg_count": 16,
+      "recommended_full_write_words": 16,
+      "windows_auto_algo_mode_word": 0,
+      "windows_hum_setpoint_word": 1,
+      "windows_hum_step_word": 2,
+      "windows_hum_step_hyst_word": 3,
+      "windows_cold_close_delta_word": 4,
+      "windows_cold_close_hyst_word": 5,
+      "windows_windward_min_percent_word": 6,
+      "windows_windward_max_percent_word": 7,
+      "windows_windward_speed_threshold_word": 8,
+      "windows_windward_reduction_percent_per_ms_word": 9,
+      "windows_leeward_min_percent_word": 10,
+      "windows_leeward_max_percent_word": 11,
+      "windows_leeward_speed_threshold_word": 12,
+      "windows_leeward_reduction_percent_per_ms_word": 13,
+      "windows_windward_lag_percent_word": 14,
+      "windows_rain_mode_word": 15,
+      "slave_registers": {
+        "windows_auto_algo_mode": {
+          "payload_word": 0,
+          "slave_reg": 195
+        },
+        "windows_hum_setpoint": {
+          "payload_word": 1,
+          "slave_reg": 196
+        },
+        "windows_hum_step": {
+          "payload_word": 2,
+          "slave_reg": 197
+        },
+        "windows_hum_step_hyst": {
+          "payload_word": 3,
+          "slave_reg": 198
+        },
+        "windows_cold_close_delta": {
+          "payload_word": 4,
+          "slave_reg": 199
+        },
+        "windows_cold_close_hyst": {
+          "payload_word": 5,
+          "slave_reg": 200
+        },
+        "windows_windward_min_percent": {
+          "payload_word": 6,
+          "slave_reg": 201
+        },
+        "windows_windward_max_percent": {
+          "payload_word": 7,
+          "slave_reg": 202
+        },
+        "windows_windward_speed_threshold": {
+          "payload_word": 8,
+          "slave_reg": 203
+        },
+        "windows_windward_reduction_percent_per_ms": {
+          "payload_word": 9,
+          "slave_reg": 204
+        },
+        "windows_leeward_min_percent": {
+          "payload_word": 10,
+          "slave_reg": 205
+        },
+        "windows_leeward_max_percent": {
+          "payload_word": 11,
+          "slave_reg": 206
+        },
+        "windows_leeward_speed_threshold": {
+          "payload_word": 12,
+          "slave_reg": 207
+        },
+        "windows_leeward_reduction_percent_per_ms": {
+          "payload_word": 13,
+          "slave_reg": 208
+        },
+        "windows_windward_lag_percent": {
+          "payload_word": 14,
+          "slave_reg": 209
+        },
+        "windows_rain_mode": {
+          "payload_word": 15,
+          "slave_reg": 210
+        }
+      }
+    },
+    "zone_2.window_weather_setpoints": {
+      "module_id": 102,
+      "slave_id": 2,
+      "cmd_profile_id": 5011,
+      "cmd_kind": "generic",
+      "payload_words": 2,
+      "start_reg": 211,
+      "reg_count": 2,
+      "recommended_full_write_words": 2,
+      "windows_rain_windward_percent_word": 0,
+      "windows_weather_stale_policy_word": 1,
+      "slave_registers": {
+        "windows_rain_windward_percent": {
+          "payload_word": 0,
+          "slave_reg": 211
+        },
+        "windows_weather_stale_policy": {
+          "payload_word": 1,
+          "slave_reg": 212
+        }
+      }
+    },
+    "zone_2.window_step_setpoints": {
+      "module_id": 102,
+      "slave_id": 2,
+      "cmd_profile_id": 5012,
+      "cmd_kind": "generic",
+      "payload_words": 6,
+      "start_reg": 219,
+      "reg_count": 6,
+      "recommended_full_write_words": 6,
+      "windows_temp_step_target_percent_word": 0,
+      "windows_temp_step_max_index_reserved_word": 1,
+      "windows_hum_step_target_percent_word": 2,
+      "windows_hum_step_max_index_reserved_word": 3,
+      "windows_weather_stale_timeout_ms_word": 4,
+      "windows_weather_source_age_s_word": 5,
+      "slave_registers": {
+        "windows_temp_step_target_percent": {
+          "payload_word": 0,
+          "slave_reg": 219
+        },
+        "windows_temp_step_max_index_reserved": {
+          "payload_word": 1,
+          "slave_reg": 220
+        },
+        "windows_hum_step_target_percent": {
+          "payload_word": 2,
+          "slave_reg": 221
+        },
+        "windows_hum_step_max_index_reserved": {
+          "payload_word": 3,
+          "slave_reg": 222
+        },
+        "windows_weather_stale_timeout_ms": {
+          "payload_word": 4,
+          "slave_reg": 223
+        },
+        "windows_weather_source_age_s": {
+          "payload_word": 5,
+          "slave_reg": 224
+        }
+      }
+    },
+    "zone_1.curtain_core_setpoints": {
+      "module_id": 101,
+      "slave_id": 1,
+      "cmd_profile_id": 5015,
+      "cmd_kind": "generic",
+      "payload_words": 8,
+      "start_reg": 243,
+      "reg_count": 8,
+      "recommended_full_write_words": 8,
+      "slave_registers": {
+        "curtain_ctrl_mode": {
+          "payload_word": 0,
+          "slave_reg": 243
+        },
+        "curtain_manual_target": {
+          "payload_word": 1,
+          "slave_reg": 244
+        },
+        "curtain_schedule_start_hhmm": {
+          "payload_word": 2,
+          "slave_reg": 245
+        },
+        "curtain_schedule_end_hhmm": {
+          "payload_word": 3,
+          "slave_reg": 246
+        },
+        "curtain_outside_target": {
+          "payload_word": 4,
+          "slave_reg": 247
+        },
+        "curtain_min_position": {
+          "payload_word": 5,
+          "slave_reg": 248
+        },
+        "curtain_max_position": {
+          "payload_word": 6,
+          "slave_reg": 249
+        },
+        "curtain_position_hyst": {
+          "payload_word": 7,
+          "slave_reg": 250
+        }
+      },
+      "curtain_ctrl_mode_word": 0,
+      "curtain_manual_target_word": 1,
+      "curtain_schedule_start_hhmm_word": 2,
+      "curtain_schedule_end_hhmm_word": 3,
+      "curtain_outside_target_word": 4,
+      "curtain_min_position_word": 5,
+      "curtain_max_position_word": 6,
+      "curtain_position_hyst_word": 7
+    },
+    "zone_1.curtain_rad_temp_setpoints": {
+      "module_id": 101,
+      "slave_id": 1,
+      "cmd_profile_id": 5016,
+      "cmd_kind": "generic",
+      "payload_words": 10,
+      "start_reg": 251,
+      "reg_count": 10,
+      "recommended_full_write_words": 10,
+      "slave_registers": {
+        "curtain_radiation_threshold": {
+          "payload_word": 0,
+          "slave_reg": 251
+        },
+        "curtain_radiation_step_wm2": {
+          "payload_word": 1,
+          "slave_reg": 252
+        },
+        "curtain_radiation_step_percent": {
+          "payload_word": 2,
+          "slave_reg": 253
+        },
+        "curtain_radiation_hyst": {
+          "payload_word": 3,
+          "slave_reg": 254
+        },
+        "curtain_cold_delta": {
+          "payload_word": 4,
+          "slave_reg": 255
+        },
+        "curtain_cold_hyst": {
+          "payload_word": 5,
+          "slave_reg": 256
+        },
+        "curtain_cold_target": {
+          "payload_word": 6,
+          "slave_reg": 257
+        },
+        "curtain_heat_delta": {
+          "payload_word": 7,
+          "slave_reg": 258
+        },
+        "curtain_heat_hyst": {
+          "payload_word": 8,
+          "slave_reg": 259
+        },
+        "curtain_heat_target": {
+          "payload_word": 9,
+          "slave_reg": 260
+        }
+      },
+      "curtain_radiation_threshold_word": 0,
+      "curtain_radiation_step_wm2_word": 1,
+      "curtain_radiation_step_percent_word": 2,
+      "curtain_radiation_hyst_word": 3,
+      "curtain_cold_delta_word": 4,
+      "curtain_cold_hyst_word": 5,
+      "curtain_cold_target_word": 6,
+      "curtain_heat_delta_word": 7,
+      "curtain_heat_hyst_word": 8,
+      "curtain_heat_target_word": 9
+    },
+    "zone_1.curtain_hum_setpoints": {
+      "module_id": 101,
+      "slave_id": 1,
+      "cmd_profile_id": 5017,
+      "cmd_kind": "generic",
+      "payload_words": 6,
+      "start_reg": 261,
+      "reg_count": 6,
+      "recommended_full_write_words": 6,
+      "slave_registers": {
+        "curtain_hum_low_threshold": {
+          "payload_word": 0,
+          "slave_reg": 261
+        },
+        "curtain_hum_low_hyst": {
+          "payload_word": 1,
+          "slave_reg": 262
+        },
+        "curtain_hum_low_target": {
+          "payload_word": 2,
+          "slave_reg": 263
+        },
+        "curtain_hum_high_threshold": {
+          "payload_word": 3,
+          "slave_reg": 264
+        },
+        "curtain_hum_high_hyst": {
+          "payload_word": 4,
+          "slave_reg": 265
+        },
+        "curtain_hum_high_target": {
+          "payload_word": 5,
+          "slave_reg": 266
+        }
+      },
+      "curtain_hum_low_threshold_word": 0,
+      "curtain_hum_low_hyst_word": 1,
+      "curtain_hum_low_target_word": 2,
+      "curtain_hum_high_threshold_word": 3,
+      "curtain_hum_high_hyst_word": 4,
+      "curtain_hum_high_target_word": 5
+    },
+    "zone_1.curtain_fault_reset": {
+      "module_id": 101,
+      "slave_id": 1,
+      "cmd_profile_id": 5018,
+      "cmd_kind": "generic",
+      "payload_words": 1,
+      "start_reg": 274,
+      "reg_count": 1,
+      "recommended_full_write_words": 1,
+      "slave_registers": {
+        "curtain_fault_reset_token": {
+          "payload_word": 0,
+          "slave_reg": 274
+        }
+      },
+      "fc": 6,
+      "curtain_fault_reset_token_word": 0
+    },
+    "zone_2.curtain_core_setpoints": {
+      "module_id": 102,
+      "slave_id": 2,
+      "cmd_profile_id": 5020,
+      "cmd_kind": "generic",
+      "payload_words": 8,
+      "start_reg": 243,
+      "reg_count": 8,
+      "recommended_full_write_words": 8,
+      "slave_registers": {
+        "curtain_ctrl_mode": {
+          "payload_word": 0,
+          "slave_reg": 243
+        },
+        "curtain_manual_target": {
+          "payload_word": 1,
+          "slave_reg": 244
+        },
+        "curtain_schedule_start_hhmm": {
+          "payload_word": 2,
+          "slave_reg": 245
+        },
+        "curtain_schedule_end_hhmm": {
+          "payload_word": 3,
+          "slave_reg": 246
+        },
+        "curtain_outside_target": {
+          "payload_word": 4,
+          "slave_reg": 247
+        },
+        "curtain_min_position": {
+          "payload_word": 5,
+          "slave_reg": 248
+        },
+        "curtain_max_position": {
+          "payload_word": 6,
+          "slave_reg": 249
+        },
+        "curtain_position_hyst": {
+          "payload_word": 7,
+          "slave_reg": 250
+        }
+      },
+      "curtain_ctrl_mode_word": 0,
+      "curtain_manual_target_word": 1,
+      "curtain_schedule_start_hhmm_word": 2,
+      "curtain_schedule_end_hhmm_word": 3,
+      "curtain_outside_target_word": 4,
+      "curtain_min_position_word": 5,
+      "curtain_max_position_word": 6,
+      "curtain_position_hyst_word": 7
+    },
+    "zone_2.curtain_rad_temp_setpoints": {
+      "module_id": 102,
+      "slave_id": 2,
+      "cmd_profile_id": 5021,
+      "cmd_kind": "generic",
+      "payload_words": 10,
+      "start_reg": 251,
+      "reg_count": 10,
+      "recommended_full_write_words": 10,
+      "slave_registers": {
+        "curtain_radiation_threshold": {
+          "payload_word": 0,
+          "slave_reg": 251
+        },
+        "curtain_radiation_step_wm2": {
+          "payload_word": 1,
+          "slave_reg": 252
+        },
+        "curtain_radiation_step_percent": {
+          "payload_word": 2,
+          "slave_reg": 253
+        },
+        "curtain_radiation_hyst": {
+          "payload_word": 3,
+          "slave_reg": 254
+        },
+        "curtain_cold_delta": {
+          "payload_word": 4,
+          "slave_reg": 255
+        },
+        "curtain_cold_hyst": {
+          "payload_word": 5,
+          "slave_reg": 256
+        },
+        "curtain_cold_target": {
+          "payload_word": 6,
+          "slave_reg": 257
+        },
+        "curtain_heat_delta": {
+          "payload_word": 7,
+          "slave_reg": 258
+        },
+        "curtain_heat_hyst": {
+          "payload_word": 8,
+          "slave_reg": 259
+        },
+        "curtain_heat_target": {
+          "payload_word": 9,
+          "slave_reg": 260
+        }
+      },
+      "curtain_radiation_threshold_word": 0,
+      "curtain_radiation_step_wm2_word": 1,
+      "curtain_radiation_step_percent_word": 2,
+      "curtain_radiation_hyst_word": 3,
+      "curtain_cold_delta_word": 4,
+      "curtain_cold_hyst_word": 5,
+      "curtain_cold_target_word": 6,
+      "curtain_heat_delta_word": 7,
+      "curtain_heat_hyst_word": 8,
+      "curtain_heat_target_word": 9
+    },
+    "zone_2.curtain_hum_setpoints": {
+      "module_id": 102,
+      "slave_id": 2,
+      "cmd_profile_id": 5022,
+      "cmd_kind": "generic",
+      "payload_words": 6,
+      "start_reg": 261,
+      "reg_count": 6,
+      "recommended_full_write_words": 6,
+      "slave_registers": {
+        "curtain_hum_low_threshold": {
+          "payload_word": 0,
+          "slave_reg": 261
+        },
+        "curtain_hum_low_hyst": {
+          "payload_word": 1,
+          "slave_reg": 262
+        },
+        "curtain_hum_low_target": {
+          "payload_word": 2,
+          "slave_reg": 263
+        },
+        "curtain_hum_high_threshold": {
+          "payload_word": 3,
+          "slave_reg": 264
+        },
+        "curtain_hum_high_hyst": {
+          "payload_word": 4,
+          "slave_reg": 265
+        },
+        "curtain_hum_high_target": {
+          "payload_word": 5,
+          "slave_reg": 266
+        }
+      },
+      "curtain_hum_low_threshold_word": 0,
+      "curtain_hum_low_hyst_word": 1,
+      "curtain_hum_low_target_word": 2,
+      "curtain_hum_high_threshold_word": 3,
+      "curtain_hum_high_hyst_word": 4,
+      "curtain_hum_high_target_word": 5
+    },
+    "zone_2.curtain_fault_reset": {
+      "module_id": 102,
+      "slave_id": 2,
+      "cmd_profile_id": 5023,
+      "cmd_kind": "generic",
+      "payload_words": 1,
+      "start_reg": 274,
+      "reg_count": 1,
+      "recommended_full_write_words": 1,
+      "slave_registers": {
+        "curtain_fault_reset_token": {
+          "payload_word": 0,
+          "slave_reg": 274
+        }
+      },
+      "fc": 6,
+      "curtain_fault_reset_token_word": 0
+    },
+    "zone_1.greenhouse_targets": {
+      "module_id": 101,
+      "slave_id": 1,
+      "cmd_profile_id": 5019,
+      "cmd_kind": "generic",
+      "payload_words": 2,
+      "start_reg": 275,
+      "reg_count": 2,
+      "recommended_full_write_words": 2,
+      "slave_registers": {
+        "air_temp_target": {
+          "payload_word": 0,
+          "slave_reg": 275
+        },
+        "air_hum_target": {
+          "payload_word": 1,
+          "slave_reg": 276
+        }
+      },
+      "fc": 16,
+      "air_temp_target_word": 0,
+      "air_hum_target_word": 1
+    },
+    "zone_2.greenhouse_targets": {
+      "module_id": 102,
+      "slave_id": 2,
+      "cmd_profile_id": 5024,
+      "cmd_kind": "generic",
+      "payload_words": 2,
+      "start_reg": 275,
+      "reg_count": 2,
+      "recommended_full_write_words": 2,
+      "slave_registers": {
+        "air_temp_target": {
+          "payload_word": 0,
+          "slave_reg": 275
+        },
+        "air_hum_target": {
+          "payload_word": 1,
+          "slave_reg": 276
+        }
+      },
+      "fc": 16,
+      "air_temp_target_word": 0,
+      "air_hum_target_word": 1
     }
   }
 }

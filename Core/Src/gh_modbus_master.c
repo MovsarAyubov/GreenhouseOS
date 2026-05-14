@@ -1056,6 +1056,49 @@ static bool gh_command_ack_probe(uint8_t slave_id,
                                       NULL);
 }
 
+static bool gh_command_readback_ack(uint8_t slave_id,
+                                    const gh_topology_cmd_binding_t *cmd,
+                                    const uint16_t *expected,
+                                    uint16_t expected_count,
+                                    gh_data_driven_command_result_t *out_result)
+{
+  uint16_t actual[TOPOLOGY_CMD_PAYLOAD_BUDGET_WORDS] = {0U};
+  modbus_io_error_t read_err = MODBUS_IO_ERR_NONE;
+  uint16_t i;
+
+  if ((cmd == NULL) || (expected == NULL) || (out_result == NULL) ||
+      (expected_count == 0U) || (expected_count > TOPOLOGY_CMD_PAYLOAD_BUDGET_WORDS))
+  {
+    return false;
+  }
+
+  if (!gh_modbus_read_holding_retry(slave_id,
+                                    cmd->start_reg,
+                                    expected_count,
+                                    actual,
+                                    cmd->timeout_ms,
+                                    cmd->retries,
+                                    MODBUS_RETRY_BACKOFF_MS,
+                                    &read_err))
+  {
+    out_result->result = GH_MB_DCMD_RESULT_TRANSPORT_FAIL;
+    out_result->io_error = read_err;
+    return false;
+  }
+
+  for (i = 0U; i < expected_count; i++)
+  {
+    if (actual[i] != expected[i])
+    {
+      out_result->result = GH_MB_DCMD_RESULT_ACK_FAIL;
+      out_result->io_error = MODBUS_IO_ERR_NONE;
+      return false;
+    }
+  }
+
+  return true;
+}
+
 static const gh_topology_cmd_binding_t *gh_find_command_profile(const gh_topology_cmd_binding_t *cmds,
                                                                 uint16_t cmd_count,
                                                                 const gh_data_driven_command_request_t *req)
@@ -1268,6 +1311,16 @@ static bool gh_execute_data_driven_step(const gh_data_driven_command_request_t *
   {
     out_result->result = GH_MB_DCMD_RESULT_TRANSPORT_FAIL;
     out_result->io_error = modbus_get_last_error();
+    return false;
+  }
+
+  if (((cmd->flags & GH_TOPOLOGY_CMD_FLAG_READBACK_ACK) != 0U) &&
+      !gh_command_readback_ack(req->slave_id,
+                               cmd,
+                               &req->payload[cmd->payload_offset],
+                               cmd_data_len,
+                               out_result))
+  {
     return false;
   }
 
