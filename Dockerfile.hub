@@ -1,0 +1,20 @@
+FROM golang:1.22-bookworm AS build
+
+WORKDIR /src/greenhouse-hub
+COPY greenhouse-hub/go.mod ./
+RUN go mod download
+COPY greenhouse-hub/ ./
+RUN go build -o /out/greenhouse-hub ./cmd/greenhouse-hub
+
+FROM debian:bookworm-slim
+
+RUN useradd --system --home-dir /nonexistent --shell /usr/sbin/nologin greenhouse
+WORKDIR /app
+COPY --from=build /out/greenhouse-hub /usr/local/bin/greenhouse-hub
+COPY topology/ /app/topology/
+
+EXPOSE 8080
+USER greenhouse
+
+ENTRYPOINT ["/usr/local/bin/greenhouse-hub"]
+CMD ["--mock", "--topology", "/app/topology/one_zone_one_weather_all_points_schedule_topology.json", "--semantics", "/app/topology/one_zone_one_weather_all_points_schedule_semantics.json", "--listen", "0.0.0.0:8080"]

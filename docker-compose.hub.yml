@@ -1,0 +1,38 @@
+services:
+  greenhouse-hub-mock:
+    build:
+      context: .
+      dockerfile: Dockerfile.hub
+    image: greenhouseos-hub:local
+    command:
+      - "--mock"
+      - "--topology"
+      - "/app/topology/one_zone_one_weather_all_points_schedule_topology.json"
+      - "--semantics"
+      - "/app/topology/one_zone_one_weather_all_points_schedule_semantics.json"
+      - "--listen"
+      - "0.0.0.0:8080"
+    ports:
+      - "${HUB_PORT:-8080}:8080"
+
+  greenhouse-hub-rtu:
+    profiles: ["rtu"]
+    build:
+      context: .
+      dockerfile: Dockerfile.hub
+    image: greenhouseos-hub:local
+    command:
+      - "--serial"
+      - "${SERIAL_PORT:-/dev/ttyUSB0}"
+      - "--baud"
+      - "${BAUD:-115200}"
+      - "--topology"
+      - "/app/topology/one_zone_one_weather_all_points_schedule_topology.json"
+      - "--semantics"
+      - "/app/topology/one_zone_one_weather_all_points_schedule_semantics.json"
+      - "--listen"
+      - "0.0.0.0:8080"
+    ports:
+      - "${HUB_PORT:-8080}:8080"
+    devices:
+      - "${SERIAL_PORT:-/dev/ttyUSB0}:${SERIAL_PORT:-/dev/ttyUSB0}"
