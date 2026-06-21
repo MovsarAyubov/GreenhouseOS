@@ -116,7 +116,7 @@ Weather sync в текущем master реализован не через `comm
 Рекомендуемый вариант:
 - `fc = 3`
 - `start_reg = 0`
-- `reg_count = 9`
+- `reg_count = 15` for the new slave map (`0..8` telemetry, `9..14` diagnostics)
 - `period_ms = 5000`
 - `timeout_ms = 300`
 - `retries = 2`

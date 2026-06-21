@@ -1,6 +1,6 @@
 # Modbus Slave Table
 
-Date: 2026-02-23 baseline.
+Date: 2026-06-08 baseline.
 
 Actual sources in code:
 - `Core/Src/gh_modbus_master.c` (RS485/RTU polling)
@@ -14,8 +14,9 @@ Limits:
 
 Current RTU polling profile:
 - slave IDs: `1..20`
-- telemetry read: `start_reg=0`, `count=9`
-- diagnostics read: `start_reg=128`, `count=6`
+- zone telemetry/diagnostics read: `start_reg=0`, `count=15`
+- zone telemetry channels: `0..8`
+- zone diagnostics channels: `9..14`
 
 Indexing rule for `g_sensors`:
 - `sensor_id = (slave_id - 1) * 9 + channel`
@@ -26,7 +27,7 @@ Indexing rule for `g_sensors`:
 
 Assumed use:
 - dedicated weather module on RTU1
-- current telemetry window fits the existing master poll contract: `start_reg=0`, `count=9`
+- current telemetry window fits the existing master weather poll contract: `start_reg=0`, `count=9`
 
 Register map (`start_reg + off`):
 

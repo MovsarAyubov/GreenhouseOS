@@ -1,7 +1,7 @@
 {
   "schema": "scada_semantic_mapping_v1",
   "topology_id": 1001,
-  "topology_generation": 107,
+  "topology_generation": 117,
   "topology_ver_major": 2,
   "topology_ver_minor": 0,
   "modules": {
@@ -240,6 +240,99 @@
       "slave_light_output_reg": 135,
       "slave_status_bits_reg": 136,
       "weather_solar_rad_reg": 163
+    },
+    "zone_1.windows_manual_targets": {
+      "module_id": 101,
+      "slave_id": 1,
+      "cmd_profile_id": 5002,
+      "cmd_kind": "generic",
+      "payload_words": 2,
+      "start_reg": 103,
+      "reg_count": 2,
+      "window_a_target_word": 0,
+      "window_b_target_word": 1,
+      "scale": "x10 %"
+    },
+    "zone_1.windows_base": {
+      "module_id": 101,
+      "slave_id": 1,
+      "cmd_profile_id": 5004,
+      "cmd_kind": "generic",
+      "payload_words": 16,
+      "start_reg": 171,
+      "reg_count": 16
+    },
+    "zone_1.windows_automation": {
+      "module_id": 101,
+      "slave_id": 1,
+      "cmd_profile_id": 5005,
+      "cmd_kind": "generic",
+      "payload_words": 16,
+      "start_reg": 195,
+      "reg_count": 16
+    },
+    "zone_1.windows_rain_weather": {
+      "module_id": 101,
+      "slave_id": 1,
+      "cmd_profile_id": 5006,
+      "cmd_kind": "generic",
+      "payload_words": 2,
+      "start_reg": 211,
+      "reg_count": 2
+    },
+    "zone_1.windows_step_timeouts": {
+      "module_id": 101,
+      "slave_id": 1,
+      "cmd_profile_id": 5007,
+      "cmd_kind": "generic",
+      "payload_words": 6,
+      "start_reg": 219,
+      "reg_count": 6
+    },
+    "zone_1.curtain_core": {
+      "module_id": 101,
+      "slave_id": 1,
+      "cmd_profile_id": 5015,
+      "cmd_kind": "generic",
+      "payload_words": 8,
+      "start_reg": 243,
+      "reg_count": 8
+    },
+    "zone_1.curtain_rad_temp": {
+      "module_id": 101,
+      "slave_id": 1,
+      "cmd_profile_id": 5016,
+      "cmd_kind": "generic",
+      "payload_words": 10,
+      "start_reg": 251,
+      "reg_count": 10
+    },
+    "zone_1.curtain_hum": {
+      "module_id": 101,
+      "slave_id": 1,
+      "cmd_profile_id": 5017,
+      "cmd_kind": "generic",
+      "payload_words": 6,
+      "start_reg": 261,
+      "reg_count": 6
+    },
+    "zone_1.curtain_fault_reset": {
+      "module_id": 101,
+      "slave_id": 1,
+      "cmd_profile_id": 5018,
+      "cmd_kind": "generic",
+      "payload_words": 1,
+      "start_reg": 274,
+      "reg_count": 1
+    },
+    "zone_1.greenhouse_targets": {
+      "module_id": 101,
+      "slave_id": 1,
+      "cmd_profile_id": 5019,
+      "cmd_kind": "generic",
+      "payload_words": 2,
+      "start_reg": 275,
+      "reg_count": 2
     }
   }
 }

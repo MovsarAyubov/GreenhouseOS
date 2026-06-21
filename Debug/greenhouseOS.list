@@ -41,9 +41,9 @@ Idx Name          Size      VMA       LMA       File off  Algn
                   CONTENTS, READONLY, DEBUGGING, OCTETS
  18 .debug_line   0004bb9a  00000000  00000000  000bfe81  2**0
                   CONTENTS, READONLY, DEBUGGING, OCTETS
- 19 .debug_str    000fda3d  00000000  00000000  0010ba1b  2**0
+ 19 .debug_str    000fda3b  00000000  00000000  0010ba1b  2**0
                   CONTENTS, READONLY, DEBUGGING, OCTETS
- 20 .comment      00000043  00000000  00000000  00209458  2**0
+ 20 .comment      00000043  00000000  00000000  00209456  2**0
                   CONTENTS, READONLY
  21 .debug_frame  0000e0ec  00000000  00000000  0020949c  2**2
                   CONTENTS, READONLY, DEBUGGING, OCTETS
@@ -900,7 +900,7 @@ static uint8_t diag_offset_for_req(const gh_topology_v2_req_t *req)
   {
     return GH_TOPOLOGY_DIAG_OFFSET_NONE;
  8000844:	23ff      	movs	r3, #255	@ 0xff
- 8000846:	e01d      	b.n	8000884 <diag_offset_for_req+0x4e>
+ 8000846:	e01c      	b.n	8000882 <diag_offset_for_req+0x4c>
   }
 
   req_end = (uint32_t)req->start_reg + (uint32_t)req->reg_count;
@@ -914,13 +914,13 @@ static uint8_t diag_offset_for_req(const gh_topology_v2_req_t *req)
  8000856:	4413      	add	r3, r2
  8000858:	60fb      	str	r3, [r7, #12]
   diag_end = GH_TOPOLOGY_RUNTIME_DIAG_BASE_REG + GH_TOPOLOGY_RUNTIME_DIAG_REG_COUNT;
- 800085a:	2386      	movs	r3, #134	@ 0x86
+ 800085a:	230f      	movs	r3, #15
  800085c:	60bb      	str	r3, [r7, #8]
   if (((uint32_t)req->start_reg > GH_TOPOLOGY_RUNTIME_DIAG_BASE_REG) || (req_end < diag_end))
  800085e:	687b      	ldr	r3, [r7, #4]
  8000860:	88db      	ldrh	r3, [r3, #6]
  8000862:	b29b      	uxth	r3, r3
- 8000864:	2b80      	cmp	r3, #128	@ 0x80
+ 8000864:	2b09      	cmp	r3, #9
  8000866:	d803      	bhi.n	8000870 <diag_offset_for_req+0x3a>
  8000868:	68fa      	ldr	r2, [r7, #12]
  800086a:	68bb      	ldr	r3, [r7, #8]
@@ -929,71 +929,71 @@ static uint8_t diag_offset_for_req(const gh_topology_v2_req_t *req)
   {
     return GH_TOPOLOGY_DIAG_OFFSET_NONE;
  8000870:	23ff      	movs	r3, #255	@ 0xff
- 8000872:	e007      	b.n	8000884 <diag_offset_for_req+0x4e>
+ 8000872:	e006      	b.n	8000882 <diag_offset_for_req+0x4c>
   }
 
   return (uint8_t)(GH_TOPOLOGY_RUNTIME_DIAG_BASE_REG - req->start_reg);
  8000874:	687b      	ldr	r3, [r7, #4]
  8000876:	88db      	ldrh	r3, [r3, #6]
  8000878:	b29b      	uxth	r3, r3
- 800087a:	b2da      	uxtb	r2, r3
- 800087c:	f06f 037f 	mvn.w	r3, #127	@ 0x7f
- 8000880:	1a9b      	subs	r3, r3, r2
- 8000882:	b2db      	uxtb	r3, r3
+ 800087a:	b2db      	uxtb	r3, r3
+ 800087c:	f1c3 0309 	rsb	r3, r3, #9
+ 8000880:	b2db      	uxtb	r3, r3
 }
- 8000884:	4618      	mov	r0, r3
- 8000886:	3714      	adds	r7, #20
- 8000888:	46bd      	mov	sp, r7
- 800088a:	f85d 7b04 	ldr.w	r7, [sp], #4
- 800088e:	4770      	bx	lr
+ 8000882:	4618      	mov	r0, r3
+ 8000884:	3714      	adds	r7, #20
+ 8000886:	46bd      	mov	sp, r7
+ 8000888:	f85d 7b04 	ldr.w	r7, [sp], #4
+ 800088c:	4770      	bx	lr
 
-08000890 <topo_point_word_width>:
+0800088e <topo_point_word_width>:
 
 static uint8_t topo_point_word_width(uint8_t point_type)
 {
- 8000890:	b480      	push	{r7}
- 8000892:	b083      	sub	sp, #12
- 8000894:	af00      	add	r7, sp, #0
- 8000896:	4603      	mov	r3, r0
- 8000898:	71fb      	strb	r3, [r7, #7]
+ 800088e:	b480      	push	{r7}
+ 8000890:	b083      	sub	sp, #12
+ 8000892:	af00      	add	r7, sp, #0
+ 8000894:	4603      	mov	r3, r0
+ 8000896:	71fb      	strb	r3, [r7, #7]
   switch (point_type)
- 800089a:	79fb      	ldrb	r3, [r7, #7]
- 800089c:	2b06      	cmp	r3, #6
- 800089e:	d00a      	beq.n	80008b6 <topo_point_word_width+0x26>
- 80008a0:	2b06      	cmp	r3, #6
- 80008a2:	dc0c      	bgt.n	80008be <topo_point_word_width+0x2e>
- 80008a4:	2b02      	cmp	r3, #2
- 80008a6:	dc02      	bgt.n	80008ae <topo_point_word_width+0x1e>
- 80008a8:	2b00      	cmp	r3, #0
- 80008aa:	dc04      	bgt.n	80008b6 <topo_point_word_width+0x26>
- 80008ac:	e007      	b.n	80008be <topo_point_word_width+0x2e>
- 80008ae:	3b03      	subs	r3, #3
- 80008b0:	2b02      	cmp	r3, #2
- 80008b2:	d804      	bhi.n	80008be <topo_point_word_width+0x2e>
- 80008b4:	e001      	b.n	80008ba <topo_point_word_width+0x2a>
+ 8000898:	79fb      	ldrb	r3, [r7, #7]
+ 800089a:	2b06      	cmp	r3, #6
+ 800089c:	d00a      	beq.n	80008b4 <topo_point_word_width+0x26>
+ 800089e:	2b06      	cmp	r3, #6
+ 80008a0:	dc0c      	bgt.n	80008bc <topo_point_word_width+0x2e>
+ 80008a2:	2b02      	cmp	r3, #2
+ 80008a4:	dc02      	bgt.n	80008ac <topo_point_word_width+0x1e>
+ 80008a6:	2b00      	cmp	r3, #0
+ 80008a8:	dc04      	bgt.n	80008b4 <topo_point_word_width+0x26>
+ 80008aa:	e007      	b.n	80008bc <topo_point_word_width+0x2e>
+ 80008ac:	3b03      	subs	r3, #3
+ 80008ae:	2b02      	cmp	r3, #2
+ 80008b0:	d804      	bhi.n	80008bc <topo_point_word_width+0x2e>
+ 80008b2:	e001      	b.n	80008b8 <topo_point_word_width+0x2a>
   {
     case GH_TOPOLOGY_POINT_TYPE_U16:
     case GH_TOPOLOGY_POINT_TYPE_S16:
     case GH_TOPOLOGY_POINT_TYPE_BIT:
       return 1U;
- 80008b6:	2301      	movs	r3, #1
- 80008b8:	e002      	b.n	80008c0 <topo_point_word_width+0x30>
+ 80008b4:	2301      	movs	r3, #1
+ 80008b6:	e002      	b.n	80008be <topo_point_word_width+0x30>
     case GH_TOPOLOGY_POINT_TYPE_U32:
     case GH_TOPOLOGY_POINT_TYPE_S32:
     case GH_TOPOLOGY_POINT_TYPE_FLOAT:
       return 2U;
- 80008ba:	2302      	movs	r3, #2
- 80008bc:	e000      	b.n	80008c0 <topo_point_word_width+0x30>
+ 80008b8:	2302      	movs	r3, #2
+ 80008ba:	e000      	b.n	80008be <topo_point_word_width+0x30>
     default:
       return 0U;
- 80008be:	2300      	movs	r3, #0
+ 80008bc:	2300      	movs	r3, #0
   }
 }
- 80008c0:	4618      	mov	r0, r3
- 80008c2:	370c      	adds	r7, #12
- 80008c4:	46bd      	mov	sp, r7
- 80008c6:	f85d 7b04 	ldr.w	r7, [sp], #4
- 80008ca:	4770      	bx	lr
+ 80008be:	4618      	mov	r0, r3
+ 80008c0:	370c      	adds	r7, #12
+ 80008c2:	46bd      	mov	sp, r7
+ 80008c4:	f85d 7b04 	ldr.w	r7, [sp], #4
+ 80008c8:	4770      	bx	lr
+	...
 
 080008cc <GH_TopologyRuntime_Clear>:
 
@@ -4375,7 +4375,7 @@ static bool topo_validate_semantics(const uint8_t *payload,
     point_words = topo_point_word_width(point_i.point_type);
  80022e8:	f897 30c4 	ldrb.w	r3, [r7, #196]	@ 0xc4
  80022ec:	4618      	mov	r0, r3
- 80022ee:	f7fe facf 	bl	8000890 <topo_point_word_width>
+ 80022ee:	f7fe face 	bl	800088e <topo_point_word_width>
  80022f2:	4603      	mov	r3, r0
  80022f4:	f887 3142 	strb.w	r3, [r7, #322]	@ 0x142
     if ((point_words == 0U) ||

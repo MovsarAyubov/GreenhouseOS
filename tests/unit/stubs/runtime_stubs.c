@@ -15,6 +15,8 @@ typedef struct
   int32_t lastSendErr;
 } modbusTcpDiag_t;
 
+typedef modbusTcpDiag_t gh_modbus_tcp_diag_t;
+
 UART_HandleTypeDef huart2 = {0};
 
 osMessageQueueId_t qConfigApplyHandle = (osMessageQueueId_t)0x2;
@@ -152,4 +154,14 @@ void ModbusTcpGetDiag(modbusTcpDiag_t *diagOut)
 
 void ModbusTcpClearDiag(void)
 {
+}
+
+void GH_ModbusTcpServer_GetDiag(gh_modbus_tcp_diag_t *diagOut)
+{
+  ModbusTcpGetDiag(diagOut);
+}
+
+void GH_ModbusTcpServer_ClearDiag(void)
+{
+  ModbusTcpClearDiag();
 }
