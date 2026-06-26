@@ -140,7 +140,7 @@ func NewMockTransport(topology config.Topology) *MockTransport {
 			continue
 		}
 		regs[module.SlaveID][req.StartReg+point.RegOffset] = uint16(point.PublishIndex + 100)
-		if module.ModuleType == config.ModuleTypeZone && point.RegOffset <= 18 {
+		if point.RegOffset <= 18 {
 			regs[module.SlaveID][400+point.RegOffset] = uint16(point.PublishIndex + 100)
 		}
 	}

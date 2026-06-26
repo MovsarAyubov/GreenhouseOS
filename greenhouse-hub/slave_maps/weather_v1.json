@@ -1,0 +1,79 @@
+{
+  "schema": "greenhouse_slave_map_v1",
+  "name": "Weather Station Map v1",
+  "device_type": 2,
+  "device_type_name": "Weather Station",
+  "modbus_map_version": 1,
+  "addressing": "zero_based_holding_register",
+  "deprecated_aliases_supported": false,
+  "ranges": [
+    {"from": 0, "to": 99, "purpose": "common identity/status/diagnostics"},
+    {"from": 100, "to": 399, "purpose": "reserved/common service"},
+    {"from": 400, "to": 699, "purpose": "weather telemetry"},
+    {"from": 700, "to": 999, "purpose": "calculated state/statistics"},
+    {"from": 1000, "to": 1299, "purpose": "setpoints/commands from hub"},
+    {"from": 1300, "to": 1599, "purpose": "schedules/profiles"},
+    {"from": 1600, "to": 1799, "purpose": "shared external data"},
+    {"from": 1800, "to": 1999, "purpose": "advanced diagnostics/debug"}
+  ],
+  "common": [
+    {"reg": 0, "key": "device_type", "type": "u16", "access": "r"},
+    {"reg": 1, "key": "firmware_version", "type": "u16", "access": "r", "format": "major << 8 | minor"},
+    {"reg": 2, "key": "modbus_map_version", "type": "u16", "access": "r"},
+    {"reg": 3, "key": "zone_id", "type": "u16", "access": "r", "note": "65535 for shared weather station"},
+    {"reg": 4, "key": "capability_low", "type": "u16", "access": "r"},
+    {"reg": 5, "key": "capability_high", "type": "u16", "access": "r"},
+    {"reg": 6, "key": "status_bits", "type": "u16", "access": "r"},
+    {"reg": 7, "key": "fault_code", "type": "u16", "access": "r"},
+    {"reg": 8, "key": "uptime_hi", "type": "u16", "access": "r"},
+    {"reg": 9, "key": "uptime_lo", "type": "u16", "access": "r"},
+    {"reg": 10, "key": "last_master_age_s", "type": "u16", "access": "r", "unit": "s"},
+    {"reg": 11, "key": "restart_counter", "type": "u16", "access": "r"},
+    {"reg": 12, "key": "config_version", "type": "u16", "access": "r"},
+    {"reg": 13, "key": "serial_hi", "type": "u16", "access": "r"},
+    {"reg": 14, "key": "serial_lo", "type": "u16", "access": "r"},
+    {"reg": 15, "key": "identity_crc", "type": "u16", "access": "r", "default": 0},
+    {"reg": 32, "key": "diag_timeout_count", "type": "u16", "access": "r"},
+    {"reg": 33, "key": "diag_crc_error_count", "type": "u16", "access": "r"},
+    {"reg": 34, "key": "diag_exception_count", "type": "u16", "access": "r"},
+    {"reg": 35, "key": "diag_last_exception", "type": "u16", "access": "r"},
+    {"reg": 36, "key": "diag_rx_count_hi", "type": "u16", "access": "r"},
+    {"reg": 37, "key": "diag_rx_count_lo", "type": "u16", "access": "r"},
+    {"reg": 38, "key": "diag_tx_count_hi", "type": "u16", "access": "r"},
+    {"reg": 39, "key": "diag_tx_count_lo", "type": "u16", "access": "r"}
+  ],
+  "capabilities": [
+    {"bit": 0, "key": "outdoor_temperature"},
+    {"bit": 1, "key": "outdoor_humidity"},
+    {"bit": 2, "key": "wind_speed"},
+    {"bit": 3, "key": "wind_direction"},
+    {"bit": 4, "key": "rain_flag"},
+    {"bit": 5, "key": "solar_radiation"},
+    {"bit": 6, "key": "barometric_pressure"},
+    {"bit": 7, "key": "dew_point"},
+    {"bit": 8, "key": "weather_status"}
+  ],
+  "telemetry": [
+    {"reg": 400, "key": "out_temp", "type": "s16", "scale": 0.1, "unit": "degC", "access": "r", "capability_bit": 0},
+    {"reg": 401, "key": "out_humidity", "type": "u16", "scale": 0.1, "unit": "%RH", "access": "r", "capability_bit": 1},
+    {"reg": 402, "key": "wind_speed", "type": "u16", "scale": 0.1, "unit": "m/s", "access": "r", "capability_bit": 2},
+    {"reg": 403, "key": "wind_dir", "type": "u16", "scale": 1, "unit": "deg", "access": "r", "capability_bit": 3},
+    {"reg": 404, "key": "rain_flag", "type": "u16", "access": "r", "capability_bit": 4},
+    {"reg": 405, "key": "solar_rad", "type": "u16", "scale": 1, "unit": "W/m2", "access": "r", "capability_bit": 5},
+    {"reg": 406, "key": "baro_press", "type": "u16", "scale": 0.1, "unit": "hPa", "access": "r", "capability_bit": 6},
+    {"reg": 407, "key": "dew_point", "type": "s16", "scale": 0.1, "unit": "degC", "access": "r", "capability_bit": 7},
+    {"reg": 408, "key": "weather_status_bits", "type": "u16", "access": "r", "capability_bit": 8}
+  ],
+  "setpoints_commands": [],
+  "schedules_profiles": [],
+  "shared_external_data": [],
+  "advanced_diagnostics": [],
+  "write_policy": {
+    "writable_ranges": [],
+    "read_only_ranges": [
+      {"from": 0, "to": 99},
+      {"from": 400, "to": 999},
+      {"from": 1000, "to": 1999}
+    ]
+  }
+}
