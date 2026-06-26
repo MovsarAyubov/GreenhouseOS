@@ -34,6 +34,7 @@ func (h *Handler) routes() {
 	h.mux.HandleFunc("GET /api/health", h.health)
 	h.mux.HandleFunc("GET /api/state", h.state)
 	h.mux.HandleFunc("GET /api/slaves", h.slaves)
+	h.mux.HandleFunc("GET /api/slaves/{slave_id}/setpoints", h.slaveSetpoints)
 	h.mux.HandleFunc("GET /api/slave-maps", h.slaveMaps)
 	h.mux.HandleFunc("GET /api/points", h.points)
 	h.mux.HandleFunc("POST /api/setpoints", h.setpoints)
@@ -51,6 +52,21 @@ func (h *Handler) state(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) slaves(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, h.service.Snapshot().Slaves)
+}
+
+func (h *Handler) slaveSetpoints(w http.ResponseWriter, r *http.Request) {
+	slaveID, ok := parsePathUint8(r.PathValue("slave_id"))
+	if !ok || slaveID == 0 {
+		writeError(w, http.StatusBadRequest, "invalid slave_id")
+		return
+	}
+	includeUnsupported := parseBoolQuery(r.URL.Query().Get("include_unsupported"))
+	catalog, err := h.service.SetpointsForSlave(r.Context(), slaveID, includeUnsupported)
+	if err != nil {
+		writeError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, catalog)
 }
 
 func (h *Handler) slaveMaps(w http.ResponseWriter, r *http.Request) {
@@ -94,6 +110,23 @@ func parseUint8(value string) uint8 {
 		return 0
 	}
 	return uint8(parsed)
+}
+
+func parsePathUint8(value string) (uint8, bool) {
+	parsed, err := strconv.ParseUint(value, 10, 8)
+	if err != nil {
+		return 0, false
+	}
+	return uint8(parsed), true
+}
+
+func parseBoolQuery(value string) bool {
+	switch value {
+	case "1", "true", "TRUE", "yes", "YES", "on", "ON":
+		return true
+	default:
+		return false
+	}
 }
 
 func writeJSON(w http.ResponseWriter, status int, payload any) {

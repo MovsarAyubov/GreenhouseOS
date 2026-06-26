@@ -53,11 +53,19 @@ sudo usermod -aG dialout greenhouse
 GET  /api/health
 GET  /api/state
 GET  /api/slaves
+GET  /api/slaves/{slave_id}/setpoints
 GET  /api/slave-maps
 GET  /api/points
 GET  /api/scan
 POST /api/scan?from=1&to=40
 POST /api/setpoints
+```
+
+Operator-facing setpoint metadata for one slave:
+
+```text
+GET /api/slaves/1/setpoints
+GET /api/slaves/1/setpoints?include_unsupported=1
 ```
 
 Primary setpoint request, by key from the slave-map catalog:
@@ -70,13 +78,13 @@ Primary setpoint request, by key from the slave-map catalog:
 }
 ```
 
-Grouped write request:
+Another setpoint request:
 
 ```json
 {
   "slave_id": 1,
-  "key": "water_setpoints",
-  "values": [220, 220, 230, 210]
+  "key": "water_rail_setpoint",
+  "value": 220
 }
 ```
 

@@ -235,18 +235,227 @@ slave_maps/
 
 `command_token` запускает обработку блока `1000..1014`, если значение новое и не равно `0`.
 
-Расширения текущей Zone Slave прошивки:
+Расширения текущей Zone Slave прошивки не являются алиасами старых адресов
+`0..336`. Старый документ использован только как источник семантики.
+Legacy-регистры из старой карты не публикуются в v1.
 
-| Range | Name | Type / scale | Access |
+#### Water setpoints, `1020..1023`
+
+| Reg | Name | Type / scale | Access |
 |---:|---|---|---|
-| 1020..1023 | `water_setpoints` | x0.1 degC | R/W |
-| 1030..1069 | `windows_and_greenhouse_settings` | u16 blocks | R/W |
-| 1100..1111 | `heating_controls` | u16 blocks | R/W |
-| 1130..1154 | `curtain_controls` | u16 blocks | R/W |
-| 1160..1161 | `greenhouse_air_targets` | x0.1 degC / x0.1 %RH | R/W |
-| 1170..1196 | `co2_controls_and_sensor_inputs` | u16 blocks | R/W |
-| 1210..1219 | `circulation_controls` | u16 blocks | R/W |
-| 1230..1237 | `side_curtain_controls` | u16 blocks | R/W |
+| 1020 | `water_rail_setpoint` | s16 x0.1 degC | R/W |
+| 1021 | `water_grow_setpoint` | s16 x0.1 degC | R/W |
+| 1022 | `water_upper_setpoint` | s16 x0.1 degC | R/W |
+| 1023 | `water_undertray_setpoint` | s16 x0.1 degC | R/W |
+
+#### Window control/runtime, `1030..1083`
+
+| Reg | Name | Type / scale | Access |
+|---:|---|---|---|
+| 1030 | `windows_ctrl_mode` | u16, `0=AUTO`, `1=MANUAL` | R/W |
+| 1031 | `windows_force_safe_cmd` | u16 | R/W |
+| 1032 | `windows_temp_setpoint` | s16 x0.1 degC | R/W |
+| 1033 | `windows_safe_min_percent` | u16 x0.1 % | R/W |
+| 1035 | `windows_wind_storm` | u16 x0.1 m/s | R/W |
+| 1036 | `windows_wind_recover` | u16 x0.1 m/s | R/W |
+| 1037 | `window_a_azimuth_deg` | u16 deg | R/W |
+| 1038 | `windows_wind_sector_half_width_deg` | u16 deg | R/W |
+| 1039 | `windows_temp_step_c` | s16 x0.1 degC | R/W |
+| 1040 | `windows_temp_step_hyst_c` | s16 x0.1 degC | R/W |
+| 1041 | `rll400_target_hyst_percent` | u16 x0.1 % | R/W |
+| 1042 | `actuator_motion_delta_percent` | u16 x0.1 % | R/W |
+| 1043 | `actuator_no_motion_timeout_ms` | u16 ms, `0` disables no-motion fault | R/W |
+| 1044 | `window_a_fault_reset_token` | u16 | R/W |
+| 1045 | `window_b_fault_reset_token` | u16 | R/W |
+| 1046 | `windows_status_bits` | u16 | R |
+| 1047 | `window_a_status_bits` | u16 | R |
+| 1048 | `window_b_status_bits` | u16 | R |
+| 1049 | `window_a_fault_code` | u16 | R |
+| 1050 | `window_b_fault_code` | u16 | R |
+| 1051 | `air_temp_sensor_status` | u16 | R |
+| 1052 | `window_a_local_manual_active` | u16 | R |
+| 1053 | `window_b_local_manual_active` | u16 | R |
+| 1054 | `windows_auto_algo_mode` | u16, `0=TEMP`, `1=HUMIDITY` | R/W |
+| 1055 | `windows_hum_setpoint` | u16 x0.1 %RH | R/W |
+| 1056 | `windows_hum_step` | u16 x0.1 %RH | R/W |
+| 1057 | `windows_hum_step_hyst` | u16 x0.1 %RH | R/W |
+| 1058 | `windows_cold_close_delta` | s16 x0.1 degC | R/W |
+| 1059 | `windows_cold_close_hyst` | s16 x0.1 degC | R/W |
+| 1060 | `windows_windward_min_percent` | u16 x0.1 % | R/W |
+| 1061 | `windows_windward_max_percent` | u16 x0.1 % | R/W |
+| 1062 | `windows_windward_speed_threshold` | u16 x0.1 m/s | R/W |
+| 1063 | `windows_windward_reduction_percent_per_ms` | u16 x0.1 %/m/s | R/W |
+| 1064 | `windows_leeward_min_percent` | u16 x0.1 % | R/W |
+| 1065 | `windows_leeward_max_percent` | u16 x0.1 % | R/W |
+| 1066 | `windows_leeward_speed_threshold` | u16 x0.1 m/s | R/W |
+| 1067 | `windows_leeward_reduction_percent_per_ms` | u16 x0.1 %/m/s | R/W |
+| 1068 | `windows_windward_lag_percent` | u16 x0.1 % | R/W |
+| 1069 | `windows_rain_mode` | u16, `0=OFF`, `1=WINDWARD` | R/W |
+| 1070 | `windows_rain_windward_percent` | u16 x0.1 % | R/W |
+| 1071 | `windows_weather_stale_policy` | u16, `0=CLOSE_SAFE`, `1=IGNORE` | R/W |
+| 1072 | `windows_base_target_a` | u16 x0.1 % | R |
+| 1073 | `windows_base_target_b` | u16 x0.1 % | R |
+| 1074 | `windows_effective_target_a` | u16 x0.1 % | R |
+| 1075 | `windows_effective_target_b` | u16 x0.1 % | R |
+| 1076 | `windows_active_protection_bits` | u16 | R |
+| 1077 | `windows_windward_side` | u16, `0=NONE`, `1=A`, `2=B`, `3=BOTH_UNKNOWN` | R |
+| 1078 | `windows_temp_step_target_percent` | u16 x0.1 % | R/W |
+| 1080 | `windows_hum_step_target_percent` | u16 x0.1 % | R/W |
+| 1082 | `windows_weather_stale_timeout_ms` | u16 ms | R/W |
+| 1083 | `windows_weather_source_age_s` | u16 s | R |
+
+#### Heating control/runtime, `1100..1117`
+
+| Reg | Name | Type / scale | Access |
+|---:|---|---|---|
+| 1100 | `heating_ctrl_mode` | u16, `0=AUTO`, `1=OFF`, `2=MANUAL` | R/W |
+| 1101 | `heating_air_setpoint` | s16 x0.1 degC | R/W |
+| 1102 | `heating_air_hyst` | s16 x0.1 degC | R/W |
+| 1103 | `heating_stage_delta_1` | s16 x0.1 degC | R/W |
+| 1104 | `heating_stage_delta_2` | s16 x0.1 degC | R/W |
+| 1105 | `heating_stage_delta_3` | s16 x0.1 degC | R/W |
+| 1106 | `heating_stage_delta_4` | s16 x0.1 degC | R/W |
+| 1107 | `heating_min_on_s` | u16 s | R/W |
+| 1108 | `heating_min_off_s` | u16 s | R/W |
+| 1109 | `heating_manual_pump_mask` | u16 | R/W |
+| 1110 | `heating_manual_valve_open_mask` | u16 | R/W |
+| 1111 | `heating_manual_valve_close_mask` | u16 | R/W |
+| 1112 | `heating_status_bits` | u16 | R |
+| 1113 | `heating_active_stage` | u16 | R |
+| 1114 | `heating_pump_mask` | u16 | R |
+| 1115 | `heating_valve_open_mask` | u16 | R |
+| 1116 | `heating_valve_close_mask` | u16 | R |
+| 1117 | `heating_sensor_status_bits` | u16 | R |
+
+#### Curtain control/runtime
+
+| Reg | Name | Type / scale | Access |
+|---:|---|---|---|
+| 1130 | `curtain_ctrl_mode` | u16, `0=AUTO`, `1=MANUAL`, `2=OFF` | R/W |
+| 1131 | `curtain_manual_target` | u16 x0.1 % | R/W |
+| 1132 | `curtain_schedule_start_hhmm` | u16 HHMM | R/W |
+| 1133 | `curtain_schedule_end_hhmm` | u16 HHMM | R/W |
+| 1134 | `curtain_outside_target` | u16 x0.1 % | R/W |
+| 1135 | `curtain_min_position` | u16 x0.1 % | R/W |
+| 1136 | `curtain_max_position` | u16 x0.1 % | R/W |
+| 1137 | `curtain_position_hyst` | u16 x0.1 % | R/W |
+| 1138 | `curtain_radiation_threshold` | u16 W/m2 | R/W |
+| 1139 | `curtain_radiation_step_wm2` | u16 W/m2 | R/W |
+| 1140 | `curtain_radiation_step_percent` | u16 x0.1 % | R/W |
+| 1141 | `curtain_radiation_hyst` | u16 W/m2 | R/W |
+| 1142 | `curtain_cold_delta` | s16 x0.1 degC | R/W |
+| 1143 | `curtain_cold_hyst` | s16 x0.1 degC | R/W |
+| 1144 | `curtain_cold_target` | u16 x0.1 % | R/W |
+| 1145 | `curtain_heat_delta` | s16 x0.1 degC | R/W |
+| 1146 | `curtain_heat_hyst` | s16 x0.1 degC | R/W |
+| 1147 | `curtain_heat_target` | u16 x0.1 % | R/W |
+| 1148 | `curtain_hum_low_delta` | u16 x0.1 %RH | R/W |
+| 1149 | `curtain_hum_low_hyst` | u16 x0.1 %RH | R/W |
+| 1150 | `curtain_hum_low_target` | u16 x0.1 % | R/W |
+| 1151 | `curtain_hum_high_delta` | u16 x0.1 %RH | R/W |
+| 1152 | `curtain_hum_high_hyst` | u16 x0.1 %RH | R/W |
+| 1153 | `curtain_hum_high_target` | u16 x0.1 % | R/W |
+| 1154 | `curtain_fault_reset_token` | u16 | R/W |
+| 700 | `curtain_target` | u16 x0.1 % | R |
+| 701 | `curtain_base_target` | u16 x0.1 % | R |
+| 702 | `curtain_current_ma` | u16 x0.1 mA | R |
+| 703 | `curtain_status_bits` | u16 | R |
+| 704 | `curtain_reason_bits` | u16 | R |
+| 705 | `curtain_position_status_bits` | u16 | R |
+| 706 | `curtain_fault_code` | u16 | R |
+
+#### Global greenhouse targets, `1160..1161`
+
+| Reg | Name | Type / scale | Access |
+|---:|---|---|---|
+| 1160 | `air_temp_target` | s16 x0.1 degC | R/W |
+| 1161 | `air_hum_target` | u16 x0.1 %RH | R/W |
+
+#### CO2 control/runtime, `1170..1202`
+
+| Reg | Name | Type / scale | Access |
+|---:|---|---|---|
+| 1170 | `co2_measured_ppm` | u16 ppm | R |
+| 1171 | `co2_sensor_valid` | u16 | R |
+| 1172 | `co2_ctrl_mode` | u16, `0=AUTO`, `1=OFF`, `2=MANUAL` | R/W |
+| 1173 | `co2_manual_outputs` | u16 | R/W |
+| 1174 | `co2_schedule_start_hhmm` | u16 HHMM | R/W |
+| 1175 | `co2_schedule_end_hhmm` | u16 HHMM | R/W |
+| 1176 | `co2_low_light_threshold_wm2` | u16 W/m2 | R/W |
+| 1177 | `co2_mid_light_threshold_wm2` | u16 W/m2 | R/W |
+| 1178 | `co2_high_light_threshold_wm2` | u16 W/m2 | R/W |
+| 1179 | `co2_low_light_target_ppm` | u16 ppm | R/W |
+| 1180 | `co2_mid_light_target_ppm` | u16 ppm | R/W |
+| 1181 | `co2_high_light_target_ppm` | u16 ppm | R/W |
+| 1182 | `co2_vent_limit_low_percent` | u16 x0.1 % | R/W |
+| 1183 | `co2_vent_limit_high_percent` | u16 x0.1 % | R/W |
+| 1184 | `co2_vent_cutoff_percent` | u16 x0.1 % | R/W |
+| 1185 | `co2_dosing_hyst_ppm` | u16 ppm | R/W |
+| 1186 | `co2_max_safe_ppm` | u16 ppm | R/W |
+| 1187 | `co2_max_dosing_time_s` | u16 s | R/W |
+| 1188 | `co2_min_pause_time_s` | u16 s | R/W |
+| 1189 | `co2_no_rise_check_time_s` | u16 s | R/W |
+| 1190 | `co2_no_rise_min_delta_ppm` | u16 ppm | R/W |
+| 1191 | `co2_temp_high_delta` | s16 x0.1 degC | R/W |
+| 1192 | `co2_temp_critical_delta` | s16 x0.1 degC | R/W |
+| 1193 | `co2_hum_high_delta` | u16 x0.1 %RH | R/W |
+| 1194 | `co2_external_alarm` | u16 | R |
+| 1195 | `co2_target_ppm` | u16 ppm | R |
+| 1196 | `co2_effective_target_ppm` | u16 ppm | R |
+| 1197 | `co2_status_bits` | u16 | R |
+| 1198 | `co2_reason_bits` | u16 | R |
+| 1199 | `co2_protection_bits` | u16 | R |
+| 1200 | `co2_fault_code` | u16 | R |
+| 1201 | `co2_dosing_elapsed_s` | u16 s | R |
+| 1202 | `co2_fault_reset_token` | u16 | R/W |
+
+#### Side curtain minimal block, `1230..1237`
+
+| Reg | Name | Type / scale | Access |
+|---:|---|---|---|
+| 1230 | `side_curtain_ctrl_mode` | u16 | R/W |
+| 1231 | `side_curtain_manual_target` | u16 x0.1 % | R/W |
+| 1232 | `side_curtain_schedule_start_hhmm` | u16 HHMM | R/W |
+| 1233 | `side_curtain_schedule_end_hhmm` | u16 HHMM | R/W |
+| 1234 | `side_curtain_min_position` | u16 x0.1 % | R/W |
+| 1235 | `side_curtain_max_position` | u16 x0.1 % | R/W |
+| 1236 | `side_curtain_target` | u16 x0.1 % | R |
+| 1237 | `side_curtain_status_bits` | u16 | R |
+
+#### Circulation fan control/runtime, `1240..1266`
+
+Диапазон начинается с `1240`, чтобы не пересекаться с минимальным блоком
+боковой шторы `1230..1237`.
+
+| Reg | Name | Type / scale | Access |
+|---:|---|---|---|
+| 1240 | `circ_ctrl_mode` | u16, `0=AUTO`, `1=OFF`, `2=MANUAL` | R/W |
+| 1241 | `circ_manual_fan_mask` | u16 | R/W |
+| 1242 | `circ_available_fan_mask` | u16 | R/W |
+| 1243 | `circ_schedule_start_hhmm` | u16 HHMM | R/W |
+| 1244 | `circ_schedule_end_hhmm` | u16 HHMM | R/W |
+| 1245 | `circ_co2_fan_mask` | u16 | R/W |
+| 1246 | `circ_heating_fan_mask` | u16 | R/W |
+| 1247 | `circ_humidity_fan_mask` | u16 | R/W |
+| 1248 | `circ_day_fan_mask` | u16 | R/W |
+| 1249 | `circ_night_fan_mask` | u16 | R/W |
+| 1250 | `circ_vent_limited_fan_mask` | u16 | R/W |
+| 1251 | `circ_vent_limit_percent` | u16 x0.1 % | R/W |
+| 1252 | `circ_vent_cutoff_percent` | u16 x0.1 % | R/W |
+| 1253 | `circ_hum_high_delta` | u16 x0.1 %RH | R/W |
+| 1254 | `circ_day_cycle_on_s` | u16 s | R/W |
+| 1255 | `circ_day_cycle_off_s` | u16 s | R/W |
+| 1256 | `circ_night_cycle_on_s` | u16 s | R/W |
+| 1257 | `circ_night_cycle_off_s` | u16 s | R/W |
+| 1258 | `circ_hum_cycle_on_s` | u16 s | R/W |
+| 1259 | `circ_hum_cycle_off_s` | u16 s | R/W |
+| 1260 | `circ_min_on_s` | u16 s | R/W |
+| 1261 | `circ_min_off_s` | u16 s | R/W |
+| 1262 | `circ_output_fan_mask` | u16 | R |
+| 1263 | `circ_status_bits` | u16 | R |
+| 1264 | `circ_reason_bits` | u16 | R |
+| 1265 | `circ_protection_bits` | u16 | R |
+| 1266 | `circ_requested_fan_mask` | u16 | R |
 
 ### 7.4 Light schedules/config
 
@@ -265,6 +474,13 @@ slave_maps/
 | 1309 | `LIGHT_R2_THRESHOLD_WM2` | u16 W/m2 | R/W |
 | 1311 | `LIGHT_R2_DLI_OFF_LIMIT_JCM2` | u16 J/cm2 | R/W |
 | 1312 | `LIGHT_HYST_SEC` | u16 seconds | R/W |
+
+Runtime:
+
+| Reg | Name | Type / scale | Access |
+|---:|---|---|---|
+| 707 | `light_status_bits` | u16 | R |
+| 1613 | `light_current_dli_jcm2` | u16 J/cm2 | R/W |
 
 Полный `FC16(1300, 13)` применяет light config сразу. Частичные записи применяются после settle-паузы `250 ms`.
 
