@@ -14,12 +14,14 @@ import (
 	"greenhouse-hub/internal/config"
 	"greenhouse-hub/internal/hub"
 	"greenhouse-hub/internal/modbusrtu"
+	"greenhouse-hub/internal/slavemap"
 )
 
 func main() {
 	var (
 		topologyPath  = flag.String("topology", "../topology/one_zone_one_weather_all_points_schedule_topology.json", "path to topology_config_v2 JSON")
 		semanticsPath = flag.String("semantics", "../topology/one_zone_one_weather_all_points_schedule_semantics.json", "path to scada_semantic_mapping_v1 JSON")
+		slaveMapsDir  = flag.String("slave-maps", "slave_maps", "path to slave map catalog directory")
 		listenAddr    = flag.String("listen", ":8080", "HTTP listen address")
 		serialDevice  = flag.String("serial", "/dev/ttyUSB0", "RS485 serial device")
 		baudRate      = flag.Int("baud", 115200, "RS485 baud rate")
@@ -34,6 +36,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("load config: %v", err)
 	}
+	maps, err := slavemap.LoadCatalog(*slaveMapsDir)
+	if err != nil {
+		log.Fatalf("load slave maps: %v", err)
+	}
+	log.Printf("loaded %d slave map(s) from %s", len(maps.List()), *slaveMapsDir)
 
 	var transport modbusrtu.Transport
 	if *mock {
@@ -51,7 +58,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	service := hub.NewService(cfg, transport, hub.Options{
+	service := hub.NewService(cfg, maps, transport, hub.Options{
 		ScanFrom: uint8(*scanFrom),
 		ScanTo:   uint8(*scanTo),
 	})

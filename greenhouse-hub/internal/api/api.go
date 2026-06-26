@@ -34,6 +34,7 @@ func (h *Handler) routes() {
 	h.mux.HandleFunc("GET /api/health", h.health)
 	h.mux.HandleFunc("GET /api/state", h.state)
 	h.mux.HandleFunc("GET /api/slaves", h.slaves)
+	h.mux.HandleFunc("GET /api/slave-maps", h.slaveMaps)
 	h.mux.HandleFunc("GET /api/points", h.points)
 	h.mux.HandleFunc("POST /api/setpoints", h.setpoints)
 	h.mux.HandleFunc("POST /api/scan", h.scan)
@@ -50,6 +51,10 @@ func (h *Handler) state(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) slaves(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, h.service.Snapshot().Slaves)
+}
+
+func (h *Handler) slaveMaps(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, h.service.SlaveMaps())
 }
 
 func (h *Handler) points(w http.ResponseWriter, r *http.Request) {

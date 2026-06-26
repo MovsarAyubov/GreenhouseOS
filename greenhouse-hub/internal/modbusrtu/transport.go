@@ -129,14 +129,6 @@ func NewMockTransport(topology config.Topology) *MockTransport {
 		if regs[module.SlaveID] == nil {
 			regs[module.SlaveID] = make(map[uint16]uint16)
 		}
-		regs[module.SlaveID][0] = uint16(module.ModuleType)
-		regs[module.SlaveID][1] = 1
-		regs[module.SlaveID][2] = uint16(topology.VerMinor)
-		regs[module.SlaveID][3] = module.ZoneID
-		regs[module.SlaveID][4] = uint16(module.CapabilityMask & 0xFFFF)
-		regs[module.SlaveID][5] = uint16(module.CapabilityMask >> 16)
-		regs[module.SlaveID][6] = 1
-		regs[module.SlaveID][7] = 0
 	}
 	for _, point := range topology.Points {
 		module, ok := findModule(topology.Modules, point.ModuleID)
@@ -148,6 +140,34 @@ func NewMockTransport(topology config.Topology) *MockTransport {
 			continue
 		}
 		regs[module.SlaveID][req.StartReg+point.RegOffset] = uint16(point.PublishIndex + 100)
+		if module.ModuleType == config.ModuleTypeZone && point.RegOffset <= 18 {
+			regs[module.SlaveID][400+point.RegOffset] = uint16(point.PublishIndex + 100)
+		}
+	}
+	for _, module := range topology.Modules {
+		if module.SlaveID == 0 {
+			continue
+		}
+		deviceType := uint16(module.ModuleType)
+		if module.ModuleType == config.ModuleTypeZone {
+			deviceType = 1
+		}
+		regs[module.SlaveID][0] = deviceType
+		regs[module.SlaveID][1] = 1
+		regs[module.SlaveID][2] = 1
+		regs[module.SlaveID][3] = module.ZoneID
+		regs[module.SlaveID][4] = uint16(module.CapabilityMask & 0xFFFF)
+		regs[module.SlaveID][5] = uint16(module.CapabilityMask >> 16)
+		regs[module.SlaveID][6] = 1
+		regs[module.SlaveID][7] = 0
+		regs[module.SlaveID][8] = 0
+		regs[module.SlaveID][9] = 1
+		regs[module.SlaveID][10] = 0
+		regs[module.SlaveID][11] = 0
+		regs[module.SlaveID][12] = 1
+		regs[module.SlaveID][13] = 0
+		regs[module.SlaveID][14] = uint16(module.SlaveID)
+		regs[module.SlaveID][15] = 0
 	}
 	return &MockTransport{regs: regs}
 }

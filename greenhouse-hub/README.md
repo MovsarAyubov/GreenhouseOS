@@ -25,6 +25,7 @@ Mock mode does not require RS485 hardware:
   --mock \
   --topology ../topology/one_zone_one_weather_all_points_schedule_topology.json \
   --semantics ../topology/one_zone_one_weather_all_points_schedule_semantics.json \
+  --slave-maps ./slave_maps \
   --listen :8080
 ```
 
@@ -36,6 +37,7 @@ Mock mode does not require RS485 hardware:
   --baud 115200 \
   --topology /etc/greenhouse/topology.json \
   --semantics /etc/greenhouse/semantics.json \
+  --slave-maps /etc/greenhouse/slave_maps \
   --listen 0.0.0.0:8080
 ```
 
@@ -51,13 +53,34 @@ sudo usermod -aG dialout greenhouse
 GET  /api/health
 GET  /api/state
 GET  /api/slaves
+GET  /api/slave-maps
 GET  /api/points
 GET  /api/scan
 POST /api/scan?from=1&to=40
 POST /api/setpoints
 ```
 
-Setpoint request:
+Primary setpoint request, by key from the slave-map catalog:
+
+```json
+{
+  "slave_id": 1,
+  "key": "weather_out_temp",
+  "value": -52
+}
+```
+
+Grouped write request:
+
+```json
+{
+  "slave_id": 1,
+  "key": "water_setpoints",
+  "values": [220, 220, 230, 210]
+}
+```
+
+Legacy topology command-profile writes are still accepted:
 
 ```json
 {
@@ -68,7 +91,8 @@ Setpoint request:
 }
 ```
 
-Autoscan reads holding registers `0..7` from each address:
+Autoscan reads holding registers `0..15` from each address and matches
+`device_type + modbus_map_version` against the local slave-map catalog:
 
 ```text
 0 device_type
@@ -79,6 +103,12 @@ Autoscan reads holding registers `0..7` from each address:
 5 capability_high
 6 status
 7 fault_code
+8..9 uptime seconds hi/lo
+10 last_master_age_s
+11 restart_counter
+12 config_version
+13..14 serial hi/lo
+15 identity_crc
 ```
 
 ## Current Scope
@@ -86,10 +116,13 @@ Autoscan reads holding registers `0..7` from each address:
 Implemented:
 
 - topology and semantics loading;
+- slave-map catalog loading;
 - single Modbus operation queue;
-- periodic polling from topology requests;
-- state cache for SCADA;
-- setpoint routing through topology command profiles;
+- expected slave list from topology;
+- periodic polling from slave-map telemetry registers;
+- state cache for SCADA with decoded slave-map keys;
+- setpoint routing by slave-map key with write-policy checks;
+- legacy setpoint routing through topology command profiles;
 - identity autoscan;
 - mock transport for development.
 
