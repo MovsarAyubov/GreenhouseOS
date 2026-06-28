@@ -23,7 +23,7 @@ Master сам:
 Это ТЗ соответствует текущему контракту в репозитории:
 - firmware map version: `4`
 - topology profile: `one_zone`
-- topology generation: `107`
+- topology generation: `121`
 - zone module: `module_id=101`
 - zone slave: `slave_id=1`
 - command profile: `cmd_profile_id=5001`
@@ -88,19 +88,19 @@ Command ingress window master:
 
 | Payload word | Назначение | Slave reg |
 |---|---|---:|
-| `PAYLOAD[0]` | `LIGHT_RELAY_1_ENABLE` | `110` |
-| `PAYLOAD[1]` | `LIGHT_RELAY_1_ON_HHMM` | `111` |
-| `PAYLOAD[2]` | `LIGHT_RELAY_1_OFF_HHMM` | `112` |
-| `PAYLOAD[3]` | `LIGHT_RELAY_1_THRESHOLD_WM2` | `113` |
-| `PAYLOAD[4]` | `LIGHT_RELAY_1_RESERVED` | `114` |
-| `PAYLOAD[5]` | `LIGHT_RELAY_1_DLI_LIMIT` | `115` |
-| `PAYLOAD[6]` | `LIGHT_RELAY_2_ENABLE` | `116` |
-| `PAYLOAD[7]` | `LIGHT_RELAY_2_ON_HHMM` | `117` |
-| `PAYLOAD[8]` | `LIGHT_RELAY_2_OFF_HHMM` | `118` |
-| `PAYLOAD[9]` | `LIGHT_RELAY_2_THRESHOLD_WM2` | `119` |
-| `PAYLOAD[10]` | `LIGHT_RELAY_2_RESERVED` | `120` |
-| `PAYLOAD[11]` | `LIGHT_RELAY_2_DLI_LIMIT` | `121` |
-| `PAYLOAD[12]` | `LIGHT_HYST_SEC` | `122` |
+| `PAYLOAD[0]` | `LIGHT_RELAY_1_ENABLE` | `1300` |
+| `PAYLOAD[1]` | `LIGHT_RELAY_1_ON_HHMM` | `1301` |
+| `PAYLOAD[2]` | `LIGHT_RELAY_1_OFF_HHMM` | `1302` |
+| `PAYLOAD[3]` | `LIGHT_RELAY_1_THRESHOLD_WM2` | `1303` |
+| `PAYLOAD[4]` | `LIGHT_RELAY_1_RESERVED` | `1304` |
+| `PAYLOAD[5]` | `LIGHT_RELAY_1_DLI_LIMIT` | `1305` |
+| `PAYLOAD[6]` | `LIGHT_RELAY_2_ENABLE` | `1306` |
+| `PAYLOAD[7]` | `LIGHT_RELAY_2_ON_HHMM` | `1307` |
+| `PAYLOAD[8]` | `LIGHT_RELAY_2_OFF_HHMM` | `1308` |
+| `PAYLOAD[9]` | `LIGHT_RELAY_2_THRESHOLD_WM2` | `1309` |
+| `PAYLOAD[10]` | `LIGHT_RELAY_2_RESERVED` | `1310` |
+| `PAYLOAD[11]` | `LIGHT_RELAY_2_DLI_LIMIT` | `1311` |
+| `PAYLOAD[12]` | `LIGHT_HYST_SEC` | `1312` |
 
 Ограничения:
 - `PAYLOAD_LEN` должен быть в диапазоне `1..13`
@@ -152,10 +152,10 @@ Master не накладывает дополнительного масштаб
 Slave больше не использует отдельный `APPLY_CMD`.
 
 Поведение slave:
-- полная запись `110..122` применяется сразу
+- полная запись `1300..1312` применяется сразу
 - частичные изменения применяются после паузы `250 ms` без новых записей
-- регистры `114` и `120` зарезервированы, при полном write клиент должен отправлять туда `0`
-- из-за fixed `start_reg=110` частичный write затрагивает только префикс `110..(110+PAYLOAD_LEN-1)`
+- регистры `1304` и `1310` зарезервированы, при полном write клиент должен отправлять туда `0`
+- из-за fixed `start_reg=1300` частичный write затрагивает только префикс `1300..(1300+PAYLOAD_LEN-1)`
 - если нужно изменить поля `relay_2`, клиент должен отправлять полный блок из `13` слов
 
 Важно для клиента:
@@ -236,7 +236,7 @@ Slave больше не использует отдельный `APPLY_CMD`.
 - локальная физическая задержка включения на slave считается как `slave_id * 10 s`
 - клиент не должен ожидать фактического включения реле сразу после подтверждения записи
 
-## 14. Чтение feedback значений из slave-регистров 134..136
+## 14. Чтение feedback значений из slave-регистров 411, 414..415, 707
 
 Клиент не читает slave напрямую.
 
@@ -246,9 +246,9 @@ Master публикует эти значения в `points window`.
 
 | Точка | Slave reg | Publish index | Row base offset | SCADA row base |
 |---|---:|---:|---:|---:|
-| `zone_1.current_dli` | `134` | `18` | `108` | `41108` |
-| `zone_1.light_output` | `135` | `19` | `114` | `41114` |
-| `zone_1.light_status_bits` | `136` | `20` | `120` | `41120` |
+| `zone_1.current_dli` | `414..415` | `18` | `108` | `41108` |
+| `zone_1.light_output` | `411` | `19` | `114` | `41114` |
+| `zone_1.light_status_bits` | `707` | `20` | `120` | `41120` |
 
 Структура каждой строки points window:
 
@@ -291,7 +291,7 @@ Master публикует эти значения в `points window`.
 Если на master активна `two_zones` topology, меняются только адресация модуля, publish-индексы и generation:
 - `zone_1`: `TARGET_SLAVE_ID=1`, `TARGET_MODULE_ID=101`, `CMD_PROFILE_ID=5001`
 - `zone_2`: `TARGET_SLAVE_ID=2`, `TARGET_MODULE_ID=102`, `CMD_PROFILE_ID=5003`
-- `two_zones` topology generation: `108`
+- `two_zones` topology generation: `114`
 - `zone_1.current_dli` -> `publish_index=27`
 - `zone_1.light_output` -> `publish_index=28`
 - `zone_1.light_status_bits` -> `publish_index=29`
