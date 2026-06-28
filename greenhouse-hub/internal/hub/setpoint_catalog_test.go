@@ -81,7 +81,7 @@ func TestSetpointsForSlaveIncludeUnsupported(t *testing.T) {
 }
 
 func TestSetpointsForSlaveHidesServiceFieldsAndAddsEnums(t *testing.T) {
-	service, cancel := newSetpointCatalogTestService(t, (1<<2)|(1<<10)|(1<<11)|(1<<12))
+	service, cancel := newSetpointCatalogTestService(t, (1<<2)|(1<<7)|(1<<10)|(1<<11)|(1<<12))
 	defer cancel()
 
 	catalog, err := service.SetpointsForSlave(context.Background(), 1, false)
@@ -101,16 +101,16 @@ func TestSetpointsForSlaveHidesServiceFieldsAndAddsEnums(t *testing.T) {
 		}
 	}
 
-	co2 := findSetpointGroup(catalog.Groups, "co2")
-	if co2 == nil {
-		t.Fatal("co2 group missing")
+	windows := findSetpointGroup(catalog.Groups, "windows")
+	if windows == nil {
+		t.Fatal("windows group missing")
 	}
-	mode := findSetpointItem(co2.Items, "co2_ctrl_mode")
+	mode := findSetpointItem(windows.Items, "windows_ctrl_mode")
 	if mode == nil {
-		t.Fatal("co2_ctrl_mode missing")
+		t.Fatal("windows_ctrl_mode missing")
 	}
-	if len(mode.Enum) != 3 || mode.Enum[0].Label != "Auto" {
-		t.Fatalf("co2_ctrl_mode enum = %#v", mode.Enum)
+	if len(mode.Enum) != 2 || mode.Enum[0].Label != "Auto" {
+		t.Fatalf("windows_ctrl_mode enum = %#v", mode.Enum)
 	}
 }
 

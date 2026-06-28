@@ -88,6 +88,16 @@ Another setpoint request:
 }
 ```
 
+Window mode writes should use the key-based API so the hub owns the map lookup:
+
+```json
+{
+  "slave_id": 1,
+  "key": "windows_ctrl_mode",
+  "value": 1
+}
+```
+
 Legacy topology command-profile writes are still accepted:
 
 ```json
@@ -98,6 +108,11 @@ Legacy topology command-profile writes are still accepted:
   "values": [600, 600]
 }
 ```
+
+For the legacy windows profile `cmd_profile_id=5004`, payload index `0` maps to
+slave register `1030` (`windows_ctrl_mode`) and payload index `1` maps to slave
+register `1031` (`windows_force_safe_cmd`). Do not put `windows_ctrl_mode` in
+the second payload word.
 
 Autoscan reads holding registers `0..15` from each address and matches
 `device_type + modbus_map_version` against the local slave-map catalog:

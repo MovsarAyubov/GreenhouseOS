@@ -58,7 +58,7 @@ func TestSlaveSetpointsEndpoint(t *testing.T) {
 	if !strings.Contains(body, `"slave_id":1`) {
 		t.Fatalf("response does not include slave_id: %s", body)
 	}
-	if !strings.Contains(body, `"key":"heating"`) || !strings.Contains(body, `"key":"heating_ctrl_mode"`) {
+	if !strings.Contains(body, `"key":"heating"`) || !strings.Contains(body, `"key":"heating_settings"`) {
 		t.Fatalf("response does not include heating setpoints: %s", body)
 	}
 }

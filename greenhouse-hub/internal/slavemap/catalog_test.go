@@ -29,23 +29,17 @@ func TestZoneV1ExpandedKeys(t *testing.T) {
 	}{
 		{"water_rail_setpoint", 1020, "rw"},
 		{"windows_ctrl_mode", 1030, "rw"},
-		{"windows_status_bits", 1046, "r"},
-		{"windows_auto_algo_mode", 1054, "rw"},
-		{"windows_hum_step", 1056, "rw"},
-		{"windows_hum_step_hyst", 1057, "rw"},
-		{"windows_cold_close_delta", 1058, "rw"},
-		{"heating_air_setpoint", 1101, "rw"},
-		{"heating_status_bits", 1112, "r"},
-		{"curtain_ctrl_mode", 1130, "rw"},
-		{"curtain_target", 1007, "rw"},
+		{"windows_force_safe_cmd", 1031, "rw"},
+		{"windows_runtime_status", 430, "r"},
+		{"windows_settings", 1032, "rw"},
+		{"heating_settings", 1100, "rw"},
+		{"curtain_settings", 1130, "rw"},
+		{"curtain_pos_target", 1007, "rw"},
 		{"air_temp_target", 1160, "rw"},
-		{"co2_measured_ppm", 1170, "r"},
-		{"co2_external_alarm", 1194, "r"},
-		{"co2_ctrl_mode", 1172, "rw"},
-		{"side_curtain_manual_target", 1231, "rw"},
-		{"side_curtain_target", 1236, "r"},
-		{"circ_ctrl_mode", 1240, "rw"},
-		{"circ_status_bits", 1263, "r"},
+		{"co2_runtime_status", 470, "r"},
+		{"co2_settings_input", 1170, "rw"},
+		{"side_curtain_settings", 1230, "rw"},
+		{"circ_settings", 1210, "rw"},
 	}
 
 	for _, tt := range tests {
@@ -55,8 +49,8 @@ func TestZoneV1ExpandedKeys(t *testing.T) {
 				t.Fatalf("RegisterByKey(%q) not found", tt.key)
 			}
 			start, end := reg.Bounds()
-			if start != tt.reg || end != tt.reg {
-				t.Fatalf("Bounds() = %d..%d, want %d..%d", start, end, tt.reg, tt.reg)
+			if start != tt.reg {
+				t.Fatalf("Bounds() starts at %d, want %d (end=%d)", start, tt.reg, end)
 			}
 			if reg.Access != tt.access {
 				t.Fatalf("Access = %q, want %q", reg.Access, tt.access)
@@ -68,14 +62,14 @@ func TestZoneV1ExpandedKeys(t *testing.T) {
 func TestZoneV1WritePolicy(t *testing.T) {
 	m := loadTestZoneMap(t)
 
-	writable := []uint16{1000, 1020, 1030, 1057, 1101, 1130, 1160, 1172, 1202, 1231, 1240, 1300}
+	writable := []uint16{1000, 1020, 1030, 1031, 1057, 1101, 1130, 1160, 1172, 1210, 1231, 1300, 1613, 1800}
 	for _, address := range writable {
 		if !m.IsWritable(address, 1) {
 			t.Fatalf("IsWritable(%d, 1) = false, want true", address)
 		}
 	}
 
-	readOnly := []uint16{700, 1046, 1112, 1170, 1171, 1194, 1195, 1236, 1263, 1304, 1310, 1611}
+	readOnly := []uint16{32, 400, 430, 450, 470, 701, 1016, 1611, 1803}
 	for _, address := range readOnly {
 		if m.IsWritable(address, 1) {
 			t.Fatalf("IsWritable(%d, 1) = true, want false", address)
