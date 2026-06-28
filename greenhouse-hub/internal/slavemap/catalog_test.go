@@ -30,10 +30,14 @@ func TestZoneV1ExpandedKeys(t *testing.T) {
 		{"water_rail_setpoint", 1020, "rw"},
 		{"windows_ctrl_mode", 1030, "rw"},
 		{"windows_status_bits", 1046, "r"},
+		{"windows_auto_algo_mode", 1054, "rw"},
+		{"windows_hum_step", 1056, "rw"},
+		{"windows_hum_step_hyst", 1057, "rw"},
+		{"windows_cold_close_delta", 1058, "rw"},
 		{"heating_air_setpoint", 1101, "rw"},
 		{"heating_status_bits", 1112, "r"},
 		{"curtain_ctrl_mode", 1130, "rw"},
-		{"curtain_target", 700, "r"},
+		{"curtain_target", 1007, "rw"},
 		{"air_temp_target", 1160, "rw"},
 		{"co2_measured_ppm", 1170, "r"},
 		{"co2_external_alarm", 1194, "r"},
@@ -64,7 +68,7 @@ func TestZoneV1ExpandedKeys(t *testing.T) {
 func TestZoneV1WritePolicy(t *testing.T) {
 	m := loadTestZoneMap(t)
 
-	writable := []uint16{1020, 1030, 1101, 1130, 1160, 1172, 1202, 1231, 1240, 1300}
+	writable := []uint16{1000, 1020, 1030, 1057, 1101, 1130, 1160, 1172, 1202, 1231, 1240, 1300}
 	for _, address := range writable {
 		if !m.IsWritable(address, 1) {
 			t.Fatalf("IsWritable(%d, 1) = false, want true", address)
@@ -79,6 +83,26 @@ func TestZoneV1WritePolicy(t *testing.T) {
 	}
 }
 
+func TestZoneV1AccessMatchesWritePolicy(t *testing.T) {
+	m := loadTestZoneMap(t)
+
+	for _, reg := range m.allRegisters() {
+		start, end := reg.Bounds()
+		for address := start; address <= end; address++ {
+			writable := m.IsWritable(address, 1)
+			if reg.IsWritable() && !writable {
+				t.Fatalf("%q at %d has access=%q but is not writable by policy", reg.Key, address, reg.Access)
+			}
+			if !reg.IsWritable() && writable {
+				t.Fatalf("%q at %d has access=%q but is writable by policy", reg.Key, address, reg.Access)
+			}
+			if address == ^uint16(0) {
+				break
+			}
+		}
+	}
+}
+
 func TestZoneV1LegacyKeysAreAbsent(t *testing.T) {
 	m := loadTestZoneMap(t)
 
@@ -86,6 +110,8 @@ func TestZoneV1LegacyKeysAreAbsent(t *testing.T) {
 		"windows_wind_limit",
 		"windows_temp_step_max_index",
 		"windows_hum_step_max_index",
+		"rll400_motion_delta_percent",
+		"rll400_no_motion_timeout_ms",
 		"ctrl_crc_lo",
 		"ctrl_crc_hi",
 	}
