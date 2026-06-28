@@ -116,6 +116,7 @@ var hiddenSetpointKeys = map[string]bool{
 	"command_token":           true,
 	"applied_token":           true,
 	"command_result":          true,
+	"windows_settings":        true,
 	"co2_fault_reset_token":   true,
 	"weather_token":           true,
 	"weather_applied_token":   true,

@@ -107,8 +107,13 @@ type SetpointRequest struct {
 }
 
 type SetpointResult struct {
-	Applied bool   `json:"applied"`
-	Error   string `json:"error,omitempty"`
+	Applied  bool     `json:"applied"`
+	Error    string   `json:"error,omitempty"`
+	Mode     string   `json:"mode,omitempty"`
+	SlaveID  uint8    `json:"slave_id,omitempty"`
+	Key      string   `json:"key,omitempty"`
+	Register *uint16  `json:"register,omitempty"`
+	Values   []uint16 `json:"values,omitempty"`
 }
 
 type DiscoveredDevice struct {
@@ -248,13 +253,15 @@ func (s *Service) ApplySetpoint(ctx context.Context, req SetpointRequest) Setpoi
 		return SetpointResult{Error: fmt.Sprintf("too many values for command profile: got %d max %d", len(req.Values), cmd.MaxRegCount)}
 	}
 
+	values, err := uint16Values(req.Values)
+	if err != nil {
+		return SetpointResult{Error: err.Error()}
+	}
+
 	err := s.enqueue(ctx, func(opCtx context.Context) error {
 		opCtx, cancel := context.WithTimeout(opCtx, commandTimeout(cmd))
 		defer cancel()
-		values, err := uint16Values(req.Values)
-		if err != nil {
-			return err
-		}
+		log.Printf("setpoint legacy slave=%d module=%d cmd_profile=%d start_reg=%d values=%v", req.SlaveID, req.ModuleID, req.CmdProfileID, cmd.StartReg, values)
 		if cmd.FC == config.FCWriteSingle {
 			if len(values) != 1 {
 				return errors.New("single-register command requires exactly one value")
@@ -266,7 +273,12 @@ func (s *Service) ApplySetpoint(ctx context.Context, req SetpointRequest) Setpoi
 	if err != nil {
 		return SetpointResult{Error: err.Error()}
 	}
-	return SetpointResult{Applied: true}
+	return SetpointResult{
+		Applied: true,
+		Mode:    "legacy",
+		SlaveID: req.SlaveID,
+		Values:  values,
+	}
 }
 
 func (s *Service) applyMapSetpoint(ctx context.Context, req SetpointRequest) SetpointResult {
@@ -310,6 +322,7 @@ func (s *Service) applyMapSetpoint(ctx context.Context, req SetpointRequest) Set
 	err = s.enqueue(ctx, func(opCtx context.Context) error {
 		opCtx, cancel := context.WithTimeout(opCtx, 1500*time.Millisecond)
 		defer cancel()
+		log.Printf("setpoint map slave=%d key=%s register=%d values=%v", req.SlaveID, req.Key, start, words)
 		if len(words) == 1 {
 			return s.transport.WriteSingle(opCtx, req.SlaveID, start, words[0])
 		}
@@ -318,7 +331,14 @@ func (s *Service) applyMapSetpoint(ctx context.Context, req SetpointRequest) Set
 	if err != nil {
 		return SetpointResult{Error: err.Error()}
 	}
-	return SetpointResult{Applied: true}
+	return SetpointResult{
+		Applied:  true,
+		Mode:     "map",
+		SlaveID:  req.SlaveID,
+		Key:      req.Key,
+		Register: &start,
+		Values:   words,
+	}
 }
 
 func (s *Service) Scan(ctx context.Context, from, to uint8) ScanResult {

@@ -179,7 +179,12 @@ Success response:
 
 ```json
 {
-  "applied": true
+  "applied": true,
+  "mode": "map",
+  "slave_id": 1,
+  "key": "windows_ctrl_mode",
+  "register": 1030,
+  "values": [1]
 }
 ```
 
@@ -197,6 +202,14 @@ Failure response:
 ```
 
 Client must treat only HTTP `202` with `applied=true` as a successful write.
+
+For diagnostics, client must log the success response. Normal key-based writes must return:
+
+- `mode: "map"`;
+- `register` equal to the selected catalog item `reg`;
+- `values.length == 1` for single-register controls.
+
+If a normal UI write returns `mode: "legacy"` or sends `values` with a leading placeholder such as `[0, value]`, the client is still using the wrong write path.
 
 ## 8. Multi-Register Writes
 
@@ -217,7 +230,7 @@ Rules:
 - `values.length` must not exceed item `width`;
 - hub writes from the key start register and increments by payload index.
 
-For v1 client UI, prefer single-register keys and avoid generic block keys such as `windows_settings` unless the UI has an explicit field layout for every word in the block.
+For v1 client UI, prefer single-register keys and avoid generic block keys. `windows_settings` is intentionally hidden by the hub catalog because the windows UI must use explicit single-register keys.
 
 ## 9. Critical Windows Mapping
 
@@ -225,6 +238,9 @@ Current zone slave v1 map:
 
 | Key | Slave register | Type | Access |
 |---|---:|---|---|
+| `windows_pos_a_target` | `1005` | `u16` | `rw` |
+| `windows_pos_b_target` | `1006` | `u16` | `rw` |
+| `curtain_pos_target` | `1007` | `u16` | `rw` |
 | `windows_ctrl_mode` | `1030` | `u16` | `rw` |
 | `windows_force_safe_cmd` | `1031` | `u16` | `rw` |
 
@@ -234,6 +250,8 @@ Required behavior:
 - client must not send key `windows_force_safe_cmd` for mode changes;
 - client must not build a legacy payload where mode is placed at payload index `1`;
 - client must not use register `1031` as an alias for mode.
+- when operator changes window A target, client must send key `windows_pos_a_target` with scalar `value`, not a `values` block;
+- when operator changes window B target, client must send key `windows_pos_b_target` with scalar `value`.
 
 Correct request:
 
@@ -379,4 +397,3 @@ Client implementation is accepted when:
 - failed hub responses are shown to operator and do not silently update UI state;
 - unsupported/offline slaves cannot be written without explicit diagnostics override;
 - no normal UI path hardcodes register `1030` or `1031`.
-
