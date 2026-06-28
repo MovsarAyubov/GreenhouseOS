@@ -258,7 +258,7 @@ func (s *Service) ApplySetpoint(ctx context.Context, req SetpointRequest) Setpoi
 		return SetpointResult{Error: err.Error()}
 	}
 
-	err := s.enqueue(ctx, func(opCtx context.Context) error {
+	err = s.enqueue(ctx, func(opCtx context.Context) error {
 		opCtx, cancel := context.WithTimeout(opCtx, commandTimeout(cmd))
 		defer cancel()
 		log.Printf("setpoint legacy slave=%d module=%d cmd_profile=%d start_reg=%d values=%v", req.SlaveID, req.ModuleID, req.CmdProfileID, cmd.StartReg, values)
