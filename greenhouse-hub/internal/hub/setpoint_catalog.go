@@ -176,9 +176,14 @@ var enumByKey = map[string][]SetpointEnumValue{
 	},
 	"co2_ctrl_mode": modeAutoOffManual(),
 	"side_curtain_ctrl_mode": {
-		{Value: 0, Label: "Auto"},
-		{Value: 1, Label: "Manual"},
-		{Value: 2, Label: "Off"},
+		{Value: 0, Label: "Night auto"},
+		{Value: 1, Label: "Off"},
+		{Value: 2, Label: "Manual"},
+	},
+	"side_curtain_manual_cmd": {
+		{Value: 0, Label: "Stop"},
+		{Value: 1, Label: "Open"},
+		{Value: 2, Label: "Close"},
 	},
 	"circ_ctrl_mode": modeAutoOffManual(),
 }

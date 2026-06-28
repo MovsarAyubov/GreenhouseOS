@@ -31,15 +31,19 @@ func TestZoneV1ExpandedKeys(t *testing.T) {
 		{"windows_ctrl_mode", 1030, "rw"},
 		{"windows_force_safe_cmd", 1031, "rw"},
 		{"windows_runtime_status", 430, "r"},
-		{"windows_settings", 1032, "rw"},
-		{"heating_settings", 1100, "rw"},
-		{"curtain_settings", 1130, "rw"},
+		{"windows_wind_storm", 1035, "rw"},
+		{"windows_wind_recover", 1036, "rw"},
+		{"windows_windward_speed_threshold", 1054, "rw"},
+		{"heating_ctrl_mode", 1100, "rw"},
+		{"heating_air_setpoint", 1101, "rw"},
+		{"curtain_ctrl_mode", 1130, "rw"},
 		{"curtain_pos_target", 1007, "rw"},
 		{"air_temp_target", 1160, "rw"},
 		{"co2_runtime_status", 470, "r"},
-		{"co2_settings_input", 1170, "rw"},
-		{"side_curtain_settings", 1230, "rw"},
-		{"circ_settings", 1210, "rw"},
+		{"co2_ctrl_mode", 1172, "rw"},
+		{"circ_ctrl_mode", 1210, "rw"},
+		{"side_curtain_ctrl_mode", 1230, "rw"},
+		{"light_r1_enable", 1300, "rw"},
 	}
 
 	for _, tt := range tests {
@@ -97,21 +101,24 @@ func TestZoneV1AccessMatchesWritePolicy(t *testing.T) {
 	}
 }
 
-func TestZoneV1LegacyKeysAreAbsent(t *testing.T) {
+func TestZoneV1OpaqueAndReservedKeysAreAbsent(t *testing.T) {
 	m := loadTestZoneMap(t)
 
-	legacyKeys := []string{
-		"windows_wind_limit",
-		"windows_temp_step_max_index",
-		"windows_hum_step_max_index",
-		"rll400_motion_delta_percent",
-		"rll400_no_motion_timeout_ms",
-		"ctrl_crc_lo",
-		"ctrl_crc_hi",
+	absentKeys := []string{
+		"windows_settings",
+		"heating_settings",
+		"curtain_settings",
+		"co2_settings_input",
+		"circ_settings",
+		"side_curtain_settings",
+		"windows_reserved_173",
+		"windows_reserved_196",
+		"light_r1_reserved",
+		"light_r2_reserved",
 	}
-	for _, key := range legacyKeys {
+	for _, key := range absentKeys {
 		if _, ok := m.RegisterByKey(key); ok {
-			t.Fatalf("legacy key %q should not be present", key)
+			t.Fatalf("opaque or reserved key %q should not be present", key)
 		}
 	}
 }
