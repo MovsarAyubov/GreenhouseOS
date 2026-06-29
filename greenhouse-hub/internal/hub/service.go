@@ -146,6 +146,11 @@ type operation struct {
 	done chan error
 }
 
+type pollPlanItem struct {
+	req  config.Request
+	next time.Time
+}
+
 func NewService(cfg *config.Config, maps *slavemap.Catalog, transport modbusrtu.Transport, options Options) *Service {
 	if options.ScanFrom == 0 {
 		options.ScanFrom = 1
@@ -433,53 +438,35 @@ func (s *Service) modbusWorker(ctx context.Context) {
 }
 
 func (s *Service) pollLoop(ctx context.Context) {
-	type dueRequest struct {
-		req      config.Request
-		next     time.Time
-		inFlight bool
-	}
-	var plan []dueRequest
+	var plan []pollPlanItem
 	now := time.Now()
 	for _, req := range s.cfg.Topology.Requests {
 		module, ok := s.moduleByID[req.ModuleID]
 		if !ok || module.SlaveID == 0 {
 			continue
 		}
-		plan = append(plan, dueRequest{req: req, next: now})
+		plan = append(plan, pollPlanItem{req: req, next: now})
 	}
 
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
-	done := make(chan uint16, len(plan))
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case reqID := <-done:
-			for i := range plan {
-				if plan[i].req.ReqID == reqID {
-					plan[i].inFlight = false
-					break
-				}
-			}
 		case now = <-ticker.C:
-			for i := range plan {
-				if plan[i].inFlight || now.Before(plan[i].next) {
-					continue
-				}
-				req := plan[i].req
-				period := requestPeriod(req)
-				plan[i].next = now.Add(period)
-				plan[i].inFlight = true
-				go func() {
-					s.pollRequest(ctx, req)
-					select {
-					case done <- req.ReqID:
-					case <-ctx.Done():
-					}
-				}()
+			idx := nextPollRequest(plan, now)
+			if idx < 0 {
+				continue
 			}
+			req := plan[idx].req
+			lateness := now.Sub(plan[idx].next)
+			if period := requestPeriod(req); lateness > period {
+				log.Printf("poll request=%d module=%d priority=%d late by %s", req.ReqID, req.ModuleID, req.Priority, lateness.Truncate(time.Millisecond))
+			}
+			s.pollRequest(ctx, req)
+			plan[idx].next = time.Now().Add(requestPeriod(req))
 		}
 	}
 }
@@ -713,18 +700,46 @@ func (s *Service) pollRequest(ctx context.Context, req config.Request) {
 		return
 	}
 	var regs []uint16
-	err := s.enqueue(ctx, func(opCtx context.Context) error {
-		opCtx, cancel := context.WithTimeout(opCtx, requestTimeout(req))
-		defer cancel()
-		var readErr error
-		regs, readErr = s.transport.ReadHolding(opCtx, module.SlaveID, req.StartReg, req.RegCount)
-		return readErr
-	})
+	err := s.readRequest(ctx, module, req, &regs)
 	if err != nil {
 		s.markSlaveError(module, err)
 		return
 	}
 	s.publishRequest(module, req, regs)
+}
+
+func (s *Service) readRequest(ctx context.Context, module config.Module, req config.Request, regs *[]uint16) error {
+	attempts := int(req.Retries) + 1
+	if attempts < 1 {
+		attempts = 1
+	}
+	var lastErr error
+	for attempt := 0; attempt < attempts; attempt++ {
+		err := s.enqueue(ctx, func(opCtx context.Context) error {
+			opCtx, cancel := context.WithTimeout(opCtx, requestReadTimeout(req))
+			defer cancel()
+			var readErr error
+			*regs, readErr = s.transport.ReadHolding(opCtx, module.SlaveID, req.StartReg, req.RegCount)
+			return readErr
+		})
+		if err == nil {
+			return nil
+		}
+		lastErr = err
+		if attempt+1 >= attempts {
+			break
+		}
+		backoff := requestBackoff(req)
+		if backoff <= 0 {
+			continue
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(backoff):
+		}
+	}
+	return lastErr
 }
 
 func (s *Service) enqueue(ctx context.Context, fn func(context.Context) error) error {
@@ -823,14 +838,16 @@ func (s *Service) findCommand(module config.Module, cmdID uint16) (config.Comman
 	return config.Command{}, false
 }
 
-func requestTimeout(req config.Request) time.Duration {
+func requestReadTimeout(req config.Request) time.Duration {
 	timeout := time.Duration(req.TimeoutMS) * time.Millisecond
 	if timeout <= 0 {
 		timeout = 300 * time.Millisecond
 	}
-	retries := int(req.Retries) + 1
-	backoff := time.Duration(req.BackoffMS) * time.Millisecond
-	return time.Duration(retries)*timeout + time.Duration(retries)*backoff
+	return timeout
+}
+
+func requestBackoff(req config.Request) time.Duration {
+	return time.Duration(req.BackoffMS) * time.Millisecond
 }
 
 func requestPeriod(req config.Request) time.Duration {
@@ -838,6 +855,29 @@ func requestPeriod(req config.Request) time.Duration {
 		return time.Duration(req.PeriodMS) * time.Millisecond
 	}
 	return 5 * time.Second
+}
+
+func nextPollRequest(plan []pollPlanItem, now time.Time) int {
+	best := -1
+	for i := range plan {
+		if now.Before(plan[i].next) {
+			continue
+		}
+		if best < 0 || pollRequestLess(plan[i], plan[best]) {
+			best = i
+		}
+	}
+	return best
+}
+
+func pollRequestLess(a, b pollPlanItem) bool {
+	if a.req.Priority != b.req.Priority {
+		return a.req.Priority < b.req.Priority
+	}
+	if !a.next.Equal(b.next) {
+		return a.next.Before(b.next)
+	}
+	return a.req.ReqID < b.req.ReqID
 }
 
 func identityPollPeriod(module config.Module) time.Duration {

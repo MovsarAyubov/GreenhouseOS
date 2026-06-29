@@ -1,0 +1,1273 @@
+{
+  "schema": "scada_semantic_mapping_v1",
+  "topology_id": 1004,
+  "topology_generation": 116,
+  "topology_ver_major": 2,
+  "topology_ver_minor": 0,
+  "modules": {
+    "zone_1": {
+      "module_id": 101,
+      "module_type": 1,
+      "slave_id": 1,
+      "zone_id": 1,
+      "title": "Zone 1"
+    },
+    "zone_2": {
+      "module_id": 102,
+      "module_type": 1,
+      "slave_id": 2,
+      "zone_id": 2,
+      "title": "Zone 2"
+    },
+    "zone_3": {
+      "module_id": 103,
+      "module_type": 1,
+      "slave_id": 3,
+      "zone_id": 3,
+      "title": "Zone 3"
+    },
+    "zone_4": {
+      "module_id": 104,
+      "module_type": 1,
+      "slave_id": 4,
+      "zone_id": 4,
+      "title": "Zone 4"
+    },
+    "weather_1": {
+      "module_id": 201,
+      "module_type": 2,
+      "slave_id": 20,
+      "zone_id": 65535,
+      "title": "Weather Station"
+    }
+  },
+  "points": {
+    "zone_1.air_temp": {
+      "module_id": 101,
+      "point_id": 10100,
+      "publish_index": 0,
+      "req_id": 1010,
+      "label": "Air temperature",
+      "unit": "degC",
+      "scale_pow10": -1
+    },
+    "zone_1.air_hum": {
+      "module_id": 101,
+      "point_id": 10101,
+      "publish_index": 1,
+      "req_id": 1010,
+      "label": "Air humidity",
+      "unit": "%RH",
+      "scale_pow10": -1
+    },
+    "zone_1.water_rail": {
+      "module_id": 101,
+      "point_id": 10102,
+      "publish_index": 2,
+      "req_id": 1010,
+      "label": "Water rail temperature",
+      "unit": "degC",
+      "scale_pow10": -1
+    },
+    "zone_1.water_grow": {
+      "module_id": 101,
+      "point_id": 10103,
+      "publish_index": 3,
+      "req_id": 1010,
+      "label": "Water grow temperature",
+      "unit": "degC",
+      "scale_pow10": -1
+    },
+    "zone_1.water_undertray": {
+      "module_id": 101,
+      "point_id": 10104,
+      "publish_index": 4,
+      "req_id": 1010,
+      "label": "Water undertray temperature",
+      "unit": "degC",
+      "scale_pow10": -1
+    },
+    "zone_1.water_upper_heat": {
+      "module_id": 101,
+      "point_id": 10105,
+      "publish_index": 5,
+      "req_id": 1010,
+      "label": "Water upper heat temperature",
+      "unit": "degC",
+      "scale_pow10": -1
+    },
+    "zone_1.windows_pos_a": {
+      "module_id": 101,
+      "point_id": 10106,
+      "publish_index": 6,
+      "req_id": 1010,
+      "label": "Windows position A",
+      "unit": "%",
+      "scale_pow10": -1
+    },
+    "zone_1.windows_pos_b": {
+      "module_id": 101,
+      "point_id": 10107,
+      "publish_index": 7,
+      "req_id": 1010,
+      "label": "Windows position B",
+      "unit": "%",
+      "scale_pow10": -1
+    },
+    "zone_1.curtain_pos": {
+      "module_id": 101,
+      "point_id": 10108,
+      "publish_index": 8,
+      "req_id": 1010,
+      "label": "Curtain position",
+      "unit": "%",
+      "scale_pow10": -1
+    },
+    "zone_2.air_temp": {
+      "module_id": 102,
+      "point_id": 10200,
+      "publish_index": 9,
+      "req_id": 1020,
+      "label": "Air temperature",
+      "unit": "degC",
+      "scale_pow10": -1
+    },
+    "zone_2.air_hum": {
+      "module_id": 102,
+      "point_id": 10201,
+      "publish_index": 10,
+      "req_id": 1020,
+      "label": "Air humidity",
+      "unit": "%RH",
+      "scale_pow10": -1
+    },
+    "zone_2.water_rail": {
+      "module_id": 102,
+      "point_id": 10202,
+      "publish_index": 11,
+      "req_id": 1020,
+      "label": "Water rail temperature",
+      "unit": "degC",
+      "scale_pow10": -1
+    },
+    "zone_2.water_grow": {
+      "module_id": 102,
+      "point_id": 10203,
+      "publish_index": 12,
+      "req_id": 1020,
+      "label": "Water grow temperature",
+      "unit": "degC",
+      "scale_pow10": -1
+    },
+    "zone_2.water_undertray": {
+      "module_id": 102,
+      "point_id": 10204,
+      "publish_index": 13,
+      "req_id": 1020,
+      "label": "Water undertray temperature",
+      "unit": "degC",
+      "scale_pow10": -1
+    },
+    "zone_2.water_upper_heat": {
+      "module_id": 102,
+      "point_id": 10205,
+      "publish_index": 14,
+      "req_id": 1020,
+      "label": "Water upper heat temperature",
+      "unit": "degC",
+      "scale_pow10": -1
+    },
+    "zone_2.windows_pos_a": {
+      "module_id": 102,
+      "point_id": 10206,
+      "publish_index": 15,
+      "req_id": 1020,
+      "label": "Windows position A",
+      "unit": "%",
+      "scale_pow10": -1
+    },
+    "zone_2.windows_pos_b": {
+      "module_id": 102,
+      "point_id": 10207,
+      "publish_index": 16,
+      "req_id": 1020,
+      "label": "Windows position B",
+      "unit": "%",
+      "scale_pow10": -1
+    },
+    "zone_2.curtain_pos": {
+      "module_id": 102,
+      "point_id": 10208,
+      "publish_index": 17,
+      "req_id": 1020,
+      "label": "Curtain position",
+      "unit": "%",
+      "scale_pow10": -1
+    },
+    "zone_3.air_temp": {
+      "module_id": 103,
+      "point_id": 10300,
+      "publish_index": 18,
+      "req_id": 1030,
+      "label": "Air temperature",
+      "unit": "degC",
+      "scale_pow10": -1
+    },
+    "zone_3.air_hum": {
+      "module_id": 103,
+      "point_id": 10301,
+      "publish_index": 19,
+      "req_id": 1030,
+      "label": "Air humidity",
+      "unit": "%RH",
+      "scale_pow10": -1
+    },
+    "zone_3.water_rail": {
+      "module_id": 103,
+      "point_id": 10302,
+      "publish_index": 20,
+      "req_id": 1030,
+      "label": "Water rail temperature",
+      "unit": "degC",
+      "scale_pow10": -1
+    },
+    "zone_3.water_grow": {
+      "module_id": 103,
+      "point_id": 10303,
+      "publish_index": 21,
+      "req_id": 1030,
+      "label": "Water grow temperature",
+      "unit": "degC",
+      "scale_pow10": -1
+    },
+    "zone_3.water_undertray": {
+      "module_id": 103,
+      "point_id": 10304,
+      "publish_index": 22,
+      "req_id": 1030,
+      "label": "Water undertray temperature",
+      "unit": "degC",
+      "scale_pow10": -1
+    },
+    "zone_3.water_upper_heat": {
+      "module_id": 103,
+      "point_id": 10305,
+      "publish_index": 23,
+      "req_id": 1030,
+      "label": "Water upper heat temperature",
+      "unit": "degC",
+      "scale_pow10": -1
+    },
+    "zone_3.windows_pos_a": {
+      "module_id": 103,
+      "point_id": 10306,
+      "publish_index": 24,
+      "req_id": 1030,
+      "label": "Windows position A",
+      "unit": "%",
+      "scale_pow10": -1
+    },
+    "zone_3.windows_pos_b": {
+      "module_id": 103,
+      "point_id": 10307,
+      "publish_index": 25,
+      "req_id": 1030,
+      "label": "Windows position B",
+      "unit": "%",
+      "scale_pow10": -1
+    },
+    "zone_3.curtain_pos": {
+      "module_id": 103,
+      "point_id": 10308,
+      "publish_index": 26,
+      "req_id": 1030,
+      "label": "Curtain position",
+      "unit": "%",
+      "scale_pow10": -1
+    },
+    "zone_4.air_temp": {
+      "module_id": 104,
+      "point_id": 10400,
+      "publish_index": 27,
+      "req_id": 1040,
+      "label": "Air temperature",
+      "unit": "degC",
+      "scale_pow10": -1
+    },
+    "zone_4.air_hum": {
+      "module_id": 104,
+      "point_id": 10401,
+      "publish_index": 28,
+      "req_id": 1040,
+      "label": "Air humidity",
+      "unit": "%RH",
+      "scale_pow10": -1
+    },
+    "zone_4.water_rail": {
+      "module_id": 104,
+      "point_id": 10402,
+      "publish_index": 29,
+      "req_id": 1040,
+      "label": "Water rail temperature",
+      "unit": "degC",
+      "scale_pow10": -1
+    },
+    "zone_4.water_grow": {
+      "module_id": 104,
+      "point_id": 10403,
+      "publish_index": 30,
+      "req_id": 1040,
+      "label": "Water grow temperature",
+      "unit": "degC",
+      "scale_pow10": -1
+    },
+    "zone_4.water_undertray": {
+      "module_id": 104,
+      "point_id": 10404,
+      "publish_index": 31,
+      "req_id": 1040,
+      "label": "Water undertray temperature",
+      "unit": "degC",
+      "scale_pow10": -1
+    },
+    "zone_4.water_upper_heat": {
+      "module_id": 104,
+      "point_id": 10405,
+      "publish_index": 32,
+      "req_id": 1040,
+      "label": "Water upper heat temperature",
+      "unit": "degC",
+      "scale_pow10": -1
+    },
+    "zone_4.windows_pos_a": {
+      "module_id": 104,
+      "point_id": 10406,
+      "publish_index": 33,
+      "req_id": 1040,
+      "label": "Windows position A",
+      "unit": "%",
+      "scale_pow10": -1
+    },
+    "zone_4.windows_pos_b": {
+      "module_id": 104,
+      "point_id": 10407,
+      "publish_index": 34,
+      "req_id": 1040,
+      "label": "Windows position B",
+      "unit": "%",
+      "scale_pow10": -1
+    },
+    "zone_4.curtain_pos": {
+      "module_id": 104,
+      "point_id": 10408,
+      "publish_index": 35,
+      "req_id": 1040,
+      "label": "Curtain position",
+      "unit": "%",
+      "scale_pow10": -1
+    },
+    "weather_1.out_temp": {
+      "module_id": 201,
+      "point_id": 20100,
+      "publish_index": 36,
+      "req_id": 2010,
+      "label": "Outdoor temperature",
+      "unit": "degC",
+      "scale_pow10": -1
+    },
+    "weather_1.out_hum": {
+      "module_id": 201,
+      "point_id": 20101,
+      "publish_index": 37,
+      "req_id": 2010,
+      "label": "Outdoor humidity",
+      "unit": "%RH",
+      "scale_pow10": -1
+    },
+    "weather_1.wind_speed": {
+      "module_id": 201,
+      "point_id": 20102,
+      "publish_index": 38,
+      "req_id": 2010,
+      "label": "Wind speed",
+      "unit": "m/s",
+      "scale_pow10": -1
+    },
+    "weather_1.wind_dir": {
+      "module_id": 201,
+      "point_id": 20103,
+      "publish_index": 39,
+      "req_id": 2010,
+      "label": "Wind direction",
+      "unit": "deg",
+      "scale_pow10": 0
+    },
+    "weather_1.solar_rad": {
+      "module_id": 201,
+      "point_id": 20105,
+      "publish_index": 40,
+      "req_id": 2010,
+      "label": "Solar radiation",
+      "unit": "W/m2",
+      "scale_pow10": 0
+    },
+    "weather_1.baro_press": {
+      "module_id": 201,
+      "point_id": 20106,
+      "publish_index": 41,
+      "req_id": 2010,
+      "label": "Barometric pressure",
+      "unit": "hPa",
+      "scale_pow10": -1
+    },
+    "weather_1.rain_flag": {
+      "module_id": 201,
+      "point_id": 20104,
+      "publish_index": 42,
+      "req_id": 2010,
+      "label": "Rain flag",
+      "unit": "flag",
+      "scale_pow10": 0
+    },
+    "weather_1.dew_point": {
+      "module_id": 201,
+      "point_id": 20107,
+      "publish_index": 43,
+      "req_id": 2010,
+      "label": "Dew point",
+      "unit": "degC",
+      "scale_pow10": -1
+    },
+    "weather_1.status_bits": {
+      "module_id": 201,
+      "point_id": 20108,
+      "publish_index": 44,
+      "req_id": 2010,
+      "label": "Status bits",
+      "unit": "mask",
+      "scale_pow10": 0
+    },
+    "zone_1.current_dli": {
+      "module_id": 101,
+      "point_id": 10134,
+      "publish_index": 45,
+      "req_id": 1011,
+      "label": "Current DLI",
+      "unit": "raw",
+      "scale_pow10": 0
+    },
+    "zone_1.light_output": {
+      "module_id": 101,
+      "point_id": 10135,
+      "publish_index": 46,
+      "req_id": 1011,
+      "label": "Light output",
+      "unit": "%",
+      "scale_pow10": 0
+    },
+    "zone_1.light_status_bits": {
+      "module_id": 101,
+      "point_id": 10136,
+      "publish_index": 47,
+      "req_id": 1012,
+      "label": "Light status bits",
+      "unit": "mask",
+      "scale_pow10": 0
+    },
+    "zone_2.current_dli": {
+      "module_id": 102,
+      "point_id": 10234,
+      "publish_index": 48,
+      "req_id": 1021,
+      "label": "Current DLI",
+      "unit": "raw",
+      "scale_pow10": 0
+    },
+    "zone_2.light_output": {
+      "module_id": 102,
+      "point_id": 10235,
+      "publish_index": 49,
+      "req_id": 1021,
+      "label": "Light output",
+      "unit": "%",
+      "scale_pow10": 0
+    },
+    "zone_2.light_status_bits": {
+      "module_id": 102,
+      "point_id": 10236,
+      "publish_index": 50,
+      "req_id": 1022,
+      "label": "Light status bits",
+      "unit": "mask",
+      "scale_pow10": 0
+    },
+    "zone_3.current_dli": {
+      "module_id": 103,
+      "point_id": 10334,
+      "publish_index": 51,
+      "req_id": 1031,
+      "label": "Current DLI",
+      "unit": "raw",
+      "scale_pow10": 0
+    },
+    "zone_3.light_output": {
+      "module_id": 103,
+      "point_id": 10335,
+      "publish_index": 52,
+      "req_id": 1031,
+      "label": "Light output",
+      "unit": "%",
+      "scale_pow10": 0
+    },
+    "zone_3.light_status_bits": {
+      "module_id": 103,
+      "point_id": 10336,
+      "publish_index": 53,
+      "req_id": 1032,
+      "label": "Light status bits",
+      "unit": "mask",
+      "scale_pow10": 0
+    },
+    "zone_4.current_dli": {
+      "module_id": 104,
+      "point_id": 10434,
+      "publish_index": 54,
+      "req_id": 1041,
+      "label": "Current DLI",
+      "unit": "raw",
+      "scale_pow10": 0
+    },
+    "zone_4.light_output": {
+      "module_id": 104,
+      "point_id": 10435,
+      "publish_index": 55,
+      "req_id": 1041,
+      "label": "Light output",
+      "unit": "%",
+      "scale_pow10": 0
+    },
+    "zone_4.light_status_bits": {
+      "module_id": 104,
+      "point_id": 10436,
+      "publish_index": 56,
+      "req_id": 1042,
+      "label": "Light status bits",
+      "unit": "mask",
+      "scale_pow10": 0
+    }
+  },
+  "commands": {
+    "zone_1.light_setpoints": {
+      "module_id": 101,
+      "slave_id": 1,
+      "cmd_profile_id": 5001,
+      "cmd_kind": "generic",
+      "payload_words": 13,
+      "start_reg": 1300,
+      "reg_count": 13,
+      "relay_1_enable_word": 0,
+      "relay_1_on_hhmm_word": 1,
+      "relay_1_off_hhmm_word": 2,
+      "relay_1_threshold_wm2_word": 3,
+      "relay_1_reserved_word": 4,
+      "relay_1_dli_limit_jcm2_word": 5,
+      "relay_2_enable_word": 6,
+      "relay_2_on_hhmm_word": 7,
+      "relay_2_off_hhmm_word": 8,
+      "relay_2_threshold_wm2_word": 9,
+      "relay_2_reserved_word": 10,
+      "relay_2_dli_limit_jcm2_word": 11,
+      "light_hyst_sec_word": 12,
+      "recommended_full_write_words": 13,
+      "partial_apply_debounce_ms": 250,
+      "reserved_words_must_be_zero": [
+        4,
+        10
+      ],
+      "slave_current_dli_reg": 414,
+      "slave_light_output_reg": 411,
+      "slave_status_bits_reg": 707,
+      "weather_solar_rad_reg": 1605
+    },
+    "zone_1.windows_manual_targets": {
+      "module_id": 101,
+      "slave_id": 1,
+      "cmd_profile_id": 5002,
+      "cmd_kind": "generic",
+      "payload_words": 2,
+      "start_reg": 1005,
+      "reg_count": 2,
+      "window_a_target_word": 0,
+      "window_b_target_word": 1
+    },
+    "zone_1.water_setpoints": {
+      "module_id": 101,
+      "slave_id": 1,
+      "cmd_profile_id": 5008,
+      "cmd_kind": "generic",
+      "payload_words": 4,
+      "start_reg": 1020,
+      "reg_count": 4
+    },
+    "zone_1.windows_base": {
+      "module_id": 101,
+      "slave_id": 1,
+      "cmd_profile_id": 5004,
+      "cmd_kind": "generic",
+      "payload_words": 16,
+      "start_reg": 1030,
+      "reg_count": 16
+    },
+    "zone_1.windows_automation": {
+      "module_id": 101,
+      "slave_id": 1,
+      "cmd_profile_id": 5005,
+      "cmd_kind": "generic",
+      "payload_words": 16,
+      "start_reg": 1046,
+      "reg_count": 16
+    },
+    "zone_1.windows_rain_weather": {
+      "module_id": 101,
+      "slave_id": 1,
+      "cmd_profile_id": 5006,
+      "cmd_kind": "generic",
+      "payload_words": 2,
+      "start_reg": 1062,
+      "reg_count": 2
+    },
+    "zone_1.windows_step_timeouts": {
+      "module_id": 101,
+      "slave_id": 1,
+      "cmd_profile_id": 5007,
+      "cmd_kind": "generic",
+      "payload_words": 6,
+      "start_reg": 1064,
+      "reg_count": 6
+    },
+    "zone_1.heating_controls": {
+      "module_id": 101,
+      "slave_id": 1,
+      "cmd_profile_id": 5009,
+      "cmd_kind": "generic",
+      "payload_words": 12,
+      "start_reg": 1100,
+      "reg_count": 12
+    },
+    "zone_1.curtain_core": {
+      "module_id": 101,
+      "slave_id": 1,
+      "cmd_profile_id": 5015,
+      "cmd_kind": "generic",
+      "payload_words": 8,
+      "start_reg": 1130,
+      "reg_count": 8
+    },
+    "zone_1.curtain_rad_temp": {
+      "module_id": 101,
+      "slave_id": 1,
+      "cmd_profile_id": 5016,
+      "cmd_kind": "generic",
+      "payload_words": 10,
+      "start_reg": 1138,
+      "reg_count": 10
+    },
+    "zone_1.curtain_hum": {
+      "module_id": 101,
+      "slave_id": 1,
+      "cmd_profile_id": 5017,
+      "cmd_kind": "generic",
+      "payload_words": 6,
+      "start_reg": 1148,
+      "reg_count": 6
+    },
+    "zone_1.curtain_fault_reset": {
+      "module_id": 101,
+      "slave_id": 1,
+      "cmd_profile_id": 5018,
+      "cmd_kind": "generic",
+      "payload_words": 1,
+      "start_reg": 1154,
+      "reg_count": 1
+    },
+    "zone_1.greenhouse_targets": {
+      "module_id": 101,
+      "slave_id": 1,
+      "cmd_profile_id": 5019,
+      "cmd_kind": "generic",
+      "payload_words": 2,
+      "start_reg": 1160,
+      "reg_count": 2
+    },
+    "zone_1.co2_core": {
+      "module_id": 101,
+      "slave_id": 1,
+      "cmd_profile_id": 5020,
+      "cmd_kind": "generic",
+      "payload_words": 16,
+      "start_reg": 1170,
+      "reg_count": 16
+    },
+    "zone_1.co2_safety": {
+      "module_id": 101,
+      "slave_id": 1,
+      "cmd_profile_id": 5023,
+      "cmd_kind": "generic",
+      "payload_words": 11,
+      "start_reg": 1186,
+      "reg_count": 11
+    },
+    "zone_1.circulation_controls": {
+      "module_id": 101,
+      "slave_id": 1,
+      "cmd_profile_id": 5021,
+      "cmd_kind": "generic",
+      "payload_words": 10,
+      "start_reg": 1210,
+      "reg_count": 10
+    },
+    "zone_1.side_curtain_controls": {
+      "module_id": 101,
+      "slave_id": 1,
+      "cmd_profile_id": 5022,
+      "cmd_kind": "generic",
+      "payload_words": 8,
+      "start_reg": 1230,
+      "reg_count": 8
+    },
+    "zone_2.light_setpoints": {
+      "module_id": 102,
+      "slave_id": 2,
+      "cmd_profile_id": 5101,
+      "cmd_kind": "generic",
+      "payload_words": 13,
+      "start_reg": 1300,
+      "reg_count": 13,
+      "relay_1_enable_word": 0,
+      "relay_1_on_hhmm_word": 1,
+      "relay_1_off_hhmm_word": 2,
+      "relay_1_threshold_wm2_word": 3,
+      "relay_1_reserved_word": 4,
+      "relay_1_dli_limit_jcm2_word": 5,
+      "relay_2_enable_word": 6,
+      "relay_2_on_hhmm_word": 7,
+      "relay_2_off_hhmm_word": 8,
+      "relay_2_threshold_wm2_word": 9,
+      "relay_2_reserved_word": 10,
+      "relay_2_dli_limit_jcm2_word": 11,
+      "light_hyst_sec_word": 12,
+      "recommended_full_write_words": 13,
+      "partial_apply_debounce_ms": 250,
+      "reserved_words_must_be_zero": [
+        4,
+        10
+      ],
+      "slave_current_dli_reg": 414,
+      "slave_light_output_reg": 411,
+      "slave_status_bits_reg": 707,
+      "weather_solar_rad_reg": 1605
+    },
+    "zone_2.windows_manual_targets": {
+      "module_id": 102,
+      "slave_id": 2,
+      "cmd_profile_id": 5102,
+      "cmd_kind": "generic",
+      "payload_words": 2,
+      "start_reg": 1005,
+      "reg_count": 2,
+      "window_a_target_word": 0,
+      "window_b_target_word": 1
+    },
+    "zone_2.water_setpoints": {
+      "module_id": 102,
+      "slave_id": 2,
+      "cmd_profile_id": 5108,
+      "cmd_kind": "generic",
+      "payload_words": 4,
+      "start_reg": 1020,
+      "reg_count": 4
+    },
+    "zone_2.windows_base": {
+      "module_id": 102,
+      "slave_id": 2,
+      "cmd_profile_id": 5104,
+      "cmd_kind": "generic",
+      "payload_words": 16,
+      "start_reg": 1030,
+      "reg_count": 16
+    },
+    "zone_2.windows_automation": {
+      "module_id": 102,
+      "slave_id": 2,
+      "cmd_profile_id": 5105,
+      "cmd_kind": "generic",
+      "payload_words": 16,
+      "start_reg": 1046,
+      "reg_count": 16
+    },
+    "zone_2.windows_rain_weather": {
+      "module_id": 102,
+      "slave_id": 2,
+      "cmd_profile_id": 5106,
+      "cmd_kind": "generic",
+      "payload_words": 2,
+      "start_reg": 1062,
+      "reg_count": 2
+    },
+    "zone_2.windows_step_timeouts": {
+      "module_id": 102,
+      "slave_id": 2,
+      "cmd_profile_id": 5107,
+      "cmd_kind": "generic",
+      "payload_words": 6,
+      "start_reg": 1064,
+      "reg_count": 6
+    },
+    "zone_2.heating_controls": {
+      "module_id": 102,
+      "slave_id": 2,
+      "cmd_profile_id": 5109,
+      "cmd_kind": "generic",
+      "payload_words": 12,
+      "start_reg": 1100,
+      "reg_count": 12
+    },
+    "zone_2.curtain_core": {
+      "module_id": 102,
+      "slave_id": 2,
+      "cmd_profile_id": 5115,
+      "cmd_kind": "generic",
+      "payload_words": 8,
+      "start_reg": 1130,
+      "reg_count": 8
+    },
+    "zone_2.curtain_rad_temp": {
+      "module_id": 102,
+      "slave_id": 2,
+      "cmd_profile_id": 5116,
+      "cmd_kind": "generic",
+      "payload_words": 10,
+      "start_reg": 1138,
+      "reg_count": 10
+    },
+    "zone_2.curtain_hum": {
+      "module_id": 102,
+      "slave_id": 2,
+      "cmd_profile_id": 5117,
+      "cmd_kind": "generic",
+      "payload_words": 6,
+      "start_reg": 1148,
+      "reg_count": 6
+    },
+    "zone_2.curtain_fault_reset": {
+      "module_id": 102,
+      "slave_id": 2,
+      "cmd_profile_id": 5118,
+      "cmd_kind": "generic",
+      "payload_words": 1,
+      "start_reg": 1154,
+      "reg_count": 1
+    },
+    "zone_2.greenhouse_targets": {
+      "module_id": 102,
+      "slave_id": 2,
+      "cmd_profile_id": 5119,
+      "cmd_kind": "generic",
+      "payload_words": 2,
+      "start_reg": 1160,
+      "reg_count": 2
+    },
+    "zone_2.co2_core": {
+      "module_id": 102,
+      "slave_id": 2,
+      "cmd_profile_id": 5120,
+      "cmd_kind": "generic",
+      "payload_words": 16,
+      "start_reg": 1170,
+      "reg_count": 16
+    },
+    "zone_2.co2_safety": {
+      "module_id": 102,
+      "slave_id": 2,
+      "cmd_profile_id": 5123,
+      "cmd_kind": "generic",
+      "payload_words": 11,
+      "start_reg": 1186,
+      "reg_count": 11
+    },
+    "zone_2.circulation_controls": {
+      "module_id": 102,
+      "slave_id": 2,
+      "cmd_profile_id": 5121,
+      "cmd_kind": "generic",
+      "payload_words": 10,
+      "start_reg": 1210,
+      "reg_count": 10
+    },
+    "zone_2.side_curtain_controls": {
+      "module_id": 102,
+      "slave_id": 2,
+      "cmd_profile_id": 5122,
+      "cmd_kind": "generic",
+      "payload_words": 8,
+      "start_reg": 1230,
+      "reg_count": 8
+    },
+    "zone_3.light_setpoints": {
+      "module_id": 103,
+      "slave_id": 3,
+      "cmd_profile_id": 5201,
+      "cmd_kind": "generic",
+      "payload_words": 13,
+      "start_reg": 1300,
+      "reg_count": 13,
+      "relay_1_enable_word": 0,
+      "relay_1_on_hhmm_word": 1,
+      "relay_1_off_hhmm_word": 2,
+      "relay_1_threshold_wm2_word": 3,
+      "relay_1_reserved_word": 4,
+      "relay_1_dli_limit_jcm2_word": 5,
+      "relay_2_enable_word": 6,
+      "relay_2_on_hhmm_word": 7,
+      "relay_2_off_hhmm_word": 8,
+      "relay_2_threshold_wm2_word": 9,
+      "relay_2_reserved_word": 10,
+      "relay_2_dli_limit_jcm2_word": 11,
+      "light_hyst_sec_word": 12,
+      "recommended_full_write_words": 13,
+      "partial_apply_debounce_ms": 250,
+      "reserved_words_must_be_zero": [
+        4,
+        10
+      ],
+      "slave_current_dli_reg": 414,
+      "slave_light_output_reg": 411,
+      "slave_status_bits_reg": 707,
+      "weather_solar_rad_reg": 1605
+    },
+    "zone_3.windows_manual_targets": {
+      "module_id": 103,
+      "slave_id": 3,
+      "cmd_profile_id": 5202,
+      "cmd_kind": "generic",
+      "payload_words": 2,
+      "start_reg": 1005,
+      "reg_count": 2,
+      "window_a_target_word": 0,
+      "window_b_target_word": 1
+    },
+    "zone_3.water_setpoints": {
+      "module_id": 103,
+      "slave_id": 3,
+      "cmd_profile_id": 5208,
+      "cmd_kind": "generic",
+      "payload_words": 4,
+      "start_reg": 1020,
+      "reg_count": 4
+    },
+    "zone_3.windows_base": {
+      "module_id": 103,
+      "slave_id": 3,
+      "cmd_profile_id": 5204,
+      "cmd_kind": "generic",
+      "payload_words": 16,
+      "start_reg": 1030,
+      "reg_count": 16
+    },
+    "zone_3.windows_automation": {
+      "module_id": 103,
+      "slave_id": 3,
+      "cmd_profile_id": 5205,
+      "cmd_kind": "generic",
+      "payload_words": 16,
+      "start_reg": 1046,
+      "reg_count": 16
+    },
+    "zone_3.windows_rain_weather": {
+      "module_id": 103,
+      "slave_id": 3,
+      "cmd_profile_id": 5206,
+      "cmd_kind": "generic",
+      "payload_words": 2,
+      "start_reg": 1062,
+      "reg_count": 2
+    },
+    "zone_3.windows_step_timeouts": {
+      "module_id": 103,
+      "slave_id": 3,
+      "cmd_profile_id": 5207,
+      "cmd_kind": "generic",
+      "payload_words": 6,
+      "start_reg": 1064,
+      "reg_count": 6
+    },
+    "zone_3.heating_controls": {
+      "module_id": 103,
+      "slave_id": 3,
+      "cmd_profile_id": 5209,
+      "cmd_kind": "generic",
+      "payload_words": 12,
+      "start_reg": 1100,
+      "reg_count": 12
+    },
+    "zone_3.curtain_core": {
+      "module_id": 103,
+      "slave_id": 3,
+      "cmd_profile_id": 5215,
+      "cmd_kind": "generic",
+      "payload_words": 8,
+      "start_reg": 1130,
+      "reg_count": 8
+    },
+    "zone_3.curtain_rad_temp": {
+      "module_id": 103,
+      "slave_id": 3,
+      "cmd_profile_id": 5216,
+      "cmd_kind": "generic",
+      "payload_words": 10,
+      "start_reg": 1138,
+      "reg_count": 10
+    },
+    "zone_3.curtain_hum": {
+      "module_id": 103,
+      "slave_id": 3,
+      "cmd_profile_id": 5217,
+      "cmd_kind": "generic",
+      "payload_words": 6,
+      "start_reg": 1148,
+      "reg_count": 6
+    },
+    "zone_3.curtain_fault_reset": {
+      "module_id": 103,
+      "slave_id": 3,
+      "cmd_profile_id": 5218,
+      "cmd_kind": "generic",
+      "payload_words": 1,
+      "start_reg": 1154,
+      "reg_count": 1
+    },
+    "zone_3.greenhouse_targets": {
+      "module_id": 103,
+      "slave_id": 3,
+      "cmd_profile_id": 5219,
+      "cmd_kind": "generic",
+      "payload_words": 2,
+      "start_reg": 1160,
+      "reg_count": 2
+    },
+    "zone_3.co2_core": {
+      "module_id": 103,
+      "slave_id": 3,
+      "cmd_profile_id": 5220,
+      "cmd_kind": "generic",
+      "payload_words": 16,
+      "start_reg": 1170,
+      "reg_count": 16
+    },
+    "zone_3.co2_safety": {
+      "module_id": 103,
+      "slave_id": 3,
+      "cmd_profile_id": 5223,
+      "cmd_kind": "generic",
+      "payload_words": 11,
+      "start_reg": 1186,
+      "reg_count": 11
+    },
+    "zone_3.circulation_controls": {
+      "module_id": 103,
+      "slave_id": 3,
+      "cmd_profile_id": 5221,
+      "cmd_kind": "generic",
+      "payload_words": 10,
+      "start_reg": 1210,
+      "reg_count": 10
+    },
+    "zone_3.side_curtain_controls": {
+      "module_id": 103,
+      "slave_id": 3,
+      "cmd_profile_id": 5222,
+      "cmd_kind": "generic",
+      "payload_words": 8,
+      "start_reg": 1230,
+      "reg_count": 8
+    },
+    "zone_4.light_setpoints": {
+      "module_id": 104,
+      "slave_id": 4,
+      "cmd_profile_id": 5301,
+      "cmd_kind": "generic",
+      "payload_words": 13,
+      "start_reg": 1300,
+      "reg_count": 13,
+      "relay_1_enable_word": 0,
+      "relay_1_on_hhmm_word": 1,
+      "relay_1_off_hhmm_word": 2,
+      "relay_1_threshold_wm2_word": 3,
+      "relay_1_reserved_word": 4,
+      "relay_1_dli_limit_jcm2_word": 5,
+      "relay_2_enable_word": 6,
+      "relay_2_on_hhmm_word": 7,
+      "relay_2_off_hhmm_word": 8,
+      "relay_2_threshold_wm2_word": 9,
+      "relay_2_reserved_word": 10,
+      "relay_2_dli_limit_jcm2_word": 11,
+      "light_hyst_sec_word": 12,
+      "recommended_full_write_words": 13,
+      "partial_apply_debounce_ms": 250,
+      "reserved_words_must_be_zero": [
+        4,
+        10
+      ],
+      "slave_current_dli_reg": 414,
+      "slave_light_output_reg": 411,
+      "slave_status_bits_reg": 707,
+      "weather_solar_rad_reg": 1605
+    },
+    "zone_4.windows_manual_targets": {
+      "module_id": 104,
+      "slave_id": 4,
+      "cmd_profile_id": 5302,
+      "cmd_kind": "generic",
+      "payload_words": 2,
+      "start_reg": 1005,
+      "reg_count": 2,
+      "window_a_target_word": 0,
+      "window_b_target_word": 1
+    },
+    "zone_4.water_setpoints": {
+      "module_id": 104,
+      "slave_id": 4,
+      "cmd_profile_id": 5308,
+      "cmd_kind": "generic",
+      "payload_words": 4,
+      "start_reg": 1020,
+      "reg_count": 4
+    },
+    "zone_4.windows_base": {
+      "module_id": 104,
+      "slave_id": 4,
+      "cmd_profile_id": 5304,
+      "cmd_kind": "generic",
+      "payload_words": 16,
+      "start_reg": 1030,
+      "reg_count": 16
+    },
+    "zone_4.windows_automation": {
+      "module_id": 104,
+      "slave_id": 4,
+      "cmd_profile_id": 5305,
+      "cmd_kind": "generic",
+      "payload_words": 16,
+      "start_reg": 1046,
+      "reg_count": 16
+    },
+    "zone_4.windows_rain_weather": {
+      "module_id": 104,
+      "slave_id": 4,
+      "cmd_profile_id": 5306,
+      "cmd_kind": "generic",
+      "payload_words": 2,
+      "start_reg": 1062,
+      "reg_count": 2
+    },
+    "zone_4.windows_step_timeouts": {
+      "module_id": 104,
+      "slave_id": 4,
+      "cmd_profile_id": 5307,
+      "cmd_kind": "generic",
+      "payload_words": 6,
+      "start_reg": 1064,
+      "reg_count": 6
+    },
+    "zone_4.heating_controls": {
+      "module_id": 104,
+      "slave_id": 4,
+      "cmd_profile_id": 5309,
+      "cmd_kind": "generic",
+      "payload_words": 12,
+      "start_reg": 1100,
+      "reg_count": 12
+    },
+    "zone_4.curtain_core": {
+      "module_id": 104,
+      "slave_id": 4,
+      "cmd_profile_id": 5315,
+      "cmd_kind": "generic",
+      "payload_words": 8,
+      "start_reg": 1130,
+      "reg_count": 8
+    },
+    "zone_4.curtain_rad_temp": {
+      "module_id": 104,
+      "slave_id": 4,
+      "cmd_profile_id": 5316,
+      "cmd_kind": "generic",
+      "payload_words": 10,
+      "start_reg": 1138,
+      "reg_count": 10
+    },
+    "zone_4.curtain_hum": {
+      "module_id": 104,
+      "slave_id": 4,
+      "cmd_profile_id": 5317,
+      "cmd_kind": "generic",
+      "payload_words": 6,
+      "start_reg": 1148,
+      "reg_count": 6
+    },
+    "zone_4.curtain_fault_reset": {
+      "module_id": 104,
+      "slave_id": 4,
+      "cmd_profile_id": 5318,
+      "cmd_kind": "generic",
+      "payload_words": 1,
+      "start_reg": 1154,
+      "reg_count": 1
+    },
+    "zone_4.greenhouse_targets": {
+      "module_id": 104,
+      "slave_id": 4,
+      "cmd_profile_id": 5319,
+      "cmd_kind": "generic",
+      "payload_words": 2,
+      "start_reg": 1160,
+      "reg_count": 2
+    },
+    "zone_4.co2_core": {
+      "module_id": 104,
+      "slave_id": 4,
+      "cmd_profile_id": 5320,
+      "cmd_kind": "generic",
+      "payload_words": 16,
+      "start_reg": 1170,
+      "reg_count": 16
+    },
+    "zone_4.co2_safety": {
+      "module_id": 104,
+      "slave_id": 4,
+      "cmd_profile_id": 5323,
+      "cmd_kind": "generic",
+      "payload_words": 11,
+      "start_reg": 1186,
+      "reg_count": 11
+    },
+    "zone_4.circulation_controls": {
+      "module_id": 104,
+      "slave_id": 4,
+      "cmd_profile_id": 5321,
+      "cmd_kind": "generic",
+      "payload_words": 10,
+      "start_reg": 1210,
+      "reg_count": 10
+    },
+    "zone_4.side_curtain_controls": {
+      "module_id": 104,
+      "slave_id": 4,
+      "cmd_profile_id": 5322,
+      "cmd_kind": "generic",
+      "payload_words": 8,
+      "start_reg": 1230,
+      "reg_count": 8
+    }
+  }
+}
