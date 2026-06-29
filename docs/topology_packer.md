@@ -9,7 +9,8 @@ Date: `2026-02-25`.
 - binary `topology_config v2` payload (`.bin`)
 - pre-split Modbus upload chunk script (`.json`)
 
-This removes manual offset/CRC/chunk mistakes during deployment.
+This provides deterministic topology artifacts for offline tooling and
+compatibility workflows. The Ubuntu hub reads topology JSON directly.
 
 ## Input JSON schema (baseline)
 
@@ -25,7 +26,7 @@ Root fields:
 - `commands[]`
 - `policies[]`
 
-Field names inside each table match `Core/Inc/gh_topology_v2.h`.
+Field names inside each table match the JSON schema described in `docs/topology_config_v2.md`.
 
 ## Run
 
@@ -49,12 +50,6 @@ Each chunk entry contains:
 - `chunk_crc32`
 - `generation`
 - `chunk_data_words[]`
-
-The output is directly mappable to register writes in `docs/topology_upload_protocol.md`.
-
-For direct upload over Modbus TCP use:
-- `tools/topology/topology_uploader.py`
-- docs: `docs/topology_uploader.md`
 
 ## Unit tests
 

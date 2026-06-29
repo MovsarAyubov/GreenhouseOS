@@ -13,8 +13,10 @@ Install Go 1.22 or newer on the target Linux machine, then run:
 ```bash
 cd greenhouse-hub
 go mod tidy
-go build ./cmd/greenhouse-hub
+go build -o greenhouse-hub ./cmd/greenhouse-hub
 ```
+
+Docker usage is documented in `../docs/docker.md`.
 
 ## Run With Mock Transport
 

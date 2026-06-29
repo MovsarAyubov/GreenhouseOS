@@ -13,6 +13,7 @@ ExecStart=/opt/greenhouse-hub/greenhouse-hub \
   --baud 115200 \
   --topology /etc/greenhouse/topology.json \
   --semantics /etc/greenhouse/semantics.json \
+  --slave-maps /etc/greenhouse/slave_maps \
   --listen 0.0.0.0:8080
 Restart=always
 RestartSec=3

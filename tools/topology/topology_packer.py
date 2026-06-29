@@ -281,7 +281,7 @@ def _ensure_supported_bus_types(modules: List[Dict[str, Any]]) -> None:
         bus_type = _parse_int(item["bus_type"], f"modules[{idx}].bus_type")
         if bus_type == BUS_RTU2:
             raise TopologyPackError(
-                f"modules[{idx}].bus_type=2: temporarily unsupported by firmware (RTU2 routing not implemented)"
+                f"modules[{idx}].bus_type=2: temporarily unsupported by runtime (RTU2 routing not implemented)"
             )
         if bus_type not in (BUS_RTU1, BUS_TCP):
             raise TopologyPackError(f"modules[{idx}].bus_type={bus_type}: unsupported bus_type")

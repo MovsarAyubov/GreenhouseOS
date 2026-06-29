@@ -33,19 +33,7 @@ python tools/topology_designer/cli.py pack `
   --chunk-words 120
 ```
 
-## 4. Upload chunks
-
-```powershell
-python tools/topology/topology_uploader.py `
-  --host 192.168.50.20 `
-  --port 502 `
-  --unit-id 1 `
-  --chunks .\build\topology\generated_topology_chunks.json
-```
-
 ## Notes
 
 - Profile format reference: `docs/greenhouse_profile_v1.md`
 - Topology format reference: `docs/topology_config_v2.md`
-- Upload protocol reference: `docs/topology_upload_protocol.md`
-

@@ -1,1 +1,6 @@
 .env
+*.pyc
+__pycache__/
+greenhouse-hub/greenhouse-hub
+greenhouse-hub/*.test
+greenhouse-hub/coverage.out

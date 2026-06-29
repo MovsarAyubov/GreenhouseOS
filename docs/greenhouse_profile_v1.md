@@ -10,10 +10,9 @@ The profile is compiled by:
 
 - `tools/topology_designer/cli.py`
 
-and then can be packed/uploaded with existing tooling:
+and then can be packed with existing tooling:
 
 - `tools/topology/topology_packer.py`
-- `tools/topology/topology_uploader.py`
 
 ## Scope of v1
 
@@ -95,7 +94,7 @@ Optional zone fields:
 - `publish_index = (slave_id - 1) * 9 + channel_index`
 - channels are sorted by fixed channel order before compile
 
-## Constraints mirrored from firmware/runtime
+## Constraints mirrored from hub/runtime topology limits
 
 - `slave_id <= 20`
 - `publish_index < 180`

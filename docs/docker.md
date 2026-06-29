@@ -1,36 +1,30 @@
-# Docker Build Setup
+# Docker
 
-This project is STM32CubeIDE/GNU Make based (not ESP-IDF), and can be built in Docker.
+Docker is used for the Ubuntu Server `greenhouse-hub` runtime.
 
-## Build firmware
+## Mock Mode
 
-```bash
-docker compose run --rm firmware
-```
-
-Build artifacts are generated in:
-
-- `Debug/greenhouseOS.elf`
-- `Debug/greenhouseOS.map`
-- `Debug/greenhouseOS.list`
-
-## Clean
+Mock mode does not need RS485 hardware:
 
 ```bash
-docker compose run --rm clean
+docker compose up --build greenhouse-hub-mock
 ```
 
-## Build + Python quality tests
+The hub listens on `${HUB_PORT:-8080}` and loads sample files from `/app/topology`
+and `/app/slave_maps` inside the container.
+
+## RTU Mode
+
+RTU mode passes a host USB-RS485 device into the container:
 
 ```bash
-docker compose run --rm quality
+SERIAL_PORT=/dev/ttyUSB0 BAUD=115200 docker compose --profile rtu up --build greenhouse-hub-rtu
 ```
 
-## Why the wrapper script exists
+The Linux user running Docker must be allowed to access the serial device.
 
-`Debug/makefile` contains a generated absolute Windows linker-script path.  
-Inside Linux containers this path is invalid, so the entrypoint normalizes it to:
+## Image Build
 
-- `../STM32F407VETX_FLASH.ld`
-
-before running `make`.
+```bash
+docker build -f Dockerfile.hub .
+```
