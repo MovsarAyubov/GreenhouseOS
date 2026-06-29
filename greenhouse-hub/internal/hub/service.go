@@ -7,6 +7,7 @@ import (
 	"log"
 	"math"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -192,6 +193,7 @@ func (s *Service) Start(ctx context.Context) error {
 
 	go s.modbusWorker(ctx)
 	go s.pollLoop(ctx)
+	go s.identityLoop(ctx)
 	return nil
 }
 
@@ -431,9 +433,62 @@ func (s *Service) modbusWorker(ctx context.Context) {
 }
 
 func (s *Service) pollLoop(ctx context.Context) {
+	type dueRequest struct {
+		req      config.Request
+		next     time.Time
+		inFlight bool
+	}
+	var plan []dueRequest
+	now := time.Now()
+	for _, req := range s.cfg.Topology.Requests {
+		module, ok := s.moduleByID[req.ModuleID]
+		if !ok || module.SlaveID == 0 {
+			continue
+		}
+		plan = append(plan, dueRequest{req: req, next: now})
+	}
+
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	done := make(chan uint16, len(plan))
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case reqID := <-done:
+			for i := range plan {
+				if plan[i].req.ReqID == reqID {
+					plan[i].inFlight = false
+					break
+				}
+			}
+		case now = <-ticker.C:
+			for i := range plan {
+				if plan[i].inFlight || now.Before(plan[i].next) {
+					continue
+				}
+				req := plan[i].req
+				period := requestPeriod(req)
+				plan[i].next = now.Add(period)
+				plan[i].inFlight = true
+				go func() {
+					s.pollRequest(ctx, req)
+					select {
+					case done <- req.ReqID:
+					case <-ctx.Done():
+					}
+				}()
+			}
+		}
+	}
+}
+
+func (s *Service) identityLoop(ctx context.Context) {
 	type dueModule struct {
-		module config.Module
-		next time.Time
+		module   config.Module
+		next     time.Time
+		inFlight bool
 	}
 	var plan []dueModule
 	now := time.Now()
@@ -444,25 +499,48 @@ func (s *Service) pollLoop(ctx context.Context) {
 		plan = append(plan, dueModule{module: module, next: now})
 	}
 
-	ticker := time.NewTicker(100 * time.Millisecond)
+	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
+	done := make(chan uint8, len(plan))
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
+		case slaveID := <-done:
+			for i := range plan {
+				if plan[i].module.SlaveID == slaveID {
+					plan[i].inFlight = false
+					break
+				}
+			}
 		case now = <-ticker.C:
 			for i := range plan {
-				if now.Before(plan[i].next) {
+				if plan[i].inFlight || now.Before(plan[i].next) {
 					continue
 				}
 				module := plan[i].module
-				period := modulePollPeriod(module)
-				plan[i].next = now.Add(period)
-				go s.pollModule(ctx, module)
+				plan[i].next = now.Add(identityPollPeriod(module))
+				plan[i].inFlight = true
+				go func() {
+					s.pollIdentity(ctx, module)
+					select {
+					case done <- module.SlaveID:
+					case <-ctx.Done():
+					}
+				}()
 			}
 		}
 	}
+}
+
+func (s *Service) pollIdentity(ctx context.Context, module config.Module) {
+	m, identity, err := s.mapForSlave(ctx, module.SlaveID)
+	if err != nil {
+		s.markSlaveError(module, err)
+		return
+	}
+	s.publishSlaveIdentity(module, identity, m)
 }
 
 func (s *Service) pollModule(ctx context.Context, module config.Module) {
@@ -683,7 +761,7 @@ func (s *Service) publishRequest(module config.Module, req config.Request, regs 
 		raw := uint32(regs[point.RegOffset])
 		value := scaledValue(raw, point.ScalePow10, point.PointType)
 		sem := s.semanticByPI[point.PublishIndex]
-		key := sem.Key
+		key := telemetryKey(sem.Key)
 		label := sem.Point.Label
 		unit := sem.Point.Unit
 		if key == "" {
@@ -697,6 +775,7 @@ func (s *Service) publishRequest(module config.Module, req config.Request, regs 
 			SlaveID:      module.SlaveID,
 			ZoneID:       module.ZoneID,
 			PublishIndex: point.PublishIndex,
+			Register:     req.StartReg + point.RegOffset,
 			Label:        label,
 			Unit:         unit,
 			ValueRaw:     raw,
@@ -754,14 +833,28 @@ func requestTimeout(req config.Request) time.Duration {
 	return time.Duration(retries)*timeout + time.Duration(retries)*backoff
 }
 
-func modulePollPeriod(module config.Module) time.Duration {
+func requestPeriod(req config.Request) time.Duration {
+	if req.PeriodMS > 0 {
+		return time.Duration(req.PeriodMS) * time.Millisecond
+	}
+	return 5 * time.Second
+}
+
+func identityPollPeriod(module config.Module) time.Duration {
 	if module.HeartbeatTimeoutMS > 0 {
-		period := time.Duration(module.HeartbeatTimeoutMS) * time.Millisecond / 2
-		if period >= time.Second {
+		period := time.Duration(module.HeartbeatTimeoutMS) * time.Millisecond * 6
+		if period >= 30*time.Second {
 			return period
 		}
 	}
-	return 2 * time.Second
+	return 60 * time.Second
+}
+
+func telemetryKey(semanticKey string) string {
+	if idx := strings.LastIndex(semanticKey, "."); idx >= 0 && idx+1 < len(semanticKey) {
+		return semanticKey[idx+1:]
+	}
+	return semanticKey
 }
 
 func commandTimeout(cmd config.Command) time.Duration {
