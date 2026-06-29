@@ -19,8 +19,8 @@ import (
 
 func main() {
 	var (
-		topologyPath  = flag.String("topology", "../topology/one_zone_one_weather_all_points_schedule_topology.json", "path to topology_config_v2 JSON")
-		semanticsPath = flag.String("semantics", "../topology/one_zone_one_weather_all_points_schedule_semantics.json", "path to scada_semantic_mapping_v1 JSON")
+		topologyPath  = flag.String("topology", "../topology/two_zones_one_weather_all_points_schedule_topology.json", "path to topology_config_v2 JSON")
+		semanticsPath = flag.String("semantics", "../topology/two_zones_one_weather_all_points_schedule_semantics.json", "path to scada_semantic_mapping_v1 JSON")
 		slaveMapsDir  = flag.String("slave-maps", "slave_maps", "path to slave map catalog directory")
 		listenAddr    = flag.String("listen", ":8080", "HTTP listen address")
 		serialDevice  = flag.String("serial", "/dev/ttyUSB0", "RS485 serial device")

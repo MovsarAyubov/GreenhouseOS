@@ -1,7 +1,7 @@
 {
   "schema": "scada_semantic_mapping_v1",
   "topology_id": 1002,
-  "topology_generation": 114,
+  "topology_generation": 115,
   "topology_ver_major": 2,
   "topology_ver_minor": 0,
   "modules": {
