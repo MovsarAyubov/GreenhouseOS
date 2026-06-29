@@ -23,6 +23,20 @@ SERIAL_PORT=/dev/ttyUSB0 BAUD=115200 docker compose --profile rtu up --build gre
 
 The Linux user running Docker must be allowed to access the serial device.
 
+The RTU service also adds Linux group id `${SERIAL_GROUP_ID:-20}` inside the
+container. On Ubuntu, `20` is normally the `dialout` group. If your serial
+device uses another group id, check it with:
+
+```bash
+stat -c '%g %G %a %n' /dev/ttyUSB0
+```
+
+Then run with the matching id:
+
+```bash
+SERIAL_GROUP_ID=20 SERIAL_PORT=/dev/ttyUSB0 BAUD=19200 docker compose --profile rtu up --build greenhouse-hub-rtu
+```
+
 ## Image Build
 
 ```bash

@@ -30,7 +30,7 @@ http://localhost:8080/api/health
 Run against a USB-RS485 adapter:
 
 ```bash
-SERIAL_PORT=/dev/ttyUSB0 docker compose --profile rtu up --build greenhouse-hub-rtu
+SERIAL_PORT=/dev/ttyUSB0 SERIAL_GROUP_ID=20 docker compose --profile rtu up --build greenhouse-hub-rtu
 ```
 
 ## Tests

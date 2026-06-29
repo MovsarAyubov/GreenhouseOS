@@ -8,7 +8,7 @@ RUN go build -o /out/greenhouse-hub ./cmd/greenhouse-hub
 
 FROM debian:bookworm-slim
 
-RUN useradd --system --home-dir /nonexistent --shell /usr/sbin/nologin greenhouse
+RUN useradd --system --home-dir /nonexistent --shell /usr/sbin/nologin --groups dialout greenhouse
 WORKDIR /app
 COPY --from=build /out/greenhouse-hub /usr/local/bin/greenhouse-hub
 COPY topology/ /app/topology/

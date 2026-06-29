@@ -38,5 +38,7 @@ services:
       - "0.0.0.0:8080"
     ports:
       - "${HUB_PORT:-8080}:8080"
+    group_add:
+      - "${SERIAL_GROUP_ID:-20}"
     devices:
       - "${SERIAL_PORT:-/dev/ttyUSB0}:${SERIAL_PORT:-/dev/ttyUSB0}"
