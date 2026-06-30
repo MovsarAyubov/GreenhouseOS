@@ -1,7 +1,7 @@
 {
   "schema": "scada_semantic_mapping_v1",
   "topology_id": 1004,
-  "topology_generation": 116,
+  "topology_generation": 117,
   "topology_ver_major": 2,
   "topology_ver_minor": 0,
   "modules": {
@@ -554,6 +554,294 @@
       "label": "Light status bits",
       "unit": "mask",
       "scale_pow10": 0
+    },
+    "zone_1.windows_base_target_a": {
+      "module_id": 101,
+      "point_id": 10170,
+      "publish_index": 57,
+      "req_id": 1013,
+      "label": "Window A base target",
+      "unit": "%",
+      "scale_pow10": -1
+    },
+    "zone_1.windows_base_target_b": {
+      "module_id": 101,
+      "point_id": 10171,
+      "publish_index": 58,
+      "req_id": 1013,
+      "label": "Window B base target",
+      "unit": "%",
+      "scale_pow10": -1
+    },
+    "zone_1.windows_effective_target_a": {
+      "module_id": 101,
+      "point_id": 10172,
+      "publish_index": 59,
+      "req_id": 1013,
+      "label": "Window A effective target",
+      "unit": "%",
+      "scale_pow10": -1
+    },
+    "zone_1.windows_effective_target_b": {
+      "module_id": 101,
+      "point_id": 10173,
+      "publish_index": 60,
+      "req_id": 1013,
+      "label": "Window B effective target",
+      "unit": "%",
+      "scale_pow10": -1
+    },
+    "zone_1.curtain_target": {
+      "module_id": 101,
+      "point_id": 10174,
+      "publish_index": 61,
+      "req_id": 1014,
+      "label": "Curtain target",
+      "unit": "%",
+      "scale_pow10": -1
+    },
+    "zone_1.curtain_base_target": {
+      "module_id": 101,
+      "point_id": 10175,
+      "publish_index": 62,
+      "req_id": 1014,
+      "label": "Curtain base target",
+      "unit": "%",
+      "scale_pow10": -1
+    },
+    "zone_1.side_curtain_left_target": {
+      "module_id": 101,
+      "point_id": 10176,
+      "publish_index": 63,
+      "req_id": 1015,
+      "label": "Left side curtain target",
+      "unit": "%",
+      "scale_pow10": -1
+    },
+    "zone_1.side_curtain_right_target": {
+      "module_id": 101,
+      "point_id": 10177,
+      "publish_index": 64,
+      "req_id": 1015,
+      "label": "Right side curtain target",
+      "unit": "%",
+      "scale_pow10": -1
+    },
+    "zone_2.windows_base_target_a": {
+      "module_id": 102,
+      "point_id": 10278,
+      "publish_index": 65,
+      "req_id": 1023,
+      "label": "Window A base target",
+      "unit": "%",
+      "scale_pow10": -1
+    },
+    "zone_2.windows_base_target_b": {
+      "module_id": 102,
+      "point_id": 10279,
+      "publish_index": 66,
+      "req_id": 1023,
+      "label": "Window B base target",
+      "unit": "%",
+      "scale_pow10": -1
+    },
+    "zone_2.windows_effective_target_a": {
+      "module_id": 102,
+      "point_id": 10280,
+      "publish_index": 67,
+      "req_id": 1023,
+      "label": "Window A effective target",
+      "unit": "%",
+      "scale_pow10": -1
+    },
+    "zone_2.windows_effective_target_b": {
+      "module_id": 102,
+      "point_id": 10281,
+      "publish_index": 68,
+      "req_id": 1023,
+      "label": "Window B effective target",
+      "unit": "%",
+      "scale_pow10": -1
+    },
+    "zone_2.curtain_target": {
+      "module_id": 102,
+      "point_id": 10282,
+      "publish_index": 69,
+      "req_id": 1024,
+      "label": "Curtain target",
+      "unit": "%",
+      "scale_pow10": -1
+    },
+    "zone_2.curtain_base_target": {
+      "module_id": 102,
+      "point_id": 10283,
+      "publish_index": 70,
+      "req_id": 1024,
+      "label": "Curtain base target",
+      "unit": "%",
+      "scale_pow10": -1
+    },
+    "zone_2.side_curtain_left_target": {
+      "module_id": 102,
+      "point_id": 10284,
+      "publish_index": 71,
+      "req_id": 1025,
+      "label": "Left side curtain target",
+      "unit": "%",
+      "scale_pow10": -1
+    },
+    "zone_2.side_curtain_right_target": {
+      "module_id": 102,
+      "point_id": 10285,
+      "publish_index": 72,
+      "req_id": 1025,
+      "label": "Right side curtain target",
+      "unit": "%",
+      "scale_pow10": -1
+    },
+    "zone_3.windows_base_target_a": {
+      "module_id": 103,
+      "point_id": 10386,
+      "publish_index": 73,
+      "req_id": 1033,
+      "label": "Window A base target",
+      "unit": "%",
+      "scale_pow10": -1
+    },
+    "zone_3.windows_base_target_b": {
+      "module_id": 103,
+      "point_id": 10387,
+      "publish_index": 74,
+      "req_id": 1033,
+      "label": "Window B base target",
+      "unit": "%",
+      "scale_pow10": -1
+    },
+    "zone_3.windows_effective_target_a": {
+      "module_id": 103,
+      "point_id": 10388,
+      "publish_index": 75,
+      "req_id": 1033,
+      "label": "Window A effective target",
+      "unit": "%",
+      "scale_pow10": -1
+    },
+    "zone_3.windows_effective_target_b": {
+      "module_id": 103,
+      "point_id": 10389,
+      "publish_index": 76,
+      "req_id": 1033,
+      "label": "Window B effective target",
+      "unit": "%",
+      "scale_pow10": -1
+    },
+    "zone_3.curtain_target": {
+      "module_id": 103,
+      "point_id": 10390,
+      "publish_index": 77,
+      "req_id": 1034,
+      "label": "Curtain target",
+      "unit": "%",
+      "scale_pow10": -1
+    },
+    "zone_3.curtain_base_target": {
+      "module_id": 103,
+      "point_id": 10391,
+      "publish_index": 78,
+      "req_id": 1034,
+      "label": "Curtain base target",
+      "unit": "%",
+      "scale_pow10": -1
+    },
+    "zone_3.side_curtain_left_target": {
+      "module_id": 103,
+      "point_id": 10392,
+      "publish_index": 79,
+      "req_id": 1035,
+      "label": "Left side curtain target",
+      "unit": "%",
+      "scale_pow10": -1
+    },
+    "zone_3.side_curtain_right_target": {
+      "module_id": 103,
+      "point_id": 10393,
+      "publish_index": 80,
+      "req_id": 1035,
+      "label": "Right side curtain target",
+      "unit": "%",
+      "scale_pow10": -1
+    },
+    "zone_4.windows_base_target_a": {
+      "module_id": 104,
+      "point_id": 10494,
+      "publish_index": 81,
+      "req_id": 1043,
+      "label": "Window A base target",
+      "unit": "%",
+      "scale_pow10": -1
+    },
+    "zone_4.windows_base_target_b": {
+      "module_id": 104,
+      "point_id": 10495,
+      "publish_index": 82,
+      "req_id": 1043,
+      "label": "Window B base target",
+      "unit": "%",
+      "scale_pow10": -1
+    },
+    "zone_4.windows_effective_target_a": {
+      "module_id": 104,
+      "point_id": 10496,
+      "publish_index": 83,
+      "req_id": 1043,
+      "label": "Window A effective target",
+      "unit": "%",
+      "scale_pow10": -1
+    },
+    "zone_4.windows_effective_target_b": {
+      "module_id": 104,
+      "point_id": 10497,
+      "publish_index": 84,
+      "req_id": 1043,
+      "label": "Window B effective target",
+      "unit": "%",
+      "scale_pow10": -1
+    },
+    "zone_4.curtain_target": {
+      "module_id": 104,
+      "point_id": 10498,
+      "publish_index": 85,
+      "req_id": 1044,
+      "label": "Curtain target",
+      "unit": "%",
+      "scale_pow10": -1
+    },
+    "zone_4.curtain_base_target": {
+      "module_id": 104,
+      "point_id": 10499,
+      "publish_index": 86,
+      "req_id": 1044,
+      "label": "Curtain base target",
+      "unit": "%",
+      "scale_pow10": -1
+    },
+    "zone_4.side_curtain_left_target": {
+      "module_id": 104,
+      "point_id": 10500,
+      "publish_index": 87,
+      "req_id": 1045,
+      "label": "Left side curtain target",
+      "unit": "%",
+      "scale_pow10": -1
+    },
+    "zone_4.side_curtain_right_target": {
+      "module_id": 104,
+      "point_id": 10501,
+      "publish_index": 88,
+      "req_id": 1045,
+      "label": "Right side curtain target",
+      "unit": "%",
+      "scale_pow10": -1
     }
   },
   "commands": {
