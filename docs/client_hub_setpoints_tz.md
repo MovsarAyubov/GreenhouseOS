@@ -150,7 +150,6 @@ raw = round(physical_value / scale)
 Examples:
 
 - `water_rail_setpoint`, scale `0.1`: operator enters `22.0 degC`, client sends `220`.
-- `weather_out_temp`, scale `0.1`: operator/source value `-5.2 degC`, client sends `-52`.
 - `windows_ctrl_mode`, enum: Auto sends `0`, Manual sends `1`.
 
 Allowed raw range:

@@ -100,14 +100,7 @@ var setpointGroupDefs = []setpointGroupDef{
 		key:          "light",
 		label:        "Light",
 		prefixes:     []string{"light_"},
-		exactKeys:    []string{"light_current_dli_jcm2"},
 		capabilityOK: func(mask uint32) bool { return hasCapability(mask, 11) },
-	},
-	{
-		key:          "weather",
-		label:        "Weather",
-		prefixes:     []string{"weather_"},
-		capabilityOK: func(mask uint32) bool { return hasCapability(mask, 12) },
 	},
 }
 
@@ -118,9 +111,6 @@ var hiddenSetpointKeys = map[string]bool{
 	"command_result":          true,
 	"windows_settings":        true,
 	"co2_fault_reset_token":   true,
-	"weather_token":           true,
-	"weather_applied_token":   true,
-	"weather_result":          true,
 }
 
 var setpointLabelOverrides = map[string]string{
@@ -138,17 +128,6 @@ var setpointLabelOverrides = map[string]string{
 	"co2_manual_outputs":               "CO2 manual outputs",
 	"side_curtain_ctrl_mode":           "Side curtain control mode",
 	"circ_ctrl_mode":                   "Circulation control mode",
-	"light_current_dli_jcm2":           "Current DLI",
-	"weather_out_temp":                 "Outside temperature",
-	"weather_out_humidity":             "Outside humidity",
-	"weather_wind_speed":               "Wind speed",
-	"weather_wind_dir":                 "Wind direction",
-	"weather_rain_flag":                "Rain flag",
-	"weather_solar_rad":                "Solar radiation",
-	"weather_baro_press":               "Barometric pressure",
-	"weather_dew_point":                "Dew point",
-	"weather_status_bits":              "Weather status bits",
-	"weather_age_s":                    "Weather age",
 }
 
 var enumByKey = map[string][]SetpointEnumValue{
@@ -254,8 +233,8 @@ func setpointItemsForGroup(m slavemap.Map, def setpointGroupDef) []SetpointItem 
 }
 
 func writableMapRegisters(m slavemap.Map) []slavemap.Register {
-	out := make([]slavemap.Register, 0, len(m.SetpointsCommands)+len(m.SchedulesProfiles)+len(m.SharedExternalData))
-	for _, regs := range [][]slavemap.Register{m.SetpointsCommands, m.SchedulesProfiles, m.SharedExternalData} {
+	out := make([]slavemap.Register, 0, len(m.SetpointsCommands)+len(m.SchedulesProfiles))
+	for _, regs := range [][]slavemap.Register{m.SetpointsCommands, m.SchedulesProfiles} {
 		for _, reg := range regs {
 			if reg.IsWritable() {
 				out = append(out, reg)

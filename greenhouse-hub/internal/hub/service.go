@@ -311,6 +311,9 @@ func (s *Service) applyMapSetpoint(ctx context.Context, req SetpointRequest) Set
 	if !ok {
 		return SetpointResult{Error: fmt.Sprintf("key %q is not in %s", req.Key, m.Name)}
 	}
+	if !isOperatorSetpointRegister(m, req.Key) {
+		return SetpointResult{Error: fmt.Sprintf("key %q is not an operator setpoint", req.Key)}
+	}
 	if !reg.IsWritable() {
 		return SetpointResult{Error: fmt.Sprintf("key %q is read-only", req.Key)}
 	}
@@ -346,6 +349,17 @@ func (s *Service) applyMapSetpoint(ctx context.Context, req SetpointRequest) Set
 		Register: &start,
 		Values:   words,
 	}
+}
+
+func isOperatorSetpointRegister(m slavemap.Map, key string) bool {
+	for _, regs := range [][]slavemap.Register{m.SetpointsCommands, m.SchedulesProfiles} {
+		for _, reg := range regs {
+			if reg.Key == key && !isOperatorHiddenSetpoint(key) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (s *Service) Scan(ctx context.Context, from, to uint8) ScanResult {

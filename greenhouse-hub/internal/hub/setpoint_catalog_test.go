@@ -92,7 +92,7 @@ func TestSetpointsForSlaveHidesServiceFieldsAndAddsEnums(t *testing.T) {
 	for _, group := range catalog.Groups {
 		for _, item := range group.Items {
 			switch item.Key {
-			case "command_setpoint_payload", "command_token", "weather_token", "co2_fault_reset_token", "windows_settings":
+			case "command_setpoint_payload", "command_token", "co2_fault_reset_token", "windows_settings":
 				t.Fatalf("service key %q should be hidden", item.Key)
 			}
 			if item.Reg == 0 || item.Width == 0 {
@@ -111,6 +111,9 @@ func TestSetpointsForSlaveHidesServiceFieldsAndAddsEnums(t *testing.T) {
 	}
 	if len(mode.Enum) != 2 || mode.Enum[0].Label != "Auto" {
 		t.Fatalf("windows_ctrl_mode enum = %#v", mode.Enum)
+	}
+	if group := findSetpointGroup(catalog.Groups, "weather"); group != nil {
+		t.Fatalf("weather telemetry group should not be returned as operator setpoints: %#v", group)
 	}
 }
 

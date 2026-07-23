@@ -121,6 +121,41 @@ func TestApplyMapSetpointWritesWindowsPosATargetAt1005(t *testing.T) {
 	}
 }
 
+func TestApplyMapSetpointRejectsWeatherTelemetry(t *testing.T) {
+	maps, err := slavemap.LoadCatalog(filepath.Join("..", "..", "slave_maps"))
+	if err != nil {
+		t.Fatalf("LoadCatalog() error = %v", err)
+	}
+	cfg := &config.Config{
+		Topology: config.Topology{
+			Modules: []config.Module{
+				{
+					ModuleID:       101,
+					ModuleType:     config.ModuleTypeZone,
+					SlaveID:        1,
+					ZoneID:         1,
+					CapabilityMask: 0xFFFFFFFF,
+				},
+			},
+		},
+	}
+	service, _, cancel := newApplySetpointTestService(t, cfg, maps)
+	defer cancel()
+
+	value := 120
+	result := service.ApplySetpoint(context.Background(), SetpointRequest{
+		SlaveID: 1,
+		Key:     "weather_wind_speed",
+		Value:   &value,
+	})
+	if result.Applied {
+		t.Fatalf("ApplySetpoint() applied weather telemetry as operator setpoint: %#v", result)
+	}
+	if result.Error != `key "weather_wind_speed" is not an operator setpoint` {
+		t.Fatalf("ApplySetpoint() error = %q", result.Error)
+	}
+}
+
 func TestApplyLegacyWindowsProfilePayloadZeroWrites1030(t *testing.T) {
 	cfg := &config.Config{
 		Topology: config.Topology{
